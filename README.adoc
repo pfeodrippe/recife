@@ -20,4 +20,4 @@ I will continue to work on it in another branch until I have some
 satisfactory organization (hope I have time!) and better backends
 (maybe Electrum or TLA+).
 
-If you want a production ready language, go use TLA+ o/
+There is no support, at least yet, for fairness or liveness properties, if you want a production ready and powerful language, go use TLA+ o/
