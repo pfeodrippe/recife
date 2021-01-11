@@ -1,0 +1,6 @@
+{:deps
+ {alloy {:local/root "jars/org.alloytools.alloy.dist.jar"}
+  medley {:mvn/version "1.3.0"}
+  lambdaisland/deep-diff2 {:mvn/version "2.0.108"}}
+
+ :paths ["src" "test"]}

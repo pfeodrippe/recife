@@ -1,0 +1,17 @@
+= Recife
+
+A model checker library in Clojure. REPLing Everything!!
+
+See a video about it that I have presented at
+link:https://www.youtube.com/watch?v=zvlD4_S3nz0[re:Clojure 2020] o/
+
+== WARNING!!
+
+This is very, very experimental, the code will certainly change and
+there is no form of documentation whatsoever. This is a prototype so
+people who are interested can use the code and, hopefully, give
+feedback.
+
+I will continue to work on it in another branch until I have some
+satisfactory organization (hope I have time!) and better backends
+(maybe Electrum or TLA+).
