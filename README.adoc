@@ -3,7 +3,7 @@ image:https://img.shields.io/clojars/v/pfeodrippe/recife.svg[link="http://clojar
 
 = Recife
 
-A model checker library in Clojure. REPLing Everything!!
+A poor's man model checker library in Clojure. REPLing Everything!!
 
 See a video about it that I have presented at
 link:https://www.youtube.com/watch?v=zvlD4_S3nz0[re:Clojure 2020] o/
@@ -19,3 +19,5 @@ feedback.
 I will continue to work on it in another branch until I have some
 satisfactory organization (hope I have time!) and better backends
 (maybe Electrum or TLA+).
+
+If you want a production ready language, go use TLA+ o/
