@@ -8,7 +8,8 @@ link:https://www.youtube.com/watch?v=zvlD4_S3nz0[re:Clojure 2020] o/
 == WARNING!!
 
 This is very, very experimental, the code will certainly change and
-there is no form of documentation whatsoever. This is a prototype so
+there is no form of documentation whatsoever, besides, the code of
+`recife.core` is a little bit messy yet. This is a prototype so
 people who are interested can use the code and, hopefully, give
 feedback.
 
