@@ -397,7 +397,8 @@
      :signatures (ra/signatures (-> (apply merge (map :schema procs))
                                     (assoc :__Map {:relations {:entries [:__MapDomain :-> :lone :univ]}}
                                            :__MapDomain {:abstract? true})
-                                    (merge map-type-signatures)))}))
+                                    (merge map-type-signatures))
+                                {:vars? false})}))
 
 (defn xml->timeline
   []
