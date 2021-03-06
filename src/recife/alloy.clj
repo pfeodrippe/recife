@@ -45,7 +45,7 @@
       true)))
 
 (defn run-alloy-expression
-  [module-contents {:keys [:expression :reuse-ans?]}]
+  [module-contents {:keys [:expression :reuse-ans? :show-viz?]}]
   (let [reporter (edu.mit.csail.sdg.alloy4.A4Reporter.)
         world (CompUtil/parseEverything_fromString reporter module-contents)
         opt (A4Options.)]
@@ -70,7 +70,8 @@
          (when (.satisfiable ans)
            (swap! current-state assoc :ans ans :ans-index ans-index)
            (.writeXML ans "alloy_example_output.xml")
-           #_(if (nil? (:viz-gui @current-state))
+           (when show-viz?
+             (if (nil? (:viz-gui @current-state))
                (do (swap! current-state assoc
                           :viz-gui (VizGUI. true "alloy_example_output.xml" nil
                                             (reify Computer
@@ -78,9 +79,10 @@
                                                 (next-solution!)
                                                 ""))
                                             nil
-                                            true))
+                                            true
+                                            1))
                    (.setFocusableWindowState (.getFrame (:viz-gui @current-state)) false))
-               (.loadXML (:viz-gui @current-state) "alloy_example_output.xml" true))
+               (.loadXML (:viz-gui @current-state) "alloy_example_output.xml" true)))
            (->> expression
                 (CompUtil/parseOneExpression_fromString world)
                 (.eval ans))))))))
@@ -99,29 +101,6 @@
          (into #{}))
 
     :else alloy-result))
-
-(defn build-alloy-module
-  [{:keys [:rec.signature/sigs :rec.signature/module]}
-   constraints
-   {:keys [:run]}]
-  ;; Reset sigs cache.
-  (run! #(reset! (:rec.alloy/result-cache %) nil) sigs)
-  (let [module-body (apply str
-                           ;; Require ordering.
-                           (->> sigs
-                                (filter :rec.alloy/ordered?)
-                                (mapv #(format "open util/ordering[%s] as %s_ordering"
-                                               (:rec.alloy/name %)
-                                               (:rec.alloy/name %)))
-                                (str/join "\n"))
-                           "\n\n"
-                           (->> (apply conj sigs constraints)
-                                (mapv :rec.alloy/form)
-                                (str/join "\n\n"))
-                           "\n\n"
-                           run)]
-    (reset! module module-body)
-    module-body))
 
 (defn custom-munge
   [s]
@@ -306,6 +285,9 @@
            (= op 'clojure.set/intersection)
            (format "%s & %s" (parse (nth expr 1)) (parse (nth expr 2)))
 
+           (= op 'recife.alloy/intersection)
+           (format "%s & %s" (parse (nth expr 1)) (parse (nth expr 2)))
+
            (= op 'recife.alloy/union)
            (->> (rest expr)
                 (mapv parse)
@@ -321,6 +303,10 @@
 
            (= op 'recife.alloy/all)
            (format "all %s | {\n  %s\n}"
+                   (parse-args (nth expr 1)) (parse (nth expr 2)))
+
+           (= op 'recife.alloy/some**)
+           (format "some %s | {\n  %s\n}"
                    (parse-args (nth expr 1)) (parse (nth expr 2)))
 
            (= op 'recife.alloy/one)
@@ -360,6 +346,15 @@
            (->> (rest expr)
                 (mapv parse)
                 (str/join " ++ "))
+
+
+           (= op 'recife.alloy/always)
+           (format "always {%s}"
+                   (parse (last expr)))
+
+           (= op 'recife.alloy/eventually)
+           (format "eventually %s"
+                   (parse (last expr)))
 
            ;; FIXME: This works only for the ordering module, let's fix it later.
            ;; Also it should accept arguments.
@@ -444,7 +439,7 @@
 
 (defmethod clojure.pprint/simple-dispatch AlloySignature [c]
   (let [sig-map (.-sig-map c)]
-    (if (contains? #{:rec.type/pred :rec.type/fun :rec.type/fact :rec.type/assertion :rec.type/check}
+    (if (contains? #{:rec.type/pred :rec.type/fun :rec.type/fact :rec.type/assertion :rec.type/check :rec.type/run}
                    (:rec.alloy/type sig-map))
       (println (:rec.alloy/form sig-map))
       (println (sig-map->set (.-sig-map c))))))
@@ -473,6 +468,31 @@
                                 :rec.alloy/result-cache (atom nil)
                                 :rec.alloy/type :rec.type/pred-call
                                 :rec.alloy/name expression))))))
+
+(defn build-alloy-module
+  [{:keys [:rec.signature/sigs :rec.signature/module]}
+   constraints
+   {:keys [:run]}]
+  ;; Reset sigs cache.
+  (run! #(reset! (:rec.alloy/result-cache %) nil) sigs)
+  (let [module-body (apply str
+                           ;; Require ordering.
+                           (->> sigs
+                                (filter :rec.alloy/ordered?)
+                                (mapv #(format "open util/ordering[%s] as %s_ordering"
+                                               (:rec.alloy/name %)
+                                               (:rec.alloy/name %)))
+                                (str/join "\n"))
+                           "\n\n"
+                           (->> (apply conj sigs constraints)
+                                (mapv :rec.alloy/form)
+                                (str/join "\n\n"))
+                           "\n\n"
+                           (if (instance? AlloySignature run)
+                             (:rec.alloy/form run)
+                             run))]
+    (reset! module module-body)
+    module-body))
 
 (defn trans
   "Transitive closure operator (`^`)."
@@ -534,18 +554,42 @@
                                 (parse (macroexpand-all (first body))))})))
 
 (defn check
-  [name & body]
+  [name options & body]
   (AlloySignature.
    {:rec.alloy/name (custom-munge name)
     :rec.alloy/type :rec.type/check
-    :rec.alloy/form (format "check %s {\n  %s\n}"
+    :rec.alloy/form (format "check %s {\n  %s\n}%s"
                             (custom-munge name)
-                            (parse (macroexpand-all (first body))))}))
+                            (parse (macroexpand-all (first body)))
+                            (or (some->> (:for options) (str " for "))
+                                ""))}))
 
 (defmacro defcheck
-  [name & body]
+  [name options & body]
   `(def ~name
-     (check '~name '~@body)))
+     (check '~name '~options '~@body)))
+
+(defn run
+  [name options & body]
+  (AlloySignature.
+   {:rec.alloy/name (custom-munge name)
+    :rec.alloy/type :rec.type/run
+    :rec.alloy/form (format "run {\n  %s\n}%s"
+                            (or (some-> body first macroexpand-all parse)
+                                "")
+                            (or (some->> (:for options) (str " for "))
+                                ""))}))
+(defmacro defrun
+  [name options & body]
+  `(def ~name
+     (run '~name '~options '~@body)))
+
+(defmacro exec
+  [sigs & body]
+  `(some-> @(:rec.signature/module ~sigs)
+           (run-alloy-expression {:expression (str (parse (macroexpand-all '~@body)))
+                                  :reuse-ans? true})
+           parse-alloy-result))
 
 (defn- parse-sig-description
   [v]
@@ -563,7 +607,7 @@
     v))
 
 (defn sig
-  [name opts {:keys [:module-atom]}]
+  [name opts {:keys [:module-atom :vars?]}]
   (AlloySignature.
    {:rec.alloy/name (clojure.core/name name)
     :rec.alloy/type :rec.type/sig
@@ -572,12 +616,16 @@
     :rec.alloy/result-cache (atom nil)
     :rec.alloy/relations (->> (:relations opts)
                               (mapv (fn [[relation _]]
-                                      (AlloySignature.
-                                       {:rec.alloy/name (custom-munge (clojure.core/name relation))
-                                        :rec.alloy/type :rec.type/relation
-                                        :rec.alloy/parent name
-                                        :rec.alloy/module module-atom
-                                        :rec.alloy/result-cache (atom nil)}))))
+                                      (let [signature (AlloySignature.
+                                                       {:rec.alloy/name (custom-munge (clojure.core/name relation))
+                                                        :rec.alloy/type :rec.type/relation
+                                                        :rec.alloy/parent name
+                                                        :rec.alloy/module module-atom
+                                                        :rec.alloy/var? (-> relation meta :var boolean)
+                                                        :rec.alloy/result-cache (atom nil)})]
+                                        (when vars?
+                                          (intern *ns* (symbol (clojure.core/name relation)) signature))
+                                        signature))))
     :rec.alloy/form (format "%ssig %s %s {%s}"
                             (cond
                               (:abstract? opts) "abstract "
@@ -590,7 +638,10 @@
                                 "")
                             (or (some->> (:relations opts)
                                          (mapv (fn [[relation description]]
-                                                 (format "%s: %s"
+                                                 ;; We can have metadata attached to `relation`,
+                                                 ;; e.g. if it's a var.
+                                                 (format "%s%s: %s"
+                                                         (if (-> relation meta :var) "var " "")
                                                          (custom-munge (clojure.core/name relation))
                                                          (->> description
                                                               (mapv parse-sig-description)
@@ -598,61 +649,26 @@
                                          (str/join ", "))
                                 ""))}))
 
-(defmacro defsig
-  [name opts {:keys [:module-atom]}]
-  `(do
-     (def ~name
-       (AlloySignature.
-        {:rec.alloy/name '~(clojure.core/name name)
-         :rec.alloy/type :rec.type/sig
-         :rec.alloy/ordered? ~(boolean (:ordered? opts))
-         :rec.alloy/module ~module-atom
-         :rec.alloy/result-cache (atom nil)
-         ;; Create relations and define vars for them.
-         :rec.alloy/relations ~(->> (:relations opts)
-                                    (mapv (fn [[relation _]]
-                                            `(def ~(symbol relation)
-                                               (AlloySignature.
-                                                {:rec.alloy/name '~(custom-munge (clojure.core/name relation))
-                                                 :rec.alloy/type :rec.type/relation
-                                                 :rec.alloy/parent ~name
-                                                 :rec.alloy/module ~module-atom
-                                                 :rec.alloy/result-cache (atom nil)})))))
-         :rec.alloy/form ~(format "%ssig %s %s {%s}"
-                                  (cond
-                                    (:abstract? opts) "abstract "
-                                    (:multiplicity opts) (str (clojure.core/name (:multiplicity opts)) " ")
-                                    :else "")
-                                  (custom-munge (clojure.core/name name))
-                                  (or (some->> (:extends opts)
-                                               clojure.core/name
-                                               (str "extends "))
-                                      "")
-                                  (or (some->> (:relations opts)
-                                               (mapv (fn [[relation description]]
-                                                       (format "%s: %s"
-                                                               (custom-munge (clojure.core/name relation))
-                                                               (->> description
-                                                                    (mapv parse-sig-description)
-                                                                    (str/join " ")))))
-                                               (str/join ", "))
-                                      ""))}))
-     ~name))
-
 (defn signatures
-  [sigs]
-  (let [module-atom (atom nil)]
-    {:rec.signature/sigs
-     (->> sigs
-          ;; XXX: Put abstracts first because is was some differences
-          ;; at the ordering that I didn't investigate further.
-          (sort-by (fn [[_sig-name opts]]
-                     (:abstract? opts)))
-          reverse
-          (mapv (fn [[sig-name opts]]
-                  (sig (symbol (name sig-name)) opts {:module-atom module-atom}))))
+  ([sigs]
+   (signatures sigs {}))
+  ([sigs {:keys [:vars?]
+          :or {vars? true}}]
+   (let [module-atom (atom nil)]
+     {:rec.signature/sigs
+      (->> sigs
+           ;; XXX: Put abstracts first because there was some differences
+           ;;in the ordering that I still have to investigate further.
+           (sort-by (fn [[_sig-name opts]]
+                      (:abstract? opts)))
+           reverse
+           (mapv (fn [[sig-name opts]]
+                   (let [signature (sig (symbol (name sig-name)) opts {:module-atom module-atom :vars? vars?})]
+                     (when vars?
+                       (intern *ns* (symbol (name sig-name)) signature))
+                     signature))))
 
-     :rec.signature/module module-atom}))
+      :rec.signature/module module-atom})))
 
 (defn- create-alloy-obj
   [existing-alloy-obj expression]
@@ -671,9 +687,13 @@
 
 (declare some*)
 
+(declare some**)
+
 (declare subset?)
 
 (declare union)
+
+(declare intersection)
 
 (declare difference)
 
@@ -682,6 +702,10 @@
 (declare >*)
 
 (declare select)
+
+(declare always)
+
+(declare eventually)
 
 (defn cartesian
   [x y])
