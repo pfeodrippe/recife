@@ -1,4 +1,5 @@
 (ns recife.util.ordering
+  (:refer-clojure :exclude [first last next])
   (:require
    [clojure.string :as str]
    recife.alloy)
