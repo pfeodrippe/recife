@@ -33,7 +33,7 @@
 
 (defmethod parse-dynamic-expression clojure.lang.Symbol
   [expr]
-  `(ra/join ~expr ~'value ~'time))
+  `(ra/join ~expr ~'value))
 
 (defmethod parse-dynamic-expression clojure.lang.Keyword
   [expr]
@@ -70,8 +70,7 @@
   (let [res (mapv (fn [[k v]]
                     ;; TODO: We should check by the map at runtime instead of static.
                     `(= (ra/join ~(parse-dynamic-expression k)
-                                 ~'value
-                                 (ord/next ~'Time ~'time))
+                                 ~'value')
                         ~(parse-dynamic-expression (if (map? v)
                                                      ;; FIXME: This SubMap thing is very weird.
                                                      (SubMap. v)
@@ -116,8 +115,7 @@
       (and (symbol? op)
            (= (last expr) 'global))
       `(ra/join ~(parse-dynamic-expression (symbol (name (munge-kw op))))
-                ~'value
-                ~'time)
+                ~'value)
 
       (contains? `#{+ - * = < or and ra/union ra/difference not} op)
       `(~op ~@(map parse-dynamic-expression (rest expr)))
@@ -216,41 +214,39 @@
                                                  form)
                                                (mapv key)
                                                (mapv #(cond
-                                                        (symbol? %) (str (ra/parse %) ".value.time")
+                                                        (symbol? %) (str (ra/parse %) ".value")
                                                         (namespace %) (name (munge-kw %))
                                                         :else (name (ra/parse %)))))]
                        {:internal-name (symbol (str "__" (name label)))
                         :metadata metadata
                         :form (ra/pred label
                                        (->> pred-args
-                                            (mapcat (fn [k] [k :- :Obj]))
-                                            (concat [:time :- :Time]))
+                                            (mapcat (fn [k] [k :- :Obj])))
                                        (if r-while
                                          `(if (not (= (ra/join ~(munge-kw (key (first r-while)))
-                                                               ~'value
-                                                               ~'time)
+                                                               ~'value)
                                                       ~(if (empty? (val (first r-while)))
                                                          :none
                                                          (val (first r-while)))))
-                                            (and (= (ra/join ~'pc ~'value (ord/next ~'Time ~'time))
+                                            (and (= (ra/join ~'pc ~'value')
                                                     ~'__recife__done)
                                                  (ra/all [:a :- [:Obj :- :pc]]
-                                                   (and (= (ra/join ~'a ~'value (ord/next ~'Time ~'time))
-                                                           (ra/join ~'a ~'value ~'time)))))
-                                            (and (= (ra/join ~'pc ~'value (ord/next ~'Time ~'time))
-                                                    (ra/join ~'pc ~'value ~'time))
+                                                   (and (= (ra/join ~'a ~'value')
+                                                           (ra/join ~'a ~'value)))))
+                                            (and (= (ra/join ~'pc ~'value')
+                                                    (ra/join ~'pc ~'value))
                                                  ~parsed-form
                                                  (ra/all [:a :- [:Obj :- ~(if (seq unchanged-objs)
                                                                             (format "{%s}"
                                                                                     (str/join " + " unchanged-objs))
                                                                             :none)
                                                                  :- :pc]]
-                                                   (and (= (ra/join ~'a ~'value (ord/next ~'Time ~'time))
-                                                           (ra/join ~'a ~'value ~'time))))))
+                                                         (and (= (ra/join ~'a ~'value')
+                                                                 (ra/join ~'a ~'value))))))
                                          `(and ~@(let [[before after] (label->before-and-after-label label)]
-                                                   [`(= (ra/join ~'pc ~'value ~'time)
+                                                   [`(= (ra/join ~'pc ~'value)
                                                         ~before)
-                                                    `(= (ra/join ~'pc ~'value (ord/next ~'Time ~'time))
+                                                    `(= (ra/join ~'pc ~'value')
                                                         ~after)])
                                                ~parsed-form
                                                (ra/all [:a :- [:Obj :- ~(if (seq unchanged-objs)
@@ -258,8 +254,8 @@
                                                                                   (str/join " + " unchanged-objs))
                                                                           :none)
                                                                :- :pc]]
-                                                 (and (= (ra/join ~'a ~'value (ord/next ~'Time ~'time))
-                                                         (ra/join ~'a ~'value ~'time)))))))
+                                                       (and (= (ra/join ~'a ~'value')
+                                                               (ra/join ~'a ~'value)))))))
                         :invokes (for [proc procs]
                                    (->> local-keys
                                         (map (fn [k]
@@ -268,7 +264,7 @@
                                                    name
                                                    (str "_0")
                                                    symbol)))
-                                        (concat [(symbol (name label)) 'time]
+                                        (concat [(symbol (name label))]
                                                 (->> global-keys
                                                      (mapv (comp symbol #(str % "_0") name))))))})])))}))
 
@@ -331,9 +327,9 @@
                        (map :key-map)
                        set)
         schema (-> schema'
-                   (assoc :Time {:ordered? true}
-                          :__Invalid {:multiplicity :one}
-                          :Obj {:relations {:value [:univ :set :-> 'Time]}
+                   (assoc :__Invalid {:multiplicity :one}
+                          :Obj {:relations {(with-meta 'value {:var true})
+                                            [:set :univ]}
                                 :abstract? true})
                    (merge new-sigs))
         initial-expressions (->> vars
@@ -342,17 +338,17 @@
                                  (mapv (fn [[k v]]
                                          (cond
                                            (= v :none)
-                                           `(and (ra/subset? (ra/join ~(name k) ~'value (ord/first ~'Time))
+                                           `(and (ra/subset? (ra/join ~(name k) ~'value)
                                                              ~v))
 
                                            (set? v)
-                                           `(and (= (ra/join ~(name k) ~'value (ord/first ~'Time))
+                                           `(and (= (ra/join ~(name k) ~'value)
                                                     (ra/union ~@v)))
 
                                            :else
-                                           `(and (ra/subset? (ra/join ~(name k) ~'value (ord/first ~'Time))
+                                           `(and (ra/subset? (ra/join ~(name k) ~'value)
                                                              ~v)
-                                                 (= (count (ra/join ~(name k) ~'value (ord/first ~'Time)))
+                                                 (= (count (ra/join ~(name k) ~'value))
                                                     1))))))]
     {:vars vars
      :initial-expressions initial-expressions
@@ -370,23 +366,23 @@
                                  (map #(vector % {:multiplicity :one
                                                   :extends :__MapDomain}))
                                  (into {}))
-        r-all `(ra/all ~(vec
-                         (concat '[time :- [Time - last]]
-                                 (->> vars
-                                      (medley/map-keys munge-kw)
-                                      (medley/map-vals parse-initial-value)
-                                      (mapcat (fn [[k _v]]
-                                                [(symbol (str (name k) "_" 0)) :- (symbol (name k))]))
-                                      vec)))
-                 (or ~@(mapcat (comp :invokes val) steps)
-                     (and ~@(->> vars
-                                 (medley/map-keys munge-kw)
-                                 (medley/map-vals parse-initial-value)
-                                 (map (fn [[k _v]]
-                                        (let [sym (symbol (str (name k) "_" 0))]
-                                          `(and (= (ra/join ~sym ~'value (ord/next ~'Time ~'time))
-                                                   (ra/join ~sym ~'value ~'time))))))
-                                 vec))))]
+        r-all `(ra/always
+                (ra/all ~(vec
+                          (->> vars
+                               (medley/map-keys munge-kw)
+                               (medley/map-vals parse-initial-value)
+                               (mapcat (fn [[k _v]]
+                                         [(symbol (str (name k) "_" 0)) :- (symbol (name k))]))
+                               vec))
+                        (or ~@(mapcat (comp :invokes val) steps)
+                            (and ~@(->> vars
+                                        (medley/map-keys munge-kw)
+                                        (medley/map-vals parse-initial-value)
+                                        (map (fn [[k _v]]
+                                               (let [sym (symbol (str (name k) "_" 0))]
+                                                 `(and (= (ra/join ~sym ~'value')
+                                                          (ra/join ~sym ~'value))))))
+                                        vec)))))]
     {:trace (ra/fact 'Trace
                      `(and ~@(mapcat :initial-expressions procs)
                            ~r-all))
@@ -402,8 +398,15 @@
 
 (defn xml->timeline
   []
-  (let [field-maps (->> (xml/parse "alloy_example_output.xml")
-                        xml-seq
+  (let [parsed-xml (->> (xml/parse "alloy_example_output.xml")
+                        xml-seq)
+        instance-attrs (-> (->> parsed-xml
+                                (filter (comp #{:instance} :tag))
+                                first
+                                :attrs)
+                           (update :backloop (fnil #(Integer/parseInt %) "-1"))
+                           (update :tracelength #(Integer/parseInt %)))
+        field-maps (->> parsed-xml
                         (filter (comp #{:field} :tag)))
         map->value (->> field-maps
                         (filter (comp #{"entries"} :label :attrs))
@@ -420,9 +423,12 @@
                                                (into {}))))
         timeline' (->> field-maps
                        (filter (comp #{"value"} :label :attrs))
-                       first
-                       :content
-                       (filter (comp #{:tuple} :tag))
+                       (map-indexed (fn [idx {:keys [:content]}]
+                                      (->> content
+                                           (filter (comp #{:tuple} :tag))
+                                           (map #(update % :content conj
+                                                         {:tag :atom, :attrs {:label (str "Time$" idx)}, :content nil})))))
+                       (apply concat)
                        (mapv :content)
                        (mapv (fn [atoms] (mapv (comp :label :attrs) atoms)))
                        (group-by last)
@@ -475,7 +481,14 @@
                             distinct
                             (mapv #(vector % #{}))
                             (into {}))
-        timeline (mapv #(merge default-values %) timeline')]
+        timeline (->> timeline'
+                      (mapv #(merge default-values %))
+                      (map-indexed (fn [idx m]
+                                     (cond-> (assoc m :_time idx)
+                                       (and (= (inc idx) (:tracelength instance-attrs))
+                                            (some-> instance-attrs :backloop))
+                                       (assoc :_back-to-time (:backloop instance-attrs)))))
+                      vec)]
     timeline))
 
 (defn run-procs
@@ -492,20 +505,22 @@
   rank : (univ - Int) -> one Int
 }"
                                    "\n"
-                                   "fact {some time: Time | {%s} and {all disj m1, m2: __Map | {%s}} and {no value.Time :> __Invalid}}\n\n"
-                                   "run {} for 9 but 6 Int\n\n"
+                                   "fact {eventually {{%s} and {all disj m1, m2: __Map | {%s}}} and always {no value :> __Invalid}}\n\n"
+                                   #_"run {} for 9 but 6 Int\n\n"
+                                   "run {} for 6 Int \n"
                                    (when checker-expr
-                                     (format "check {all time: Time | %s} for 9 but 6 Int"
+                                     (format "check {always {%s}} for 6 Int"
                                              (ra/parse checker-expr))))
                               (->> internal-pcs
                                    (mapv ra/custom-munge)
-                                   (mapv #(format "%s.value.time = __recife__done" %))
+                                   (mapv #(format "%s.value = __recife__done" %))
                                    (str/join " and "))
                               (->> map-types
                                    (mapv ra/custom-munge)
                                    (mapv #(format "m1.entries[%s] != m2.entries[%s]" % %))
                                    (str/join " or ")))})
-               (ra/run-alloy-expression {:expression "1"})
+               (ra/run-alloy-expression {:expression "1"
+                                         #_ #_:show-viz? true})
                ra/parse-alloy-result)
        (xml->timeline)))))
 
