@@ -1,9 +1,9 @@
-clj_cmd = env clj -O:default-options
+clj_cmd = env clj
 
 .PHONY: build
 build:
 	mkdir -p target
-	$(clj_cmd) -A:depstar -m hf.depstar.uberjar target/recife.jar
+	$(clj_cmd) -X:depstar uberjar :jar target/recife.jar :sync-pom true :exclude '["clojure/.*", "lambdaisland/.*", "medley/.*"]'
 
 .PHONY: deploy
 deploy:
