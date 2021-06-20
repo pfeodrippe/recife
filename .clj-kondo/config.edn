@@ -1,0 +1,8 @@
+{:linters
+ {:unresolved-symbol
+  {:exclude [match?]}}
+
+ :lint-as {recife.core/defproc clojure.core/def
+           recife.core/definvariant clojure.core/def
+           recife.core/defproperty clojure.core/def
+           recife.core/defconstraint clojure.core/def}}
