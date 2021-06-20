@@ -5,6 +5,8 @@ image:https://img.shields.io/clojars/v/pfeodrippe/recife.svg[link="http://clojar
 
 A model checker library in Clojure.
 
+See a quick video with new features of 0.3.0 at https://www.youtube.com/watch?v=C9WwF4RXq74.
+
 == Usage
 
 We will use the following aliases during the documentation.
