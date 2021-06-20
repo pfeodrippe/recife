@@ -45,6 +45,10 @@ Instead of having to learn a new language (which I would incentivize because TLA
 is a great one), we can use normal Clojure code (it makes heavy use of TLC
 overrides).
 
+It calls TLC through a new JVM, so you have to create your vars outside of, e.g., a comment form.
+Also don't put your `r/run-model` call in the wild so it's not called again
+when on the new JVM (NOTE: make `r/run-model` ignore it by using a JVM property).
+
 == WARNING!!
 
 This is a alpha library, use at your own risk, file bugs and issues.
