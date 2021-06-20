@@ -26,6 +26,13 @@ Our mains macros/functions are
 - `r/done`, you state that the process is done;
 - `r/goto`, go to another step in the same process (some step defined in the
   context of the `r/defproc`).
+- `ra/visualize-result` to see the result in a graphic format (we use `Quil` to
+  draw stuff).
+
+See the tests to check what's available, there are more advanced concepts like
+fairness there.
+
+Open an Issue or reach out to me on https://twitter.com/pfeodrippe[Twitter].
 
 == How it works
 
