@@ -54,3 +54,7 @@ when on the new JVM (NOTE: make `r/run-model` ignore it by using a JVM property)
 This is a alpha library, use at your own risk, file bugs and issues.
 
 See examples at `test/hillel` folder and `test/hillel_tests.clj` file.
+
+== Related Projects or of Interest
+- https://www.stateright.rs/getting-started.html[Stateright].
+- https://github.com/tlaplus/tlaplus [TLA+/TLC].
