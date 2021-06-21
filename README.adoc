@@ -57,4 +57,4 @@ See examples at `test/hillel` folder and `test/hillel_tests.clj` file.
 
 == Related Projects or of Interest
 - https://www.stateright.rs/getting-started.html[Stateright].
-- https://github.com/tlaplus/tlaplus [TLA+/TLC].
+- https://github.com/tlaplus/tlaplus[TLA+/TLC].
