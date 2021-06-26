@@ -38,3 +38,9 @@
   (fn [db]
     (and (>= (:trash/capacity db) 0)
          (>= (:recycle/capacity db) 0))))
+
+(comment
+
+  (r/run-model global #{main invariant})
+
+  ())

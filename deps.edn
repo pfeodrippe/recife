@@ -9,13 +9,15 @@
                      lambdaisland/kaocha {:mvn/version "1.0-612"}
                      elle/elle {:mvn/version "0.1.2"}
                      ;; `unilog` is needed by `elle`.
-                     spootnik/unilog {:mvn/version "0.7.24"}}
+                     spootnik/unilog {:mvn/version "0.7.24"}
+                     pfeodrippe/arrudeia {:mvn/version "0.10.0-SNAPSHOT"}}
         :extra-paths ["test"]}
   :test {:extra-deps {nubank/matcher-combinators {:mvn/version "3.1.4"}
                       lambdaisland/kaocha {:mvn/version "1.0-612"}
                       elle/elle {:mvn/version "0.1.2"}
                       ;; `unilog` is needed by `elle`.
-                      spootnik/unilog {:mvn/version "0.7.24"}}
+                      spootnik/unilog {:mvn/version "0.7.24"}
+                      pfeodrippe/arrudeia {:mvn/version "0.10.0-SNAPSHOT"}}
          :extra-paths ["test"]
          :main-opts   ["-m" "kaocha.runner"]}}
 
@@ -25,6 +27,7 @@
   pfeodrippe/tla-edn {:mvn/version "0.6.0-SNAPSHOT"}
   alandipert/interpol8 {:mvn/version "0.0.3"}
   metosin/malli {:mvn/version "0.5.1"}
-  quil/quil {:mvn/version "3.1.0"}}
+  quil/quil {:mvn/version "3.1.0"}
+  com.cognitect/transit-clj {:mvn/version "1.0.324"}}
 
  :paths ["src"]}

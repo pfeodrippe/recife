@@ -12,7 +12,8 @@
    [medley.core :as medley]
    [recife.schema :as schema]
    [tla-edn.core :as tla-edn]
-   [tla-edn.spec :as spec])
+   [tla-edn.spec :as spec]
+   [cognitect.transit :as t])
   (:import
    (java.io File)
    (lambdaisland.deep_diff2.diff_impl Mismatch Deletion Insertion)
@@ -51,6 +52,8 @@
   [v]
   (ModelValue/make (str v)))
 
+;; TODO: For serialized objecs, make it a custom random filename
+;; so exceptions from concurrent executions do not mess with each other.
 (def ^:private exception-filename
   "recife-exception.ser")
 
@@ -578,52 +581,53 @@ VIEW
      (. m (setAccessible true))
      (. m (get obj)))))
 
-(def ^:private states-atom (atom {}))
+;; EdnStateWriter
+(def ^:private edn-states-atom (atom {}))
 
-(defn- save-state
+(defn- edn-save-state
   [tlc-state]
   (let [edn-state (->> tlc-state
                        .getVals
                        (some #(when (= (str (key %)) "main_var")
                                 (val %)))
                        tla-edn/to-edn)]
-    (swap! states-atom assoc-in
+    (swap! edn-states-atom assoc-in
            [:states (.fingerPrint tlc-state)]
            {:state (dissoc edn-state :recife/metadata)
             :successors #{}})))
 
-(defn- rank-state
+(defn- edn-rank-state
   [tlc-state]
-  (swap! states-atom update-in
+  (swap! edn-states-atom update-in
          [:ranks (dec (.getLevel tlc-state))]
          (fnil conj #{}) (.fingerPrint tlc-state)))
 
-(defn- save-successor
+(defn- edn-save-successor
   [tlc-state tlc-successor]
   (let [successor-state (->> tlc-successor
                              .getVals
                              (some #(when (= (str (key %)) "main_var")
                                       (val %)))
                              tla-edn/to-edn)]
-    (swap! states-atom update-in
+    (swap! edn-states-atom update-in
            [:states (.fingerPrint tlc-state) :successors]
            conj
            [(.fingerPrint tlc-successor) (get-in successor-state [:recife/metadata :context])])))
 
-(defn- write-state
+(defn- edn-write-state
   [_state-writer state successor _action-checks _from _length successor-state-new? _visualization _action]
   (when successor-state-new?
-    (save-state successor))
-  (rank-state state)
-  (save-successor state successor))
+    (edn-save-state successor))
+  (edn-rank-state state)
+  (edn-save-successor state successor))
 
-#_ (clojure.edn/read-string (slurp "states-atom.edn"))
+#_ (clojure.edn/read-string (slurp "edn-states-atom.edn"))
 
-(defrecord EdnStateWriter [#_states-atom]
+(defrecord EdnStateWriter [#_edn-states-atom]
   tlc2.util.IStateWriter
   (writeState [_ state]
-    (save-state state)
-    (rank-state state))
+    (edn-save-state state)
+    (edn-rank-state state))
 
   (writeState [this state successor successor-state-new?]
     (.writeState this state successor successor-state-new? tlc2.util.IStateWriter$Visualization/DEFAULT))
@@ -633,23 +637,23 @@ VIEW
                      ^tlc2.tool.TLCState successor
                      ^boolean successor-state-new?
                      ^tlc2.tool.Action action]
-   (write-state this state successor nil 0 0 successor-state-new? tlc2.util.IStateWriter$Visualization/DEFAULT action))
+   (edn-write-state this state successor nil 0 0 successor-state-new? tlc2.util.IStateWriter$Visualization/DEFAULT action))
 
   (^void writeState [this
                      ^tlc2.tool.TLCState state
                      ^tlc2.tool.TLCState successor
                      ^boolean successor-state-new?
                      ^tlc2.util.IStateWriter$Visualization visualization]
-   (write-state this state successor nil 0 0 successor-state-new? visualization nil))
+   (edn-write-state this state successor nil 0 0 successor-state-new? visualization nil))
 
   (writeState [this state successor action-checks from length successor-state-new?]
-    (write-state this state successor action-checks from length successor-state-new? tlc2.util.IStateWriter$Visualization/DEFAULT nil))
+    (edn-write-state this state successor action-checks from length successor-state-new? tlc2.util.IStateWriter$Visualization/DEFAULT nil))
 
   (writeState [this state successor action-checks from length successor-state-new? visualization]
-    (write-state this state successor action-checks from length successor-state-new? visualization nil))
+    (edn-write-state this state successor action-checks from length successor-state-new? visualization nil))
 
   (close [_]
-    (spit "states-atom.edn" @states-atom))
+    (spit "edn-states-atom.edn" @edn-states-atom))
 
   (getDumpFileName [_])
 
@@ -659,7 +663,150 @@ VIEW
 
   (snapshot [_]))
 
+;; FileStateWriter
+(defn- file-sw-save-state
+  [{:keys [:edn-states-atom]} tlc-state]
+  (let [edn-state (->> tlc-state
+                       .getVals
+                       (some #(when (= (str (key %)) "main_var")
+                                (val %)))
+                       tla-edn/to-edn)]
+    (swap! edn-states-atom assoc-in
+           [:states (.fingerPrint tlc-state)]
+           {:state (dissoc edn-state :recife/metadata)
+            :successors #{}})))
+
+(defn- file-sw-rank-state
+  [{:keys [:edn-states-atom]} tlc-state]
+  (swap! edn-states-atom update-in
+         [:ranks (dec (.getLevel tlc-state))]
+         (fnil conj #{}) (.fingerPrint tlc-state)))
+
+(defn- file-sw-save-successor
+  [{:keys [:edn-states-atom]} tlc-state tlc-successor]
+  (let [successor-state (->> tlc-successor
+                             .getVals
+                             (some #(when (= (str (key %)) "main_var")
+                                      (val %)))
+                             tla-edn/to-edn)]
+    (swap! edn-states-atom update-in
+           [:states (.fingerPrint tlc-state) :successors]
+           conj
+           [(.fingerPrint tlc-successor) (get-in successor-state [:recife/metadata :context])])))
+
+(defn- file-sw-write-state
+  [this state successor _action-checks _from _length successor-state-new? _visualization _action]
+  (when successor-state-new?
+    (file-sw-save-state this successor))
+  (file-sw-rank-state this state)
+  (file-sw-save-successor this state successor))
+
+;; TODO: Move the state writers to a `state-writers` ns.
+(defrecord FileStateWriter [writer output-stream edn-states-atom file-path]
+  tlc2.util.IStateWriter
+  (writeState [this state]
+    (file-sw-save-state this state)
+    (file-sw-rank-state this state))
+
+  (writeState [this state successor successor-state-new?]
+    (.writeState this state successor successor-state-new? tlc2.util.IStateWriter$Visualization/DEFAULT))
+
+  (^void writeState [this
+                     ^tlc2.tool.TLCState state
+                     ^tlc2.tool.TLCState successor
+                     ^boolean successor-state-new?
+                     ^tlc2.tool.Action action]
+   (file-sw-write-state this state successor nil 0 0 successor-state-new? tlc2.util.IStateWriter$Visualization/DEFAULT action))
+
+  (^void writeState [this
+                     ^tlc2.tool.TLCState state
+                     ^tlc2.tool.TLCState successor
+                     ^boolean successor-state-new?
+                     ^tlc2.util.IStateWriter$Visualization visualization]
+   (file-sw-write-state this state successor nil 0 0 successor-state-new? visualization nil))
+
+  (writeState [this state successor action-checks from length successor-state-new?]
+    (file-sw-write-state this state successor action-checks from length successor-state-new? tlc2.util.IStateWriter$Visualization/DEFAULT nil))
+
+  (writeState [this state successor action-checks from length successor-state-new? visualization]
+    (file-sw-write-state this state successor action-checks from length successor-state-new? visualization nil))
+
+  (close [_]
+    (t/write writer @edn-states-atom)
+    (reset! edn-states-atom nil)
+    (.close output-stream))
+
+  (getDumpFileName [_])
+
+  (isNoop [_] false)
+
+  (isDot [_] false)
+
+  (snapshot [_]))
+
+(defn states-from-result
+  [{:keys [:recife/transit-states-file-path]}]
+  (with-open [is (io/input-stream transit-states-file-path)]
+    (let [reader (t/reader is :msgpack)]
+      (t/read reader))))
+
+(defn random-traces-from-states
+  ([states]
+   (random-traces-from-states states 10))
+  ([states max-number-of-paths]
+   (if (< max-number-of-paths 1)
+     []
+     (let [initial-states (get-in states [:ranks 0])]
+       (loop [[current-state] [(rand-nth (vec initial-states)) nil]
+              visited #{}
+              paths [[[current-state nil]]]]
+         (let [visited' (conj visited current-state)
+               successor-state (some->> (get-in states [:states current-state :successors])
+                                        (remove #(contains? visited' (first %)))
+                                        vec
+                                        seq
+                                        rand-nth)
+               ;; If there is no successor state and the current path is a prefix
+               ;; of some exising path, we can get rid of this path.
+               paths' (if (and (nil? successor-state)
+                               (some #(= (take (count (last paths)) %)
+                                         (last paths))
+                                     (drop-last paths)))
+                        (vec (drop-last paths))
+                        paths)]
+           (cond
+             (some? successor-state)
+             (recur successor-state
+                    visited'
+                    (update paths' (dec (count paths')) (comp vec conj) successor-state))
+
+             ;; Stop if there are no more paths to see or if we have the desired
+             ;; number of paths.
+             (or (= (count paths') max-number-of-paths)
+                 (= (count visited') (count (:states states))))
+             ;; Return maps instead of positional data.
+             ;; We make the output the same form as `:trace` when we have some
+             ;; violation.
+             (->> paths'
+                  (mapv #(->> %
+                              (map-indexed (fn [idx [state-fp context]]
+                                             [idx (-> (get-in states [:states state-fp :state])
+                                                      (merge (when (some? context)
+                                                               {:recife/metadata {:context context}}))
+                                                      (with-meta {:fingerprint state-fp}))]))
+                              vec)))
+
+             :else
+             ;; Start a new path.
+             (let [state (rand-nth (vec initial-states))]
+               (recur [state nil]
+                      (conj visited' state)
+                      (assoc paths' (count paths') [[state nil]]))))))))))
+
 (defn tlc-result-handler
+  "This function is a implementation detail, you should not use it.
+  It handles the TLC object and its result, generating the output we see when
+  calling `run-model`."
   [tlc-runner]
   (let [recorder-atom (atom {:others []})
         record #(swap! recorder-atom merge %)
@@ -699,8 +846,15 @@ VIEW
     (try
       (let [tlc (do (MP/setRecorder recorder)
                     (tlc-runner))
+            ;; Read opts file from JVM property.
+            opts (some-> (System/getProperty "RECIFE_OPTS_FILE_PATH") slurp edn/read-string)
+            state-writer (when (:dump-states? opts)
+                           (let [file-path (.getAbsolutePath (File/createTempFile "transit-output" ".msgpack"))
+                                 os (io/output-stream file-path)
+                                 state-writer (->FileStateWriter (t/writer os :msgpack) os (atom {}) file-path)]
+                             (.setStateWriter tlc state-writer)
+                             state-writer))
             _ (doto tlc
-                #_(.setStateWriter (->EdnStateWriter))
                 .process)
             recorder-info @recorder-atom
             _ (do (def tlc tlc)
@@ -758,22 +912,23 @@ VIEW
 
                                   :else
                                   {:trace :ok})))]
-        {:trace (if (some-> tlc2.TLCGlobals/mainChecker .theFPSet .size)
-                  trace
-                  :error)
-         :trace-info (if (-> info :violation :name (= ::show-example-invariant))
-                       ;; If the user didn't ask for some check (through an
-                       ;; invariant or a temporal property) and there was some
-                       ;; violation (which in reality is just a example of a trace
-                       ;; which satisfies the spec), then we get here.
-                       (-> info
-                           (dissoc :violation)
-                           (assoc :trace-example? true))
-                       info)
-         :distinct-states (some-> tlc2.TLCGlobals/mainChecker .theFPSet .size)
-         :generated-states (some-> tlc2.TLCGlobals/mainChecker .getStatesGenerated)
-         :seed (private-field tlc "seed")
-         :fp (private-field tlc "fpIndex")})
+        (-> {:trace (if (some-> tlc2.TLCGlobals/mainChecker .theFPSet .size)
+                      trace
+                      :error)
+             :trace-info (if (-> info :violation :name (= ::show-example-invariant))
+                           ;; If the user didn't ask for some check (through an
+                           ;; invariant or a temporal property) and there was some
+                           ;; violation (which in reality is just a example of a trace
+                           ;; which satisfies the spec), then we get here.
+                           (-> info
+                               (dissoc :violation)
+                               (assoc :trace-example? true))
+                           info)
+             :distinct-states (some-> tlc2.TLCGlobals/mainChecker .theFPSet .size)
+             :generated-states (some-> tlc2.TLCGlobals/mainChecker .getStatesGenerated)
+             :seed (private-field tlc "seed")
+             :fp (private-field tlc "fpIndex")}
+            (medley/assoc-some :recife/transit-states-file-path (:file-path state-writer))))
       (catch Exception ex
         (serialize-obj ex exception-filename)
         {:trace :error
@@ -793,7 +948,7 @@ VIEW
   ([init-state next-operator operators {:keys [:seed :fp :workers :tlc-args
                                                :raw-output? :run-local? :debug?
                                                :complete-response?]
-                                        :or {workers :auto}}]
+                                        :or {workers :auto} :as opts}]
    ;; Do some validation.
    (some->> (m/explain schema/Operator next-operator)
             me/humanize
@@ -808,6 +963,7 @@ VIEW
    ;; Run model.
    (let [file (doto (File/createTempFile "eita" ".tla") .delete) ; we are interested in the random name of the folder
          abs-path (-> file .getAbsolutePath (str/split #"\.") first (str "/spec.tla"))
+         opts-file-path (-> file .getAbsolutePath (str/split #"\.") first (str "/opts.edn"))
          _ (io/make-parents abs-path)
          [file-name file-type] (-> abs-path (str/split #"/") last (str/split #"\."))
          all-operators (if (->> operators
@@ -821,6 +977,9 @@ VIEW
                            :operators all-operators
                            :spec-name file-name})
          _ (spit abs-path module-contents)
+         ;; Also put a file with opts in the same folder so we can read configuration
+         ;; in the tlc-handler function.
+         _ (spit opts-file-path opts)
          tlc-opts (->> (cond-> []
                          seed (conj "-seed" seed)
                          fp (conj "-fp" fp)
@@ -869,7 +1028,7 @@ VIEW
                       {:tlc-result-handler #'tlc-result-printer-handler
                        :loaded-classes loaded-classes
                        :complete-response? true
-                       :raw-args ["-DTLCCustomHandler=hillel.ch5_cache_2.Abc"]})
+                       :raw-args [(str "-DRECIFE_OPTS_FILE_PATH=" opts-file-path)]})
              output (atom [])]
          ;; Read line by line so we can stream the output to the user.
          (with-open [rdr (io/reader (:out result))]
@@ -1107,6 +1266,8 @@ VIEW
   ;; - [ ] Maybe give names to anonymous functions in `defproc`?
   ;; - [ ] Check coverage (e.g. if some operator is never enabled or if it's
   ;;       never enabled in some context).
+  ;; - [ ] Create CHANGELOG file.
+  ;; - [ ] Visualize states file.
 
   ;; PRIORITIES:
   ;; - [x] Better show which process caused which changes, it's still confusing.
@@ -1130,5 +1291,53 @@ VIEW
   ;; - [x] Allow user to pass a function which will be used as a `CONSTRAINT`.
   ;; - [x] Maybe let the user pass custom messages from the invariant to the
   ;;       output.
+  ;; - [ ] Show action which took it to a back to state violation.
+  ;; - [ ] Use DFS and `arrudeia` to check implementations. Well, it appears
+  ;;       that TLC DFS is not reliable, so we will have to use BFS, maybe
+  ;;       generating all the possible traces upfront (with a `StateWriter`
+  ;;       instance) and using it. Or just use BFS and require lots of memory
+  ;;       for the user, it may be viable given the small scope hypothesis.
+  ;; - [ ] Return `:error` in `:trace`, check for some kind of error code.
+  ;; - [x] Remove bogus `-DTLCCustomHandler` JVM property.
+  ;; - [ ] Make `r/run-model` ignore other `r/run-model` calls by checking a JVM
+  ;;       property.
+  ;; - [ ] Better documentation for fairness and `:exists` local variables.
+  ;; - [ ] Create serialized files in a unique folder so it does not clash
+  ;;       with concurrent runs of Recife.
+
+
+  "
+== Interaction with implementation
+
+To test an implementation, we have to make our system deterministic by
+instrumenting it (maybe with `arrudeia`), also we have to keep track of
+which trace we are at (maybe by appending the traces prefixes?) (maybe it's
+not needed). Besides being deterministic and as we will use BFS, we have to
+differentiate between the concurrent traaces through our systems (maybe by
+mocking).
+
+The combination function + state should give you the same result everytime.
+
+Thinking a little bit more, we could use use DFS with the one worker limitation so
+we don't have concurrency issues (which is what we are trying to test in a real
+implementation anyway). DFS also does not let us test liveness stuff, but we could
+probably use something from TLC (or somewhere else) which would check the stories
+for us ad hoc.
+
+We can do it in real time while TLA+ is running or after we have our traces from
+the state writer file. Doing it after appears to be much more easier, it can be
+said that testing it in the implementation it's kind of a refinement of the
+specification. Doing it in real time means that we can drive TLA+ from the
+implementation, but is this useful?
+
+Two types of implementation model checking:
+- Using arrudeia and Recife in the application itself.
+- Sending command through headers so the application know when to \"freeze\".
+
+Just using state writer is how we can know the action, so let's try to use it.
+
+For the implementation project, also see https://github.com/pfeodrippe/recife/projects/2.
+
+"
 
   ())
