@@ -12,7 +12,9 @@
    [medley.core :as medley]
    [recife.schema :as schema]
    [tla-edn.core :as tla-edn]
-   [tla-edn.spec :as spec])
+   [tla-edn.spec :as spec]
+   [cognitect.transit :as t]
+   [clojure.set :as set])
   (:import
    (java.io File)
    (lambdaisland.deep_diff2.diff_impl Mismatch Deletion Insertion)
@@ -32,8 +34,11 @@
 (extend-protocol tla-edn/TLAPlusEdn
   StringValue
   (-to-edn [v]
-    (let [s (str/replace (str (.val v)) #"___" ".")]
-      (keyword (repl/demunge s))))
+    (let [s (str/replace (str (.val v)) #"___" ".")
+          k (keyword (repl/demunge s))]
+      (if (= k :recife/null)
+        nil
+        k)))
 
   UniqueString
   (-to-edn [v]
@@ -43,6 +48,10 @@
   [v]
   (StringValue. (custom-munge (symbol v))))
 
+(defmethod tla-edn/to-tla-value nil
+  [_]
+  (tla-edn/to-tla-value :recife/null))
+
 (defmethod tla-edn/to-tla-value clojure.lang.Seqable
   [v]
   (tla-edn/to-tla-value (into [] v)))
@@ -51,6 +60,8 @@
   [v]
   (ModelValue/make (str v)))
 
+;; TODO: For serialized objecs, make it a custom random filename
+;; so exceptions from concurrent executions do not mess with each other.
 (def ^:private exception-filename
   "recife-exception.ser")
 
@@ -112,6 +123,23 @@
                        {}
                        (tla-edn/to-edn extra-args-tla))
           result (process-operator* identifier f self extra-args main-var)]
+      (tla-edn/to-tla-value result))
+    (catch Exception e
+      (serialize-obj e exception-filename)
+      (throw e))))
+
+(defn- process-operator-local*
+  [f self main-var]
+  (let [global main-var
+        local (get-in main-var [::procs self])]
+    (f (merge {:self self} global local))))
+
+(defn- process-operator-local
+  [f self-tla ^Value main-var-tla]
+  (try
+    (let [self (tla-edn/to-edn self-tla {:string-to-keyword? true})
+          main-var (tla-edn/to-edn main-var-tla {:string-to-keyword? true})
+          result (process-operator-local* f self main-var)]
       (tla-edn/to-tla-value result))
     (catch Exception e
       (serialize-obj e exception-filename)
@@ -220,6 +248,19 @@
   (fn [context _state]
     (first context)))
 
+(defmulti operator-local
+  "Used for helper functions (e.g. to help with non-determinism).
+  Instead of creating a new operator, we create a unique one,
+  `recife-operator-local`, and dispatch it based on `:step` and
+  `:key` fields."
+  (fn [args]
+    (select-keys args [:step :key])))
+
+(spec/defop recife_operator_local {:module "spec"}
+  [self ^Value params main-var]
+  (let [{:keys [:f]} (operator-local (tla-edn/to-edn params))]
+    (process-operator-local f self main-var)))
+
 (defn reg
   ([identifier expr]
    (reg identifier {} expr))
@@ -238,7 +279,8 @@
                                                             (second state)
                                                             state))))
      (with-meta
-       {:identifier (str (symbol (str (custom-munge identifier) "2")) "(self, _extra_args, _main_var) == self = self /\\ _main_var = _main_var /\\ _extra_args = _extra_args\n\n"
+       {:identifier (str (symbol (str (custom-munge identifier) "2"))
+                         "(self, _extra_args, _main_var) == self = self /\\ _main_var = _main_var /\\ _extra_args = _extra_args\n\n"
                          (symbol (custom-munge identifier))
                          "(self, _main_var)")
         :op-ns (-> op meta :op-ns)
@@ -250,28 +292,75 @@
                                (-> opts meta :fair+)) :recife.fairness/strongly-fair)
         :form (parse [:and
                       [:raw (format "\nmain_var[%s][self][\"pc\"] = %s"
-                                     (tla-edn/to-tla-value ::procs)
-                                     (tla-edn/to-tla-value identifier))]
+                                    (tla-edn/to-tla-value ::procs)
+                                    (tla-edn/to-tla-value identifier))]
                       (if (seq opts)
                         [:raw (parse [:exists (->> opts
-                                                     (mapv (fn [[k v]]
-                                                             (if (coll? v)
-                                                               [(symbol (str (custom-munge k)))
-                                                                (parse (set v))]
-                                                               [(symbol (str (custom-munge k)))
-                                                                [:raw (str " main_var[" (parse v) "]")]]))))
-                                       [:raw (str "\nmain_var' = "
-                                                   (symbol (str (custom-munge identifier) "2"))
-                                                   "(self, "
-                                                   (->> (keys opts)
-                                                        (mapv #(hash-map % (symbol (custom-munge %))))
-                                                        (into {})
-                                                        tla-edn/to-tla-value)
-                                                   ", main_var)")]])]
+                                                   (mapv (fn [[k v]]
+                                                           ;; Here we want to achieve non determinism.
+                                                           [(symbol (str (custom-munge k)))
+                                                            ;; If the value is empty, we return
+                                                            ;; a set with a `nil` (`#{nil}`) so
+                                                            ;; we don't have bogus deadlocks.
+                                                            (cond
+                                                              ;; If we have a coll here, then we want
+                                                              ;; to get one of these hardcoded elements.
+                                                              (coll? v)
+                                                              (if (seq v)
+                                                                (parse (set v))
+                                                                #{nil})
+
+                                                              ;; A keyword means that the user wants
+                                                              ;; to use one of the global variables
+                                                              ;; as a source of non determinism.
+                                                              ;; TODO: Maybe if the user passes a
+                                                              ;; unamespaced keyword we can use a
+                                                              ;; local variable?
+                                                              (keyword? v)
+                                                              [:raw
+                                                               (let [mv (str " main_var[" (parse v) "] ")]
+                                                                 (format " IF %s = {} THEN %s ELSE %s"
+                                                                         mv
+                                                                         (parse #{nil})
+                                                                         mv))]
+
+                                                              ;; For functions, instead of creating a
+                                                              ;; new operator, we use a defmethod used
+                                                              ;; by a hardcoded operator (`recife-operator-local`).
+                                                              (fn? v)
+                                                              (do (defmethod operator-local {:step identifier
+                                                                                             :key k}
+                                                                    [_]
+                                                                    {:step identifier
+                                                                     :key k
+                                                                     :f (comp (fn [result]
+                                                                                (if (seq result)
+                                                                                  (set result)
+                                                                                  #{nil}))
+                                                                              v)})
+                                                                  [:raw (str " recife_operator_local"
+                                                                             (format "(self, %s, main_var)"
+                                                                                     (tla-edn/to-tla-value
+                                                                                      {:step identifier
+                                                                                       :key k})))])
+
+                                                              :else
+                                                              (throw (ex-info "Unsupported type"
+                                                                              {:step identifier
+                                                                               :opts opts
+                                                                               :value [k v]})))])))
+                                      [:raw (str "\nmain_var' = "
+                                                 (symbol (str (custom-munge identifier) "2"))
+                                                 "(self, "
+                                                 (->> (keys opts)
+                                                      (mapv #(hash-map % (symbol (custom-munge %))))
+                                                      (into {})
+                                                      tla-edn/to-tla-value)
+                                                 ", main_var)")]])]
                         ;; If no opts, send a bogus structure.
                         [:raw (str "main_var' = "
-                                    (symbol (str (custom-munge identifier) "2"))
-                                    "(self, [_no |-> 0], main_var)")])
+                                   (symbol (str (custom-munge identifier) "2"))
+                                   "(self, [_no |-> 0], main_var)")])
                       ;; With it we can test deadlock.
                       [:raw "[x \\in DOMAIN main_var' \\ {\"recife_SLASH_metadata\"} |-> main_var'[x]] /= [x \\in DOMAIN main_var \\ {\"recife_SLASH_metadata\"} |-> main_var[x]]"]])
         :recife.operator/type :operator}
@@ -358,14 +447,6 @@
      :op-nss (mapv :ns @collector)
      :form form
      :recife.operator/type :temporal-property}))
-
-(def ^:private show-example-invariant
-  "This operator is supposed to be used when the user does not pass
-  any invariant or temporal property."
-  (invariant ::show-example-invariant
-             (fn [db]
-               (not (every? #(= (:pc %) ::done)
-                            (-> db ::procs vals))))))
 
 (defn goto
   [db identifier]
@@ -501,8 +582,9 @@
                                      (mapv (juxt :recife/fairness :recife.operator/name))
                                      (mapv (fn [[fairness name]]
                                              [:raw (format "\\A self \\in %s: %s_vars(%s(self, main_var) %s)"
-                                                           (->> init ::procs keys
-                                                                (mapv clojure.core/name) set tla-edn/to-tla-value)
+                                                           (->> (keys (::procs init))
+                                                                set
+                                                                tla-edn/to-tla-value)
                                                            (case fairness
                                                              :recife.fairness/weakly-fair "WF"
                                                              :recife.fairness/strongly-fair "SF")
@@ -521,6 +603,8 @@ EXTENDS Integers, TLC
 VARIABLES main_var #{helper-variables}
 
 vars == << main_var #{helper-variables} >>
+
+recife_operator_local(_self, _params, _main_var) == _self = _self /\\ _params = _params /\\ _main_var = _main_var
 
 __init ==
    #{formatted-init}
@@ -578,52 +662,53 @@ VIEW
      (. m (setAccessible true))
      (. m (get obj)))))
 
-(def ^:private states-atom (atom {}))
+;; EdnStateWriter
+(def ^:private edn-states-atom (atom {}))
 
-(defn- save-state
+(defn- edn-save-state
   [tlc-state]
   (let [edn-state (->> tlc-state
                        .getVals
                        (some #(when (= (str (key %)) "main_var")
                                 (val %)))
                        tla-edn/to-edn)]
-    (swap! states-atom assoc-in
+    (swap! edn-states-atom assoc-in
            [:states (.fingerPrint tlc-state)]
            {:state (dissoc edn-state :recife/metadata)
             :successors #{}})))
 
-(defn- rank-state
+(defn- edn-rank-state
   [tlc-state]
-  (swap! states-atom update-in
+  (swap! edn-states-atom update-in
          [:ranks (dec (.getLevel tlc-state))]
          (fnil conj #{}) (.fingerPrint tlc-state)))
 
-(defn- save-successor
+(defn- edn-save-successor
   [tlc-state tlc-successor]
   (let [successor-state (->> tlc-successor
                              .getVals
                              (some #(when (= (str (key %)) "main_var")
                                       (val %)))
                              tla-edn/to-edn)]
-    (swap! states-atom update-in
+    (swap! edn-states-atom update-in
            [:states (.fingerPrint tlc-state) :successors]
            conj
            [(.fingerPrint tlc-successor) (get-in successor-state [:recife/metadata :context])])))
 
-(defn- write-state
+(defn- edn-write-state
   [_state-writer state successor _action-checks _from _length successor-state-new? _visualization _action]
   (when successor-state-new?
-    (save-state successor))
-  (rank-state state)
-  (save-successor state successor))
+    (edn-save-state successor))
+  (edn-rank-state state)
+  (edn-save-successor state successor))
 
-#_ (clojure.edn/read-string (slurp "states-atom.edn"))
+#_ (clojure.edn/read-string (slurp "edn-states-atom.edn"))
 
-(defrecord EdnStateWriter [#_states-atom]
+(defrecord EdnStateWriter [#_edn-states-atom]
   tlc2.util.IStateWriter
   (writeState [_ state]
-    (save-state state)
-    (rank-state state))
+    (edn-save-state state)
+    (edn-rank-state state))
 
   (writeState [this state successor successor-state-new?]
     (.writeState this state successor successor-state-new? tlc2.util.IStateWriter$Visualization/DEFAULT))
@@ -633,23 +718,23 @@ VIEW
                      ^tlc2.tool.TLCState successor
                      ^boolean successor-state-new?
                      ^tlc2.tool.Action action]
-   (write-state this state successor nil 0 0 successor-state-new? tlc2.util.IStateWriter$Visualization/DEFAULT action))
+   (edn-write-state this state successor nil 0 0 successor-state-new? tlc2.util.IStateWriter$Visualization/DEFAULT action))
 
   (^void writeState [this
                      ^tlc2.tool.TLCState state
                      ^tlc2.tool.TLCState successor
                      ^boolean successor-state-new?
                      ^tlc2.util.IStateWriter$Visualization visualization]
-   (write-state this state successor nil 0 0 successor-state-new? visualization nil))
+   (edn-write-state this state successor nil 0 0 successor-state-new? visualization nil))
 
   (writeState [this state successor action-checks from length successor-state-new?]
-    (write-state this state successor action-checks from length successor-state-new? tlc2.util.IStateWriter$Visualization/DEFAULT nil))
+    (edn-write-state this state successor action-checks from length successor-state-new? tlc2.util.IStateWriter$Visualization/DEFAULT nil))
 
   (writeState [this state successor action-checks from length successor-state-new? visualization]
-    (write-state this state successor action-checks from length successor-state-new? visualization nil))
+    (edn-write-state this state successor action-checks from length successor-state-new? visualization nil))
 
   (close [_]
-    (spit "states-atom.edn" @states-atom))
+    (spit "edn-states-atom.edn" @edn-states-atom))
 
   (getDumpFileName [_])
 
@@ -659,7 +744,176 @@ VIEW
 
   (snapshot [_]))
 
+;; FileStateWriter
+(defn- file-sw-save-state
+  [{:keys [:edn-states-atom]} tlc-state]
+  (let [edn-state (->> tlc-state
+                       .getVals
+                       (some #(when (= (str (key %)) "main_var")
+                                (val %)))
+                       tla-edn/to-edn)]
+    (swap! edn-states-atom assoc-in
+           [:states (.fingerPrint tlc-state)]
+           {:state (dissoc edn-state :recife/metadata)
+            :successors #{}})))
+
+(defn- file-sw-rank-state
+  [{:keys [:edn-states-atom]} tlc-state]
+  (swap! edn-states-atom update-in
+         [:ranks (dec (.getLevel tlc-state))]
+         (fnil conj #{}) (.fingerPrint tlc-state)))
+
+(defn- file-sw-save-successor
+  [{:keys [:edn-states-atom]} tlc-state tlc-successor]
+  (let [successor-state (->> tlc-successor
+                             .getVals
+                             (some #(when (= (str (key %)) "main_var")
+                                      (val %)))
+                             tla-edn/to-edn)]
+    (swap! edn-states-atom update-in
+           [:states (.fingerPrint tlc-state) :successors]
+           conj
+           [(.fingerPrint tlc-successor) (get-in successor-state [:recife/metadata :context])])))
+
+(defn- file-sw-write-state
+  [this state successor _action-checks _from _length successor-state-new? visualization _action]
+  ;; If it's stuttering, we don't put it as a successor.
+  (when-not (= visualization tlc2.util.IStateWriter$Visualization/STUTTERING)
+    (when successor-state-new?
+      (file-sw-save-state this successor))
+    (file-sw-rank-state this state)
+    (file-sw-save-successor this state successor)))
+
+;; TODO: Move the state writers to a `state-writers` ns.
+(defrecord FileStateWriter [writer output-stream edn-states-atom file-path]
+  tlc2.util.IStateWriter
+  (writeState [this state]
+    (file-sw-save-state this state)
+    (file-sw-rank-state this state))
+
+  (writeState [this state successor successor-state-new?]
+    (.writeState this state successor successor-state-new? tlc2.util.IStateWriter$Visualization/DEFAULT))
+
+  (^void writeState [this
+                     ^tlc2.tool.TLCState state
+                     ^tlc2.tool.TLCState successor
+                     ^boolean successor-state-new?
+                     ^tlc2.tool.Action action]
+   (file-sw-write-state this state successor nil 0 0 successor-state-new? tlc2.util.IStateWriter$Visualization/DEFAULT action))
+
+  (^void writeState [this
+                     ^tlc2.tool.TLCState state
+                     ^tlc2.tool.TLCState successor
+                     ^boolean successor-state-new?
+                     ^tlc2.util.IStateWriter$Visualization visualization]
+   (file-sw-write-state this state successor nil 0 0 successor-state-new? visualization nil))
+
+  (writeState [this state successor action-checks from length successor-state-new?]
+    (file-sw-write-state this state successor action-checks from length successor-state-new? tlc2.util.IStateWriter$Visualization/DEFAULT nil))
+
+  (writeState [this state successor action-checks from length successor-state-new? visualization]
+    (file-sw-write-state this state successor action-checks from length successor-state-new? visualization nil))
+
+  (close [_]
+    (t/write writer @edn-states-atom)
+    (reset! edn-states-atom nil)
+    (.close output-stream))
+
+  (getDumpFileName [_])
+
+  (isNoop [_] false)
+
+  (isDot [_] false)
+
+  (snapshot [_]))
+
+(defn- states-from-file
+  [file-path]
+  (with-open [is (io/input-stream file-path)]
+    (let [reader (t/reader is :msgpack)]
+      (t/read reader))))
+
+(defn states-from-result
+  [{:keys [:recife/transit-states-file-path]}]
+  (states-from-file transit-states-file-path))
+
+(defn random-traces-from-states
+  ([states]
+   (random-traces-from-states states 10))
+  ([states max-number-of-paths]
+   (if (< max-number-of-paths 1)
+     []
+     (let [initial-states (get-in states [:ranks 0])]
+       (loop [[current-state] [(rand-nth (vec initial-states)) nil]
+              ;; `visited` is used to avoid loops.
+              visited #{}
+              ;; TODO: It can be improved to check for visited state successor.
+              ;; Currently it does not return all possible paths (I wonder if
+              ;; this is something we want), but it's fine for now.
+              removed #{}
+              paths [[[current-state nil]]]
+              counter 0]
+         (let [visited' (conj visited current-state)
+               successor-state (some->> (get-in states [:states current-state :successors])
+                                        (remove #(contains? visited' (first %)))
+                                        vec
+                                        seq
+                                        rand-nth)
+               ;; If there is no successor state and the current path is a prefix
+               ;; of some existing path, we can get rid of this path.
+               paths' (if (and (nil? successor-state)
+                               (some #(= (take (count (last paths)) %)
+                                         (last paths))
+                                     (drop-last paths)))
+                        (vec (drop-last paths))
+                        paths)
+               ;; If all the successors are visited or removed, then we don't
+               ;; need to check this state again.
+               removed' (if (->> (get-in states [:states current-state :successors])
+                                 (mapv first)
+                                 (every? #(contains? (set/union removed visited') %)))
+                          (conj removed current-state)
+                          removed)]
+           (cond
+             (some? successor-state)
+             (recur successor-state
+                    visited'
+                    removed'
+                    (update paths' (dec (count paths')) (comp vec conj) successor-state)
+                    (inc counter))
+
+             ;; Stop if there are no more paths to see or if we have the desired
+             ;; number of paths.
+             (or (= (count paths') max-number-of-paths)
+                 (= (count removed') (count (:states states)))
+                 (not (->> (vec initial-states) (remove #(contains? removed' %)) seq)))
+             ;; Return maps instead of positional data.
+             ;; We make the output the same form as `:trace` when we have some
+             ;; violation.
+             (->> paths'
+                  (mapv #(->> %
+                              (map-indexed (fn [idx [state-fp context]]
+                                             [idx (-> (get-in states [:states state-fp :state])
+                                                      (merge (when (some? context)
+                                                               {:recife/metadata {:context context}}))
+                                                      (with-meta {:fingerprint state-fp}))]))
+                              vec)))
+
+             :else
+             ;; Start a new path.
+             (let [state (->> (vec initial-states)
+                              (remove #(contains? removed' %))
+                              rand-nth)]
+               (recur [state nil]
+                      #{}
+                      removed'
+                      (assoc paths' (count paths') [[state nil]])
+                      (inc counter))))))))))
+
 (defn tlc-result-handler
+  "This function is a implementation detail, you should not use it.
+  It handles the TLC object and its result, generating the output we see when
+  calling `run-model`."
   [tlc-runner]
   (let [recorder-atom (atom {:others []})
         record #(swap! recorder-atom merge %)
@@ -699,8 +953,19 @@ VIEW
     (try
       (let [tlc (do (MP/setRecorder recorder)
                     (tlc-runner))
+            ;; Read opts file from JVM property.
+            opts (some-> (System/getProperty "RECIFE_OPTS_FILE_PATH") slurp edn/read-string)
+            state-writer (when (or (:dump-states? opts)
+                                   ;; If we want to show a trace example (if no
+                                   ;; violation is found), then we have to
+                                   ;; generate the states file.
+                                   (:trace-example? opts))
+                           (let [file-path (.getAbsolutePath (File/createTempFile "transit-output" ".msgpack"))
+                                 os (io/output-stream file-path)
+                                 state-writer (->FileStateWriter (t/writer os :msgpack) os (atom {}) file-path)]
+                             (.setStateWriter tlc state-writer)
+                             state-writer))
             _ (doto tlc
-                #_(.setStateWriter (->EdnStateWriter))
                 .process)
             recorder-info @recorder-atom
             _ (do (def tlc tlc)
@@ -758,22 +1023,26 @@ VIEW
 
                                   :else
                                   {:trace :ok})))]
-        {:trace (if (some-> tlc2.TLCGlobals/mainChecker .theFPSet .size)
-                  trace
-                  :error)
-         :trace-info (if (-> info :violation :name (= ::show-example-invariant))
-                       ;; If the user didn't ask for some check (through an
-                       ;; invariant or a temporal property) and there was some
-                       ;; violation (which in reality is just a example of a trace
-                       ;; which satisfies the spec), then we get here.
-                       (-> info
-                           (dissoc :violation)
-                           (assoc :trace-example? true))
-                       info)
-         :distinct-states (some-> tlc2.TLCGlobals/mainChecker .theFPSet .size)
-         :generated-states (some-> tlc2.TLCGlobals/mainChecker .getStatesGenerated)
-         :seed (private-field tlc "seed")
-         :fp (private-field tlc "fpIndex")})
+        (-> {:trace (cond
+                      (nil? (some-> tlc2.TLCGlobals/mainChecker .theFPSet .size))
+                      :error
+
+                      (and (= trace :ok) (:trace-example? opts))
+                      (-> (:file-path state-writer)
+                          states-from-file
+                          random-traces-from-states
+                          rand-nth)
+
+                      :else
+                      trace)
+             :trace-info (if (and (nil? info) (:trace-example? opts))
+                           {:trace-example? true}
+                           info)
+             :distinct-states (some-> tlc2.TLCGlobals/mainChecker .theFPSet .size)
+             :generated-states (some-> tlc2.TLCGlobals/mainChecker .getStatesGenerated)
+             :seed (private-field tlc "seed")
+             :fp (private-field tlc "fpIndex")}
+            (medley/assoc-some :recife/transit-states-file-path (:file-path state-writer))))
       (catch Exception ex
         (serialize-obj ex exception-filename)
         {:trace :error
@@ -793,7 +1062,7 @@ VIEW
   ([init-state next-operator operators {:keys [:seed :fp :workers :tlc-args
                                                :raw-output? :run-local? :debug?
                                                :complete-response?]
-                                        :or {workers :auto}}]
+                                        :or {workers :auto} :as opts}]
    ;; Do some validation.
    (some->> (m/explain schema/Operator next-operator)
             me/humanize
@@ -808,19 +1077,19 @@ VIEW
    ;; Run model.
    (let [file (doto (File/createTempFile "eita" ".tla") .delete) ; we are interested in the random name of the folder
          abs-path (-> file .getAbsolutePath (str/split #"\.") first (str "/spec.tla"))
+         opts-file-path (-> file .getAbsolutePath (str/split #"\.") first (str "/opts.edn"))
          _ (io/make-parents abs-path)
          [file-name file-type] (-> abs-path (str/split #"/") last (str/split #"\."))
-         all-operators (if (->> operators
-                                (filter (comp #{:temporal-property :invariant} :recife.operator/type))
-                                seq)
-                         operators
-                         (conj operators show-example-invariant))
+         all-operators operators
          module-contents (module-template
                           {:init init-state
                            :next next-operator
                            :operators all-operators
                            :spec-name file-name})
          _ (spit abs-path module-contents)
+         ;; Also put a file with opts in the same folder so we can read configuration
+         ;; in the tlc-handler function.
+         _ (spit opts-file-path opts)
          tlc-opts (->> (cond-> []
                          seed (conj "-seed" seed)
                          fp (conj "-fp" fp)
@@ -869,7 +1138,7 @@ VIEW
                       {:tlc-result-handler #'tlc-result-printer-handler
                        :loaded-classes loaded-classes
                        :complete-response? true
-                       :raw-args ["-DTLCCustomHandler=hillel.ch5_cache_2.Abc"]})
+                       :raw-args [(str "-DRECIFE_OPTS_FILE_PATH=" opts-file-path)]})
              output (atom [])]
          ;; Read line by line so we can stream the output to the user.
          (with-open [rdr (io/reader (:out result))]
@@ -958,13 +1227,75 @@ VIEW
      (run-model* db-init next' operators opts))))
 
 (defmacro defproc
+  "Defines a process and its multiple instances (`:procs`).
+
+  `name` is a symbol for this var.
+
+  `params` is a map of:
+     `:procs` - set of arbitrary idenfiers (keywords);
+     `:local` - map with local variables, `:pc` is required.
+
+  `:pc` - initial step from the `steps` key (keyword).
+
+  `steps` is a map of keywords (or vector) to functions. Each of
+  these functions receives one argument (`db`) which contains the
+  global state (namespaced keywords) plus any local state (unamespaced
+  keywords) merged. E.g. in the example below, the function of `::check-funds`
+  will have `:amount` available in it's input (besides all global state, which
+  it uses only `:account/alice`).
+
+  The keys in `steps` also can be a vector with two elements, the first one
+  is the step identifier (keyword) and the second is some non-deterministic
+  source (Recife model checker checks all the possibilities), e.g. if we want
+  to model a failure, we can have `[::read {:notify-failure? #{true false}}]`
+  instead of only `::read`, `:notify-failure` will be assoc'ed to into `db`
+  of the associated function.
+
+
+;; Example
+(r/defproc wire {:procs #{:x :y}
+                 :local {:amount (r/one-of (range 5))
+                         :pc ::check-funds}}
+  {::check-funds
+   (fn [{:keys [:amount :account/alice] :as db}]
+     (if (< amount alice)
+       (r/goto db ::withdraw)
+       (r/done db)))
+
+   ::withdraw
+   (fn [db]
+     (-> db
+         (update :account/alice - (:amount db))
+         (r/goto ::deposit)))
+
+   ::deposit
+   (fn [db]
+     (-> db
+         (update :account/bob + (:amount db))
+         r/done))})"
   [name params steps]
   `(def ~name
-     (let [steps# ~steps
-           params# ~params]
+     (let [keywordized-name# (keyword (str *ns*) ~(str name))
+           temp-steps# ~steps
+           ;; If you pass a function to `steps`, it means that you
+           ;; have only one step and the name of this will be derived
+           ;; from `name`.
+           steps# (if (fn? temp-steps#)
+                    {keywordized-name# temp-steps#}
+                    temp-steps#)
+           temp-params# ~params
+           ;; If we don't have `:procs`, use the name of the symbol as a proc name.
+           procs# (or (:procs temp-params#)
+                      #{(keyword ~(str name))})
+           ;; If we don't have `:local`, just use the first step (it should have
+           ;; one only).
+           local-variables# (or (:local temp-params#)
+                                {:pc (key (first steps#))})
+           params# {:procs procs#
+                    :local local-variables#}]
        (schema/explain-humanized schema/DefProc ['~name params# steps#] "Invalid `defproc` args")
        ^{:type ::Proc}
-       {:name (keyword (str *ns*) ~(str name))
+       {:name keywordized-name#
         :steps-keys (->> steps#
                          keys
                          (mapv #(if (vector? %)
@@ -1005,7 +1336,7 @@ VIEW
        ^{:type ::Property}
        {:name name#
         :property expr#
-        :operator (temporal-property ::no-livelocks expr#)})))
+        :operator (temporal-property name# expr#)})))
 
 (defmacro defconstraint
   [name f]
@@ -1080,7 +1411,7 @@ VIEW
   ;; - [ ] Profile parsing, things are slow in comparison with usual TLA+.
   ;; - [ ] (?) For performance reasons, make `db` be a custom map type.
   ;; - [x] Need to pass a seed so examples give us the same output.
-  ;; - [ ] Keep track of which process is acting so we know who is doing what.
+  ;; - [x] Keep track of which process is acting so we know who is doing what.
   ;; - [x] Show `fp`, `seed`.
   ;; - [ ] Create source map from TLA+ to clojure expression?
   ;; - [ ] Print logs to stdout.
@@ -1107,6 +1438,10 @@ VIEW
   ;; - [ ] Maybe give names to anonymous functions in `defproc`?
   ;; - [ ] Check coverage (e.g. if some operator is never enabled or if it's
   ;;       never enabled in some context).
+  ;; - [ ] Create CHANGELOG file.
+  ;; - [ ] Visualize states file.
+  ;; - [ ] Convert `nil` values in Clojure to `:recife/null` in TLA+ and
+  ;;       vice-versa.
 
   ;; PRIORITIES:
   ;; - [x] Better show which process caused which changes, it's still confusing.
@@ -1130,5 +1465,60 @@ VIEW
   ;; - [x] Allow user to pass a function which will be used as a `CONSTRAINT`.
   ;; - [x] Maybe let the user pass custom messages from the invariant to the
   ;;       output.
+  ;; - [ ] Show action which took it to a back to state violation.
+  ;; - [ ] Use DFS and `arrudeia` to check implementations. Well, it appears
+  ;;       that TLC DFS is not reliable, so we will have to use BFS, maybe
+  ;;       generating all the possible traces upfront (with a `StateWriter`
+  ;;       instance) and using it. Or just use BFS and require lots of memory
+  ;;       for the user, it may be viable given the small scope hypothesis.
+  ;; - [ ] Return `:error` in `:trace`, check for some kind of error code.
+  ;; - [x] Remove bogus `-DTLCCustomHandler` JVM property.
+  ;; - [ ] Make `r/run-model` ignore other `r/run-model` calls by checking a JVM
+  ;;       property.
+  ;; - [ ] Better documentation for fairness and `:exists` local variables.
+  ;; - [ ] Create serialized files in a unique folder so it does not clash
+  ;;       with concurrent runs of Recife.
+  ;; - [ ] Add flag to return an trace example if no violation is found.
+  ;; - [ ] Check that all initial global variables are namespaced.
+  ;; - [ ] Use Pathom3, I don't want to be bothered how to get data (e.g.
+  ;;       trace from the result map).
+  ;; - [x] Fix a problem with the usage of empty maps.
+  ;; - [ ] Return better error when some bogus thing happens in the user-provided
+  ;;       functions.
+  ;; - [ ] Add `tap` support.
+
+  "
+== Interaction with implementation
+
+To test an implementation, we have to make our system deterministic by
+instrumenting it (maybe with `arrudeia`), also we have to keep track of
+which trace we are at (maybe by appending the traces prefixes?) (maybe it's
+not needed). Besides being deterministic and as we will use BFS, we have to
+differentiate between the concurrent traaces through our systems (maybe by
+mocking).
+
+The combination function + state should give you the same result everytime.
+
+Thinking a little bit more, we could use use DFS with the one worker limitation so
+we don't have concurrency issues (which is what we are trying to test in a real
+implementation anyway). DFS also does not let us test liveness stuff, but we could
+probably use something from TLC (or somewhere else) which would check the stories
+for us ad hoc.
+
+We can do it in real time while TLA+ is running or after we have our traces from
+the state writer file. Doing it after appears to be much more easier, it can be
+said that testing it in the implementation it's kind of a refinement of the
+specification. Doing it in real time means that we can drive TLA+ from the
+implementation, but is this useful?
+
+Two types of implementation model checking:
+- Using arrudeia and Recife in the application itself.
+- Sending command through headers so the application know when to \"freeze\".
+
+Just using state writer is how we can know the action, so let's try to use it.
+
+For the implementation project, also see https://github.com/pfeodrippe/recife/projects/2.
+
+"
 
   ())

@@ -28,6 +28,13 @@
 (comment
 
   ;; ok.
-  (r/run-model global #{actor time' invariant} #_{:raw-output? true})
+  (def states
+    (-> (r/run-model global #{actor time' invariant} {:dump-states? true})
+        r/states-from-result))
+  ;; `:dump-states?` creates a file with states and ranks (the level where a
+  ;; state appears first). It adds `:recife/transit-states-file-path` to the
+  ;; result of `run-model`, it's a implementation details that it's transit.
+
+  (r/random-traces-from-states states)
 
   ())
