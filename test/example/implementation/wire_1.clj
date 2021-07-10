@@ -86,17 +86,17 @@
 
   ;; Automate it with some helpers.
   ;; We have some main points which need to be addresses (TODO):
-  ;; [x] - Global initialization, what we need to call and how to adapt this data
-  ;;       from the trace to arrudeia.
-  ;; [x] - Processes mapping, collect all the processes from the trace, map it
-  ;;       and "initilize" with any needed local variables.
-  ;; [x] - Check impl global state with trace.
-  ;; [x] - Test with traces from the states file.
-  ;; [ ] - Deal with context parameters besides `:self`.
-  ;; [ ] - Check impl local state with trace. Or maybe global state is enough?
-  ;; [ ] - Maybe make dynamic processes work (processes created after state `0`)?
-  ;;       Do we need to assert the step which created the new process?
-  ;; [ ] - Maybe make a protocol out of this?
+  ;; - [x] Global initialization, what we need to call and how to adapt this data
+  ;; -     from the trace to arrudeia.
+  ;; - [x] Processes mapping, collect all the processes from the trace, map it
+  ;; -     and "initilize" with any needed local variables.
+  ;; - [x] Check impl global state with trace.
+  ;; - [x] Test with traces from the states file.
+  ;; - [ ] Deal with context parameters besides `:self`.
+  ;; - [ ] Check impl local state with trace. Or maybe global state is enough?
+  ;; - [ ] Maybe make dynamic processes work (processes created after state `0`)?
+  ;; -     Do we need to assert the step which created the new process?
+  ;; - [ ] Maybe make a protocol out of this?
   (let [init-fn (fn [initial-global-state] (reset! balances initial-global-state))
         model-step->implementation-step {::model/check-funds ::check-funds
                                          ::model/deposit ::deposit!

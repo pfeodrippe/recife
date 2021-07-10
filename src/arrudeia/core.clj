@@ -297,6 +297,6 @@
 (comment
 
   ;; TODO:
-  ;; [ ] - Graceful thread cancelling.
+  ;; - [ ] Graceful thread cancelling.
 
   ())
