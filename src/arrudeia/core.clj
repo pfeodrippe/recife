@@ -298,5 +298,6 @@
 
   ;; TODO:
   ;; - [ ] Graceful thread cancelling.
+  ;; - [ ] Maybe make it thread friendly where the user passes the atom?
 
   ())

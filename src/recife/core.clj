@@ -736,11 +736,15 @@ VIEW
 
   (snapshot [_]))
 
-(defn states-from-result
-  [{:keys [:recife/transit-states-file-path]}]
-  (with-open [is (io/input-stream transit-states-file-path)]
+(defn- states-from-file
+  [file-path]
+  (with-open [is (io/input-stream file-path)]
     (let [reader (t/reader is :msgpack)]
       (t/read reader))))
+
+(defn states-from-result
+  [{:keys [:recife/transit-states-file-path]}]
+  (states-from-file transit-states-file-path))
 
 (defn random-traces-from-states
   ([states]
@@ -840,7 +844,11 @@ VIEW
                     (tlc-runner))
             ;; Read opts file from JVM property.
             opts (some-> (System/getProperty "RECIFE_OPTS_FILE_PATH") slurp edn/read-string)
-            state-writer (when (:dump-states? opts)
+            state-writer (when (or (:dump-states? opts)
+                                   ;; If we want to show a trace example (if no
+                                   ;; violation is found), then we have to
+                                   ;; generate the states file.
+                                   (:gen-trace-example? opts))
                            (let [file-path (.getAbsolutePath (File/createTempFile "transit-output" ".msgpack"))
                                  os (io/output-stream file-path)
                                  state-writer (->FileStateWriter (t/writer os :msgpack) os (atom {}) file-path)]
@@ -904,10 +912,21 @@ VIEW
 
                                   :else
                                   {:trace :ok})))]
-        (-> {:trace (if (some-> tlc2.TLCGlobals/mainChecker .theFPSet .size)
-                      trace
-                      :error)
-             :trace-info info
+        (-> {:trace (cond
+                      (nil? (some-> tlc2.TLCGlobals/mainChecker .theFPSet .size))
+                      :error
+
+                      (and (= trace :ok) (:gen-trace-example? opts))
+                      (-> (:file-path state-writer)
+                          states-from-file
+                          random-traces-from-states
+                          rand-nth)
+
+                      :else
+                      trace)
+             :trace-info (if (and (nil? info) (:gen-trace-example? opts))
+                           {:trace-example? true}
+                           info)
              :distinct-states (some-> tlc2.TLCGlobals/mainChecker .theFPSet .size)
              :generated-states (some-> tlc2.TLCGlobals/mainChecker .getStatesGenerated)
              :seed (private-field tlc "seed")
@@ -1333,7 +1352,9 @@ VIEW
   ;; - [ ] Create serialized files in a unique folder so it does not clash
   ;;       with concurrent runs of Recife.
   ;; - [ ] Add flag to return an trace example if no violation is found.
-
+  ;; - [ ] Check that all initial global variables are namespaced.
+  ;; - [ ] Use Pathom3, I don't want to be bothered how to get data (e.g.
+  ;;       trace from the result map).
 
   "
 == Interaction with implementation

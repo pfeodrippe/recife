@@ -87,11 +87,14 @@
   ;; Automate it with some helpers.
   ;; We have some main points which need to be addresses (TODO):
   ;; - [x] Global initialization, what we need to call and how to adapt this data
-  ;; -     from the trace to arrudeia.
+  ;; -     from the trace to `arrudeia`.
   ;; - [x] Processes mapping, collect all the processes from the trace, map it
   ;; -     and "initilize" with any needed local variables.
   ;; - [x] Check impl global state with trace.
   ;; - [x] Test with traces from the states file.
+  ;; - [ ] Fix `arrudeia` in that it should not run the thread before any
+  ;;       command. ATM it's running until the first step, but this may be
+  ;;       underisable and hard to reason about.
   ;; - [ ] Deal with context parameters besides `:self`.
   ;; - [ ] Check impl local state with trace. Or maybe global state is enough?
   ;; - [ ] Maybe make dynamic processes work (processes created after state `0`)?
