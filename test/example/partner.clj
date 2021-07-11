@@ -10,17 +10,28 @@
   so you can have grandchildren or great-grandchildren (but no loops, you cannot
   have a child C1 who has a parent P1 where C1 has P1 as one of its children
   (transitively or directly)).
-  ")
+  "
+  (:require [recife.core :as r]))
 
 (def global
   ;; All global keywords should be namespaced so we can differentiate it
   ;; from local variables in our processes.
-  {::accounts {}})
+  ;; `:c1` and `:c2` are the companies.
+  ;; `:token` is just some unique global identifier.
+  ;; `:children` are the children of that company.
+  {::accounts {:c1 {:token 0
+                    :children #{:c2}}
+               :c2 {:token 1}}})
 
 ;; In the real world, we talk to our partner through a HTTP request, but here
 ;; we don't need to bother about status, HTTP or error handling. We will model
 ;; a API request by putting a element in a set, which the partner process will
 ;; use, retrieving the "request" information.
+(r/defproc send-children {:procs #{:send-children}
+                          :local {:pc ::send}}
+  {::send
+   (fn [{:keys [::accounts]}]
+     accounts)})
 
 (comment
 

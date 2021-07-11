@@ -127,140 +127,16 @@
 
 (deftest ch2-recycler-1-test
   (let [result (r/run-model ch2-recycler-1/global
-                            #{ch2-recycler-1/main}
+                            #{ch2-recycler-1/main ch2-recycler-1/invariant}
                             default-options)]
     (testing "whole result"
-      (is (= {:trace
-              [[0
-                {:recife.core/procs {:x {:pc :hillel.ch2-recycler-1/main}}
-                 :trash/capacity 10
-                 :trash/bin #{}
-                 :recycle/capacity 10
-                 :recycle/bin #{}
-                 :hillel.ch2-recycler-1/items
-                 [{:type :recycle :size 5}
-                  {:type :trash :size 5}
-                  {:type :recycle :size 4}
-                  {:type :recycle :size 3}]}]
-               [1
-                {:recife.core/procs {:x {:pc :hillel.ch2-recycler-1/main}}
-                 :trash/capacity 10
-                 :trash/bin #{}
-                 :recycle/capacity 5
-                 :recycle/bin #{{:type :recycle :size 5}}
-                 :hillel.ch2-recycler-1/items
-                 [{:type :trash :size 5}
-                  {:type :recycle :size 4}
-                  {:type :recycle :size 3}]
-                 :recife/metadata
-                 {:context [:hillel.ch2-recycler-1/main {:self :x}]}}]
-               [2
-                {:recife.core/procs {:x {:pc :hillel.ch2-recycler-1/main}}
-                 :trash/capacity 5
-                 :trash/bin #{{:type :trash :size 5}}
-                 :recycle/capacity 5
-                 :recycle/bin #{{:type :recycle :size 5}}
-                 :hillel.ch2-recycler-1/items
-                 [{:type :recycle :size 4} {:type :recycle :size 3}]
-                 :recife/metadata
-                 {:context [:hillel.ch2-recycler-1/main {:self :x}]}}]
-               [3
-                {:recife.core/procs {:x {:pc :hillel.ch2-recycler-1/main}}
-                 :trash/capacity 5
-                 :trash/bin #{{:type :trash :size 5}}
-                 :recycle/capacity 1
-                 :recycle/bin
-                 #{{:type :recycle :size 5} {:type :recycle :size 4}}
-                 :hillel.ch2-recycler-1/items [{:type :recycle :size 3}]
-                 :recife/metadata
-                 {:context [:hillel.ch2-recycler-1/main {:self :x}]}}]
-               [4
-                {:recife.core/procs {:x {:pc :hillel.ch2-recycler-1/main}}
-                 :trash/capacity 2
-                 :trash/bin #{{:type :recycle :size 3} {:type :trash :size 5}}
-                 :recycle/capacity 1
-                 :recycle/bin
-                 #{{:type :recycle :size 5} {:type :recycle :size 4}}
-                 :hillel.ch2-recycler-1/items []
-                 :recife/metadata
-                 {:context [:hillel.ch2-recycler-1/main {:self :x}]}}]
-               [5
-                {:recife.core/procs {:x {:pc :recife.core/done}}
-                 :trash/capacity 2
-                 :trash/bin #{{:type :recycle :size 3} {:type :trash :size 5}}
-                 :recycle/capacity 1
-                 :recycle/bin
-                 #{{:type :recycle :size 5} {:type :recycle :size 4}}
-                 :hillel.ch2-recycler-1/items []
-                 :recife/metadata
-                 {:context [:hillel.ch2-recycler-1/main {:self :x}]}}]]
-              :trace-info {:trace-example? true}
+      (is (= {:trace :ok
+              :trace-info nil
               :distinct-states 6
-              :generated-states 6
+              :generated-states 7
               :seed 1
               :fp 0}
-             result))
-      (simulate-assert result))
-
-    (testing "timeline diff"
-      (is (= {:trace
-              [[0
-                {:recife.core/procs {:x {:pc :hillel.ch2-recycler-1/main}}
-                 :trash/capacity 10
-                 :trash/bin #{}
-                 :recycle/capacity 10
-                 :recycle/bin #{}
-                 :hillel.ch2-recycler-1/items
-                 [{:type :recycle :size 5}
-                  {:type :trash :size 5}
-                  {:type :recycle :size 4}
-                  {:type :recycle :size 3}]}]
-               [1
-                {:recycle/capacity {:- 10 :+ 5}
-                 :recycle/bin #{{:+ {:type :recycle :size 5}}}
-                 :hillel.ch2-recycler-1/items
-                 [{:- {:type :recycle :size 5}}
-                  {:type :trash :size 5}
-                  {:type :recycle :size 4}
-                  {:type :recycle :size 3}]
-                 {:+ :recife/metadata}
-                 {:context [:hillel.ch2-recycler-1/main {:self :x}]}}]
-               [2
-                {:trash/capacity {:- 10 :+ 5}
-                 :trash/bin #{{:+ {:type :trash :size 5}}}
-                 :hillel.ch2-recycler-1/items
-                 [{:- {:type :trash :size 5}}
-                  {:type :recycle :size 4}
-                  {:type :recycle :size 3}]}]
-               [3
-                {:recycle/capacity {:- 5 :+ 1}
-                 :recycle/bin
-                 #{{:+ {:type :recycle :size 4}} {:type :recycle :size 5}}
-                 :hillel.ch2-recycler-1/items
-                 [{:- {:type :recycle :size 4}} {:type :recycle :size 3}]}]
-               [4
-                {:trash/capacity {:- 5 :+ 2}
-                 :trash/bin
-                 #{{:+ {:type :recycle :size 3}} {:type :trash :size 5}}
-                 :hillel.ch2-recycler-1/items [{:- {:type :recycle :size 3}}]}]
-               [5
-                #:recife.core{:procs
-                              {:x
-                               {:pc
-                                {:- :hillel.ch2-recycler-1/main
-                                 :+ :recife.core/done}}}}]]
-              :trace-info {:trace-example? true}
-              :distinct-states 6
-              :generated-states 6
-              :seed 1
-              :fp 0}
-             (->> (r/timeline-diff result)
-                  (walk/prewalk (fn [form]
-                                  (cond
-                                    (instance? Mismatch form) {:+ (:+ form) :- (:- form)}
-                                    (instance? Deletion form) {:- (:- form)}
-                                    (instance? Insertion form) {:+ (:+ form)}
-                                    :else form)))))))))
+             result)))))
 
 (deftest ch2-recycler-2-test
   (is (= {:trace :ok
@@ -280,93 +156,191 @@
                               ch5-cache-3/invariant
                               ch5-cache-3/type-ok}
                             default-options)]
-    (is (= {:trace
-            [[0
-              {:recife.core/procs
-               {:a2
-                {:resources-needed 1
-                 :ran? false
-                 :pc :hillel.ch5-cache-3/wait-for-resources}
-                :a1
-                {:resources-needed 1
-                 :ran? false
-                 :pc :hillel.ch5-cache-3/wait-for-resources}
-                :time {:pc :hillel.ch5-cache-3/tick}}
-               :cache/resource-cap 1
-               :cache/resources-left 1}]
-             [1
-              {:recife.core/procs
-               {:a2
-                {:resources-needed 1
-                 :ran? false
-                 :pc :hillel.ch5-cache-3/use-resources}
-                :a1
-                {:resources-needed 1
-                 :ran? false
-                 :pc :hillel.ch5-cache-3/wait-for-resources}
-                :time {:pc :hillel.ch5-cache-3/tick}}
-               :cache/resource-cap 1
-               :cache/resources-left 1
-               :recife/metadata
-               {:context [:hillel.ch5-cache-3/wait-for-resources {:self :a2}]}}]
-             [2
-              {:recife.core/procs
-               {:a2
-                {:resources-needed 1
-                 :ran? false
-                 :pc :hillel.ch5-cache-3/use-resources}
-                :a1
-                {:resources-needed 1
-                 :ran? false
-                 :pc :hillel.ch5-cache-3/use-resources}
-                :time {:pc :hillel.ch5-cache-3/tick}}
-               :cache/resource-cap 1
-               :cache/resources-left 1
-               :recife/metadata
-               {:context [:hillel.ch5-cache-3/wait-for-resources {:self :a1}]}}]
-             [3
-              {:recife.core/procs
-               {:a2
-                {:resources-needed 0
-                 :ran? false
-                 :pc :hillel.ch5-cache-3/use-resources}
-                :a1
-                {:resources-needed 1
-                 :ran? false
-                 :pc :hillel.ch5-cache-3/use-resources}
-                :time {:pc :hillel.ch5-cache-3/tick}}
-               :cache/resource-cap 1
-               :cache/resources-left 0
-               :recife/metadata
-               {:context
-                [:hillel.ch5-cache-3/use-resources {:x 0 :self :a2}]}}]
-             [4
-              {:recife.core/procs
-               {:a2
-                {:resources-needed 0
-                 :ran? false
-                 :pc :hillel.ch5-cache-3/use-resources}
-                :a1
-                {:resources-needed 0
-                 :ran? false
-                 :pc :hillel.ch5-cache-3/use-resources}
-                :time {:pc :hillel.ch5-cache-3/tick}}
-               :cache/resource-cap 1
-               :cache/resources-left -1
-               :recife/metadata
-               {:context
-                [:hillel.ch5-cache-3/use-resources {:x 0 :self :a1}]}}]]
-            :trace-info
-            {:violation
-             {:type :invariant
-              :name :hillel.ch5-cache-3/invariant
-              :data {:well [:this :is :it]}}}
-            :distinct-states 77
-            :generated-states 93
-            :seed 1
-            :fp 0}
-           result))
-    (simulate-assert result)))
+    (testing "trace result"
+      (is (= {:trace
+              [[0
+                {:recife.core/procs
+                 {:a2
+                  {:resources-needed 1
+                   :ran? false
+                   :pc :hillel.ch5-cache-3/wait-for-resources}
+                  :a1
+                  {:resources-needed 1
+                   :ran? false
+                   :pc :hillel.ch5-cache-3/wait-for-resources}
+                  :time {:pc :hillel.ch5-cache-3/tick}}
+                 :cache/resource-cap 1
+                 :cache/resources-left 1}]
+               [1
+                {:recife.core/procs
+                 {:a2
+                  {:resources-needed 1
+                   :ran? false
+                   :pc :hillel.ch5-cache-3/use-resources}
+                  :a1
+                  {:resources-needed 1
+                   :ran? false
+                   :pc :hillel.ch5-cache-3/wait-for-resources}
+                  :time {:pc :hillel.ch5-cache-3/tick}}
+                 :cache/resource-cap 1
+                 :cache/resources-left 1
+                 :recife/metadata
+                 {:context [:hillel.ch5-cache-3/wait-for-resources {:self :a2}]}}]
+               [2
+                {:recife.core/procs
+                 {:a2
+                  {:resources-needed 1
+                   :ran? false
+                   :pc :hillel.ch5-cache-3/use-resources}
+                  :a1
+                  {:resources-needed 1
+                   :ran? false
+                   :pc :hillel.ch5-cache-3/use-resources}
+                  :time {:pc :hillel.ch5-cache-3/tick}}
+                 :cache/resource-cap 1
+                 :cache/resources-left 1
+                 :recife/metadata
+                 {:context [:hillel.ch5-cache-3/wait-for-resources {:self :a1}]}}]
+               [3
+                {:recife.core/procs
+                 {:a2
+                  {:resources-needed 0
+                   :ran? false
+                   :pc :hillel.ch5-cache-3/use-resources}
+                  :a1
+                  {:resources-needed 1
+                   :ran? false
+                   :pc :hillel.ch5-cache-3/use-resources}
+                  :time {:pc :hillel.ch5-cache-3/tick}}
+                 :cache/resource-cap 1
+                 :cache/resources-left 0
+                 :recife/metadata
+                 {:context
+                  [:hillel.ch5-cache-3/use-resources {:x 0 :self :a2}]}}]
+               [4
+                {:recife.core/procs
+                 {:a2
+                  {:resources-needed 0
+                   :ran? false
+                   :pc :hillel.ch5-cache-3/use-resources}
+                  :a1
+                  {:resources-needed 0
+                   :ran? false
+                   :pc :hillel.ch5-cache-3/use-resources}
+                  :time {:pc :hillel.ch5-cache-3/tick}}
+                 :cache/resource-cap 1
+                 :cache/resources-left -1
+                 :recife/metadata
+                 {:context
+                  [:hillel.ch5-cache-3/use-resources {:x 0 :self :a1}]}}]]
+              :trace-info
+              {:violation
+               {:type :invariant
+                :name :hillel.ch5-cache-3/invariant
+                :data {:well [:this :is :it]}}}
+              :distinct-states 77
+              :generated-states 93
+              :seed 1
+              :fp 0}
+             result))
+      (simulate-assert result))
+
+    (testing "timeline diff"
+      (is (= {:trace
+              [[0
+                {:recife.core/procs
+                 {:a2
+                  {:ran? false,
+                   :pc :hillel.ch5-cache-3/wait-for-resources,
+                   :resources-needed 1},
+                  :a1
+                  {:ran? false,
+                   :pc :hillel.ch5-cache-3/wait-for-resources,
+                   :resources-needed 1},
+                  :time {:pc :hillel.ch5-cache-3/tick}},
+                 :cache/resources-left 1,
+                 :cache/resource-cap 1}]
+               [1
+                {:recife.core/procs
+                 {:a2
+                  {:ran? false,
+                   :pc
+                   {:- :hillel.ch5-cache-3/wait-for-resources,
+                    :+ :hillel.ch5-cache-3/use-resources},
+                   :resources-needed 1},
+                  :a1
+                  {:ran? false,
+                   :pc :hillel.ch5-cache-3/wait-for-resources,
+                   :resources-needed 1},
+                  :time {:pc :hillel.ch5-cache-3/tick}},
+                 {:+ :recife/metadata}
+                 {:context [:hillel.ch5-cache-3/wait-for-resources {:self :a2}]}}]
+               [2
+                {:recife.core/procs
+                 {:a2
+                  {:ran? false,
+                   :pc :hillel.ch5-cache-3/use-resources,
+                   :resources-needed 1},
+                  :a1
+                  {:ran? false,
+                   :pc
+                   {:- :hillel.ch5-cache-3/wait-for-resources,
+                    :+ :hillel.ch5-cache-3/use-resources},
+                   :resources-needed 1},
+                  :time {:pc :hillel.ch5-cache-3/tick}},
+                 :recife/metadata
+                 {:context
+                  [:hillel.ch5-cache-3/wait-for-resources
+                   {:self {:- :a2, :+ :a1}}]}}]
+               [3
+                {:recife.core/procs
+                 {:a2
+                  {:ran? false,
+                   :pc :hillel.ch5-cache-3/use-resources,
+                   :resources-needed {:- 1, :+ 0}},
+                  :a1
+                  {:ran? false,
+                   :pc :hillel.ch5-cache-3/use-resources,
+                   :resources-needed 1},
+                  :time {:pc :hillel.ch5-cache-3/tick}},
+                 :cache/resources-left {:- 1, :+ 0},
+                 :recife/metadata
+                 {:context
+                  [{:- :hillel.ch5-cache-3/wait-for-resources,
+                    :+ :hillel.ch5-cache-3/use-resources}
+                   {:self {:- :a1, :+ :a2}, {:+ :x} 0}]}}]
+               [4
+                {:recife.core/procs
+                 {:a2
+                  {:ran? false,
+                   :pc :hillel.ch5-cache-3/use-resources,
+                   :resources-needed 0},
+                  :a1
+                  {:ran? false,
+                   :pc :hillel.ch5-cache-3/use-resources,
+                   :resources-needed {:- 1, :+ 0}},
+                  :time {:pc :hillel.ch5-cache-3/tick}},
+                 :cache/resources-left {:- 0, :+ -1},
+                 :recife/metadata
+                 {:context
+                  [:hillel.ch5-cache-3/use-resources
+                   {:x 0, :self {:- :a2, :+ :a1}}]}}]],
+              :trace-info
+              {:violation
+               {:type :invariant,
+                :name :hillel.ch5-cache-3/invariant,
+                :data {:well [:this :is :it]}}},
+              :distinct-states 77,
+              :generated-states 93,
+              :seed 1,
+              :fp 0}
+             (->> (r/timeline-diff result)
+                  (walk/prewalk (fn [form]
+                                  (cond
+                                    (instance? Mismatch form) {:+ (:+ form) :- (:- form)}
+                                    (instance? Deletion form) {:- (:- form)}
+                                    (instance? Insertion form) {:+ (:+ form)}
+                                    :else form)))))))))
 
 (deftest ch5-server-3-test
   (let [result (r/run-model ch5-server-3/global

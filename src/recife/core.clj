@@ -362,14 +362,6 @@
      :form form
      :recife.operator/type :temporal-property}))
 
-(def ^:private show-example-invariant
-  "This operator is supposed to be used when the user does not pass
-  any invariant or temporal property."
-  (invariant ::show-example-invariant
-             (fn [db]
-               (not (every? #(= (:pc %) ::done)
-                            (-> db ::procs vals))))))
-
 (defn goto
   [db identifier]
   (assoc db :pc identifier))
@@ -915,15 +907,7 @@ VIEW
         (-> {:trace (if (some-> tlc2.TLCGlobals/mainChecker .theFPSet .size)
                       trace
                       :error)
-             :trace-info (if (-> info :violation :name (= ::show-example-invariant))
-                           ;; If the user didn't ask for some check (through an
-                           ;; invariant or a temporal property) and there was some
-                           ;; violation (which in reality is just a example of a trace
-                           ;; which satisfies the spec), then we get here.
-                           (-> info
-                               (dissoc :violation)
-                               (assoc :trace-example? true))
-                           info)
+             :trace-info info
              :distinct-states (some-> tlc2.TLCGlobals/mainChecker .theFPSet .size)
              :generated-states (some-> tlc2.TLCGlobals/mainChecker .getStatesGenerated)
              :seed (private-field tlc "seed")
@@ -966,11 +950,7 @@ VIEW
          opts-file-path (-> file .getAbsolutePath (str/split #"\.") first (str "/opts.edn"))
          _ (io/make-parents abs-path)
          [file-name file-type] (-> abs-path (str/split #"/") last (str/split #"\."))
-         all-operators (if (->> operators
-                                (filter (comp #{:temporal-property :invariant} :recife.operator/type))
-                                seq)
-                         operators
-                         (conj operators show-example-invariant))
+         all-operators operators
          module-contents (module-template
                           {:init init-state
                            :next next-operator
@@ -1117,6 +1097,52 @@ VIEW
      (run-model* db-init next' operators opts))))
 
 (defmacro defproc
+  "Defines a process and its multiple instances (`:procs`).
+
+  `name` is a symbol for this var.
+
+  `params` is a map of:
+     `:procs` - set of arbitrary idenfiers (keywords);
+     `:local` - map with local variables, `:pc` is required.
+
+  `:pc` - initial step from the `steps` key (keyword).
+
+  `steps` is a map of keywords (or vector) to functions. Each of
+  these functions receives one argument (`db`) which contains the
+  global state (namespaced keywords) plus any local state (unamespaced
+  keywords) merged. E.g. in the example below, the function of `::check-funds`
+  will have `:amount` available in it's input (besides all global state, which
+  it uses only `:account/alice`).
+
+  The keys in `steps` also can be a vector with two elements, the first one
+  is the step identifier (keyword) and the second is some non-deterministic
+  source (Recife model checker checks all the possibilities), e.g. if we want
+  to model a failure, we can have `[::read {:notify-failure? #{true false}}]`
+  instead of only `::read`, `:notify-failure` will be assoc'ed to into `db`
+  of the associated function.
+
+
+;; Example
+(r/defproc wire {:procs #{:x :y}
+                 :local {:amount (r/one-of (range 5))
+                         :pc ::check-funds}}
+  {::check-funds
+   (fn [{:keys [:amount :account/alice] :as db}]
+     (if (< amount alice)
+       (r/goto db ::withdraw)
+       (r/done db)))
+
+   ::withdraw
+   (fn [db]
+     (-> db
+         (update :account/alice - (:amount db))
+         (r/goto ::deposit)))
+
+   ::deposit
+   (fn [db]
+     (-> db
+         (update :account/bob + (:amount db))
+         r/done))})"
   [name params steps]
   `(def ~name
      (let [steps# ~steps
@@ -1268,6 +1294,8 @@ VIEW
   ;;       never enabled in some context).
   ;; - [ ] Create CHANGELOG file.
   ;; - [ ] Visualize states file.
+  ;; - [ ] Convert `nil` values in Clojure to `:recife/null` in TLA+ and
+  ;;       vice-versa.
 
   ;; PRIORITIES:
   ;; - [x] Better show which process caused which changes, it's still confusing.
@@ -1304,6 +1332,7 @@ VIEW
   ;; - [ ] Better documentation for fairness and `:exists` local variables.
   ;; - [ ] Create serialized files in a unique folder so it does not clash
   ;;       with concurrent runs of Recife.
+  ;; - [ ] Add flag to return an trace example if no violation is found.
 
 
   "
