@@ -26,14 +26,26 @@
 (defonce semaphore (atom {:debug []}))
 (defonce exceptions (atom []))
 
+(defn debug!
+  [v]
+  (swap! semaphore update :debug conj v))
+
 (defn waiting-step
   ([[proc-name keyword idx]]
    (waiting-step {} [proc-name keyword idx]))
   ([args [proc-name keyword idx]]
    (when (not *bypass*)
+     (debug! {:waiting-step {:proc-name proc-name
+                             :keyword keyword
+                             :idx idx
+                             :stage :init}})
      (while (not (or (and (get @semaphore [proc-name :arrudeia/next])
+                          ;; TODO: Change this to use current.
                           (not (contains? #{keyword idx}
                                           (get @semaphore [proc-name :arrudeia/next]))))
+                     ;; If it's the first step (init) and we cannot continue,
+                     ;; then wait.
+                     (and (= keyword :arrudeia/init) (get-in @semaphore [proc-name :arrudeia/started?]))
                      (= (get-in @semaphore [proc-name idx]) :start)
                      (= (get-in @semaphore [proc-name keyword]) :start)))
        (when (Thread/interrupted)
@@ -42,28 +54,41 @@
                 (contains? #{keyword idx}
                            (get @semaphore [proc-name :arrudeia/next])))
        (swap! semaphore assoc [proc-name :arrudeia/next] nil))
-     (swap! semaphore update :debug conj {:start [proc-name keyword idx]}))
+     (debug! {:start [proc-name keyword idx]}))
    args))
 
 (defn done-step
   [args [proc-name keyword idx]]
   (if (not *bypass*)
-    (let [{:keys [:cancel-execution?]} (get-in @semaphore [proc-name :arrudeia/opts keyword])]
+    (let [{:keys [:cancel-execution?]} (get-in @semaphore [proc-name :arrudeia/params keyword])]
       ;; You may want to cancel the execution if you are the last step so you don't
       ;; run the rest of the code, stopping in the side effect of this step.
-      (swap! semaphore update :debug conj {:done [proc-name keyword idx]
-                                           :cancel-execution? cancel-execution?})
+      (debug! {:done [proc-name keyword idx]})
       (swap! semaphore assoc-in [proc-name [idx :args-after]] args)
       (swap! semaphore assoc-in [proc-name idx] :done)
       (swap! semaphore assoc-in [proc-name [keyword :args-after]] args)
       (swap! semaphore assoc-in [proc-name keyword] :done)
-      (if cancel-execution?
-        (.interrupt (Thread/currentThread))
-        ;; Apply result-modifier to args.
+
+      (when cancel-execution?
+        (throw (InterruptedException. "Cancelling `Arrudeia`  execution")))
+
+      ;; Apply result-modifier to args.
+      (try
         ((or (get *result-modifiers* keyword)
              (get *result-modifiers* idx)
              identity)
-         args)))
+         args)
+        (finally
+          ;; If we are not the actual target step, don't need to wait.
+          (when (or (= (get-in @semaphore [proc-name :arrudeia/previous-step]) keyword)
+                    (= keyword :arrudeia/init))
+            ;; Wait until we can continue so we don't do unwanted side effects.
+            (while (not (get-in @semaphore [proc-name :arrudeia/params keyword :continue?]))
+              (when (Thread/interrupted)
+                (.interrupt (Thread/currentThread))))
+            ;; Blocks next step.
+            (debug! {:blocks-next-step [proc-name keyword idx]})
+            (swap! semaphore assoc-in [proc-name :arrudeia/params keyword :continue?] false)))))
     args))
 
 (defn var->keyword
@@ -93,9 +118,8 @@
                            opts#)
            idx# (:idx opts#)]
        (waiting-step {} [*proc-name* identifier# idx#])
-       (done-step
-        ~@body
-        [*proc-name* identifier# idx#]))))
+       (let [result# (do ~@body)]
+         (done-step result# [*proc-name* identifier# idx#])))))
 
 (defn build-thread-first-macro-body
   [->-macro & forms]
@@ -169,7 +193,7 @@
 
   java.io.Closeable
   (close [_]
-    (.interrupt (Thread/currentThread))))
+    (future-cancel proc)))
 
 (prefer-method pp/simple-dispatch clojure.lang.IPersistentMap clojure.lang.IDeref)
 
@@ -183,8 +207,10 @@
                                        *bypass* false
                                        *result-modifiers* ~result-modifiers]
                                (try
+                                 (with-label :arrudeia/init nil)
                                  ~pipe
                                  ;; If a thread is stopped, do not show exception.
+                                 (catch InterruptedException _#)
                                  (catch java.lang.ThreadDeath _#)
                                  (catch Exception e#
                                    (clojure.pprint/pprint
@@ -206,17 +232,47 @@
   ([[{:keys [:proc-name :proc]} step]
     {:keys [:run-intermediate-steps? :step-opts]
      :or {run-intermediate-steps? true}}]
-   (swap! semaphore assoc-in [proc-name :arrudeia/opts step] (merge step-opts {:proc-future proc}))
-   (when run-intermediate-steps?
-     (swap! semaphore assoc [proc-name :arrudeia/next] step))
-   ;; Trigger new step.
-   (swap! semaphore assoc-in [proc-name step] :start)
-   ;; Wait for triggered step.
-   (while (not= (get-in @semaphore [proc-name step]) :done))
-   ;; Step could be used again at pipeline, so we reset its associated values.
-   (swap! semaphore assoc-in [proc-name step] nil)
-   (swap! semaphore assoc-in [proc-name :arrudeia/opts step] {})
-   (get-in @semaphore [proc-name [step :args-after]])))
+   (debug! {:run-step {:proc-name proc-name
+                       :stage :init
+                       :step step}})
+   (let [previous-step (get-in @semaphore [proc-name :arrudeia/previous-step] :arrudeia/init)
+         cancel-execution? (:cancel-execution? step-opts)]
+     (when (= previous-step :arrudeia/init)
+       ;; First time we are calling `run-step` for this proc.
+       (swap! semaphore assoc-in [proc-name :arrudeia/started?] true))
+
+     ;; Continue execution from last step.
+     (swap! semaphore assoc-in [proc-name :arrudeia/params previous-step :continue?] true)
+
+     ;; Wait until it's blocked again.
+     (debug! {:run-step {:proc-name proc-name
+                         :stage :waiting-to-continue
+                         :previous-step previous-step
+                         :step step}})
+     (while (get-in @semaphore [proc-name :arrudeia/params previous-step :continue?]))
+     (debug! {:run-step {:proc-name proc-name
+                         :stage :continuing
+                         :previous-step previous-step
+                         :step step}})
+
+     ;; Last step is now the current step.
+     (swap! semaphore assoc-in [proc-name :arrudeia/previous-step] step)
+
+     ;; Add params so the process can read it.
+     (swap! semaphore assoc-in [proc-name :arrudeia/params step] (merge step-opts {:proc-future proc}))
+     (when run-intermediate-steps?
+       (swap! semaphore assoc [proc-name :arrudeia/next] step))
+
+     ;; Trigger new step.
+     (swap! semaphore assoc-in [proc-name step] :start)
+
+     ;; Wait for triggered step.
+     (while (not= (get-in @semaphore [proc-name step]) :done))
+
+     ;; Step could be used again at pipeline, so we reset its associated values.
+     (swap! semaphore assoc-in [proc-name step] nil)
+     (swap! semaphore assoc-in [proc-name :arrudeia/params step] {})
+     (get-in @semaphore [proc-name [step :args-after]]))))
 
 (defn cancel-remaining-steps
   [procs]
@@ -230,37 +286,29 @@
    (run-processes! steps {}))
   ([steps {:keys [:step-handler]}]
    (swap! semaphore (constantly {:debug []}))
-   (try
-     (let [reversed-steps-proc-names (->> steps (mapv (comp :proc-name first)) reverse)
-           ;; Find indexes which should have the execution cancelled (last step of
-           ;; a proc).
-           cancelled-indexes (->> (distinct reversed-steps-proc-names)
-                                  (mapv #(- (dec (count steps))
-                                            (.indexOf reversed-steps-proc-names %)))
-                                  set)]
-       (->> steps
-            (map-indexed (fn [idx [proc step :as step']]
-                           (let [response (run-step step' {:step-opts
-                                                           (when (contains? cancelled-indexes idx)
-                                                             {:cancel-execution? true})})]
-                             (if step-handler
-                               (step-handler {:idx idx
-                                              :proc (:proc-name proc)
-                                              :step step
-                                              :response response})
-                               response))))
-            (mapv (fn [[proc step] response]
-                    {:proc (:proc-name proc)
-                     :step step
-                     :response response})
-                  steps)))
-     (finally
-       (try
-         (->> steps
-              (map first)
-              set
-              (run! deref))
-         (catch java.util.concurrent.CancellationException _))))))
+   (let [reversed-steps-proc-names (->> steps (mapv (comp :proc-name first)) reverse)
+         ;; Find indexes which should have the execution cancelled (last step of
+         ;; a proc).
+         cancelled-indexes (->> (distinct reversed-steps-proc-names)
+                                (mapv #(- (dec (count steps))
+                                          (.indexOf reversed-steps-proc-names %)))
+                                set)]
+     (->> steps
+          (map-indexed (fn [idx [proc step :as step']]
+                         (let [response (run-step step' {:step-opts
+                                                         (when (contains? cancelled-indexes idx)
+                                                           {:cancel-execution? true})})]
+                           (if step-handler
+                             (step-handler {:idx idx
+                                            :proc (:proc-name proc)
+                                            :step step
+                                            :response response})
+                             response))))
+          (mapv (fn [[proc step] response]
+                  {:proc (:proc-name proc)
+                   :step step
+                   :response response})
+                steps)))))
 
 (defn parse-process-names
   [process-name->process process-with-steps]
@@ -307,8 +355,9 @@
   ;; - [ ] Maybe make it thread friendly where the user passes the atom? Or
   ;;       where the user initializes a object.
   ;; - [ ] There are some side-effects when you run again, maybe the user
-  ;;       initiliazing will help with it.
+  ;;       initiliazing the atom will help with it.
   ;; - [ ] Add to docs that you should `.close` the process so you don't have
   ;;       leaked objects.
+  ;; - [ ] Maybe use `locking` instead of a semaphore.
 
   ())

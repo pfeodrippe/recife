@@ -22,13 +22,7 @@
 
 (defn- adapt
   [args]
-  (println :><ADAPT)
   (update args :money bigdec))
-
-(defn- dumb-step
-  [args]
-  (println :><DUMB_STEP)
-  args)
 
 (defn- check-funds
   [{:keys [:sender :money] :as args}]
@@ -58,7 +52,6 @@
   ;; pipeline.
   (some-> (adapt args)
           check-funds
-          dumb-step
           withdraw!
           deposit!)
   @balances)
@@ -76,9 +69,9 @@
 
   (do
     (reset! balances {:alice 5M :bob 5M})
-    (def x (ar/register :x (request {:money 4
-                                     :sender :alice
-                                     :receiver :bob})))
+    (def x (ar/register nil (request {:money 4
+                                      :sender :alice
+                                      :receiver :bob})))
     (try
       (ar/run-step [x ::check-funds])
       (finally
@@ -102,6 +95,10 @@
                        ;; we can compare the values of these with the trace violation.
                        {:step-handler (fn [_] @balances)}))
 
+  (->> @ar/semaphore
+       :debug
+       (map-indexed vector))
+
   ;; Automate it with some helpers.
   ;; We have some main points which need to be addresses (TODO):
   ;; - [x] Global initialization, what we need to call and how to adapt this data
@@ -110,7 +107,7 @@
   ;; -     and "initilize" with any needed local variables.
   ;; - [x] Check impl global state with trace.
   ;; - [x] Test with traces from the states file.
-  ;; - [ ] Fix `arrudeia` in that it should not run the thread before any
+  ;; - [x] Fix `arrudeia` in that it should not run the thread before any
   ;;       command. ATM it's running until the first step, but this may be
   ;;       underisable and hard to reason about.
   ;; - [ ] Deal with context parameters besides `:self`.
@@ -143,12 +140,14 @@
                                  (into {}))]
         (init-fn initial-global-state)
         ;; Check global state.
-        (= (->> trace
-                (drop 1)
-                (mapv last)
-                (mapv #(dissoc % ::r/procs :recife/metadata)))
-           (->> (ar/run-processes! (ar/parse-process-names proc-name->proc steps) {:step-handler step-handler})
-                (mapv :response))))))
+        (let [spec-trace (->> trace
+                              (drop 1)
+                              (mapv last)
+                              (mapv #(dissoc % ::r/procs :recife/metadata)))
+              impl-trace (->> {:step-handler step-handler}
+                              (ar/run-processes! (ar/parse-process-names proc-name->proc steps))
+                              (mapv :response))]
+          (= spec-trace impl-trace)))))
 
   ())
 
