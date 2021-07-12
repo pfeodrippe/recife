@@ -37,7 +37,7 @@
                      (= (get-in @semaphore [proc-name idx]) :start)
                      (= (get-in @semaphore [proc-name keyword]) :start)))
        (when (Thread/interrupted)
-         (.stop (Thread/currentThread))))
+         (.interrupt (Thread/currentThread))))
      (when (and (get @semaphore [proc-name :arrudeia/next])
                 (contains? #{keyword idx}
                            (get @semaphore [proc-name :arrudeia/next])))
@@ -165,15 +165,21 @@
     ;; this `swap!` means that processes which are deferred will be
     ;; run until completion
     (swap! semaphore assoc [proc-name :arrudeia/next] :arrudeia/until-the-end)
-    @proc))
+    @proc)
+
+  java.io.Closeable
+  (close [_]
+    (.interrupt (Thread/currentThread))))
 
 (prefer-method pp/simple-dispatch clojure.lang.IPersistentMap clojure.lang.IDeref)
 
 (defmacro register
   [proc-name pipe & [{:keys [:result-modifiers]}]]
   `(do (swap! semaphore (constantly {:debug []}))
-       (let [p# (-> {:proc (future
-                             (binding [*proc-name* ~proc-name
+       (let [temp-proc-name# ~proc-name
+             proc-name# (or temp-proc-name# (keyword (str (gensym))))
+             p# (-> {:proc (future
+                             (binding [*proc-name* proc-name#
                                        *bypass* false
                                        *result-modifiers* ~result-modifiers]
                                (try
@@ -183,14 +189,14 @@
                                  (catch Exception e#
                                    (clojure.pprint/pprint
                                     {:EXCEPTION
-                                     {~proc-name e#}})
-                                   (swap! exceptions conj {~proc-name e#}))
+                                     {proc-name# e#}})
+                                   (swap! exceptions conj {proc-name# e#}))
                                  (catch Error e#
                                    (clojure.pprint/pprint
                                     {:EXCEPTION
-                                     {~proc-name e#}})
-                                   (swap! exceptions conj {~proc-name e#})))))
-                     :proc-name ~proc-name}
+                                     {proc-name# e#}})
+                                   (swap! exceptions conj {proc-name# e#})))))
+                     :proc-name proc-name#}
                     map->ArrudeiaProcess)]
          p#)))
 
@@ -298,6 +304,11 @@
 
   ;; TODO:
   ;; - [ ] Graceful thread cancelling.
-  ;; - [ ] Maybe make it thread friendly where the user passes the atom?
+  ;; - [ ] Maybe make it thread friendly where the user passes the atom? Or
+  ;;       where the user initializes a object.
+  ;; - [ ] There are some side-effects when you run again, maybe the user
+  ;;       initiliazing will help with it.
+  ;; - [ ] Add to docs that you should `.close` the process so you don't have
+  ;;       leaked objects.
 
   ())

@@ -22,7 +22,13 @@
 
 (defn- adapt
   [args]
+  (println :><ADAPT)
   (update args :money bigdec))
+
+(defn- dumb-step
+  [args]
+  (println :><DUMB_STEP)
+  args)
 
 (defn- check-funds
   [{:keys [:sender :money] :as args}]
@@ -52,6 +58,7 @@
   ;; pipeline.
   (some-> (adapt args)
           check-funds
+          dumb-step
           withdraw!
           deposit!)
   @balances)
@@ -66,6 +73,17 @@
                                                                  :seed -3669946775118883845
                                                                  :dump-states? true})
         r/states-from-result))
+
+  (do
+    (reset! balances {:alice 5M :bob 5M})
+    (def x (ar/register :x (request {:money 4
+                                     :sender :alice
+                                     :receiver :bob})))
+    (try
+      (ar/run-step [x ::check-funds])
+      (finally
+        (Thread/sleep 100)
+        (.close x))))
 
   ;; Run it manually by looking at the generated violated trace.
   (let [_ (reset! balances {:alice 5M :bob 5M})
