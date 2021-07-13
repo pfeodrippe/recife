@@ -13,7 +13,8 @@
    [recife.schema :as schema]
    [tla-edn.core :as tla-edn]
    [tla-edn.spec :as spec]
-   [cognitect.transit :as t])
+   [cognitect.transit :as t]
+   [clojure.set :as set])
   (:import
    (java.io File)
    (lambdaisland.deep_diff2.diff_impl Mismatch Deletion Insertion)
@@ -754,8 +755,14 @@ VIEW
      []
      (let [initial-states (get-in states [:ranks 0])]
        (loop [[current-state] [(rand-nth (vec initial-states)) nil]
+              ;; `visited` is used to avoid loops.
               visited #{}
-              paths [[[current-state nil]]]]
+              ;; TODO: It can be improved to check for visited state successor.
+              ;; Currently it does not return all possible paths (I wonder if
+              ;; this is something we want), but it's fine for now.
+              removed #{}
+              paths [[[current-state nil]]]
+              counter 0]
          (let [visited' (conj visited current-state)
                successor-state (some->> (get-in states [:states current-state :successors])
                                         (remove #(contains? visited' (first %)))
@@ -763,23 +770,32 @@ VIEW
                                         seq
                                         rand-nth)
                ;; If there is no successor state and the current path is a prefix
-               ;; of some exising path, we can get rid of this path.
+               ;; of some existing path, we can get rid of this path.
                paths' (if (and (nil? successor-state)
                                (some #(= (take (count (last paths)) %)
                                          (last paths))
                                      (drop-last paths)))
                         (vec (drop-last paths))
-                        paths)]
+                        paths)
+               ;; If all the successors are visited or removed, then we don't
+               ;; need to check this state again.
+               removed' (if (->> (get-in states [:states current-state :successors])
+                                 (mapv first)
+                                 (every? #(contains? (set/union removed visited') %)))
+                          (conj removed current-state)
+                          removed)]
            (cond
              (some? successor-state)
              (recur successor-state
                     visited'
-                    (update paths' (dec (count paths')) (comp vec conj) successor-state))
+                    removed'
+                    (update paths' (dec (count paths')) (comp vec conj) successor-state)
+                    (inc counter))
 
              ;; Stop if there are no more paths to see or if we have the desired
              ;; number of paths.
              (or (= (count paths') max-number-of-paths)
-                 (= (count visited') (count (:states states))))
+                 (= (count removed') (count (:states states))))
              ;; Return maps instead of positional data.
              ;; We make the output the same form as `:trace` when we have some
              ;; violation.
@@ -794,10 +810,14 @@ VIEW
 
              :else
              ;; Start a new path.
-             (let [state (rand-nth (vec initial-states))]
+             (let [state (->> (vec initial-states)
+                              (remove #(contains? removed' %))
+                              rand-nth)]
                (recur [state nil]
-                      (conj visited' state)
-                      (assoc paths' (count paths') [[state nil]]))))))))))
+                      #{}
+                      removed'
+                      (assoc paths' (count paths') [[state nil]])
+                      (inc counter))))))))))
 
 (defn tlc-result-handler
   "This function is a implementation detail, you should not use it.
@@ -1165,7 +1185,13 @@ VIEW
   [name params steps]
   `(def ~name
      (let [steps# ~steps
-           params# ~params]
+           temp-params# ~params
+           procs# (or (:procs temp-params#)
+                      #{(keyword ~(str name))})
+           local-variables# (or (:local temp-params#)
+                                {:pc (key (first steps#))})
+           params# {:procs procs#
+                    :local local-variables#}]
        (schema/explain-humanized schema/DefProc ['~name params# steps#] "Invalid `defproc` args")
        ^{:type ::Proc}
        {:name (keyword (str *ns*) ~(str name))

@@ -61,12 +61,6 @@
   (def result (r/run-model model/global #{model/wire model/invariant} {:fp 6
                                                                        :seed -3669946775118883845}))
 
-  (def states
-    (-> (r/run-model model/global #{model/wire model/invariant} {:fp 6
-                                                                 :seed -3669946775118883845
-                                                                 :dump-states? true})
-        r/states-from-result))
-
   (do
     (reset! balances {:alice 5M :bob 5M})
     (def x (ar/register nil (request {:money 4
@@ -115,39 +109,46 @@
   ;; - [ ] Maybe make dynamic processes work (processes created after state `0`)?
   ;; -     Do we need to assert the step which created the new process?
   ;; - [ ] Maybe make a protocol out of this?
-  (let [init-fn (fn [initial-global-state] (reset! balances initial-global-state))
-        model-step->implementation-step {::model/check-funds ::check-funds
-                                         ::model/deposit ::deposit!
-                                         ::model/withdraw ::withdraw!}
-        step-handler (fn [_] (medley/map-vals int @balances))
-        register (fn [initial-local-state]
-                   (request {:money (:amount initial-local-state)
-                             :sender :account/alice
-                             :receiver :account/bob}))]
-    (for [trace (r/random-traces-from-states states)]
-      (let [initial-global-state (dissoc (get-in trace [0 1]) ::r/procs)
-            initial-local-states (get-in trace [0 1 ::r/procs])
-            steps (->> trace
-                       (drop 1)
-                       (mapv (comp :context :recife/metadata last))
-                       (mapv (fn [[step {:keys [:self]}]]
-                               [self (model-step->implementation-step step)])))
-            proc-name->proc (->> steps
-                                 (map first)
-                                 distinct
-                                 (mapv (fn [name]
-                                         [name (ar/register name (register (get initial-local-states name)))]))
-                                 (into {}))]
-        (init-fn initial-global-state)
-        ;; Check global state.
-        (let [spec-trace (->> trace
-                              (drop 1)
-                              (mapv last)
-                              (mapv #(dissoc % ::r/procs :recife/metadata)))
-              impl-trace (->> {:step-handler step-handler}
-                              (ar/run-processes! (ar/parse-process-names proc-name->proc steps))
-                              (mapv :response))]
-          (= spec-trace impl-trace)))))
+  (def states
+    (-> (r/run-model model/global #{model/wire model/invariant} {:fp 6
+                                                                 :seed -3669946775118883845
+                                                                 :dump-states? true})
+        r/states-from-result))
+
+  (->> (let [init-fn (fn [initial-global-state] (reset! balances initial-global-state))
+             model-step->implementation-step {::model/check-funds ::check-funds
+                                              ::model/deposit ::deposit!
+                                              ::model/withdraw ::withdraw!}
+             step-handler (fn [_] (medley/map-vals int @balances))
+             register (fn [initial-local-state]
+                        (request {:money (:amount initial-local-state)
+                                  :sender :account/alice
+                                  :receiver :account/bob}))]
+         (for [trace (r/random-traces-from-states states 1000)]
+           (let [initial-global-state (dissoc (get-in trace [0 1]) ::r/procs)
+                 initial-local-states (get-in trace [0 1 ::r/procs])
+                 steps (->> trace
+                            (drop 1)
+                            (mapv (comp :context :recife/metadata last))
+                            (mapv (fn [[step {:keys [:self]}]]
+                                    [self (model-step->implementation-step step)])))
+                 proc-name->proc (->> steps
+                                      (map first)
+                                      distinct
+                                      (mapv (fn [name]
+                                              [name (ar/register name (register (get initial-local-states name)))]))
+                                      (into {}))]
+             (init-fn initial-global-state)
+             ;; Check global state.
+             (let [spec-trace (->> trace
+                                   (drop 1)
+                                   (mapv last)
+                                   (mapv #(dissoc % ::r/procs :recife/metadata)))
+                   impl-trace (->> {:step-handler step-handler}
+                                   (ar/run-processes! (ar/parse-process-names proc-name->proc steps))
+                                   (mapv :response))]
+               (= spec-trace impl-trace)))))
+       (every? true?))
 
   ())
 

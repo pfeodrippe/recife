@@ -34,8 +34,7 @@
 ;; TODO: Maybe for processes which only have one step, we can get rid of
 ;; this verbosity. The same for when there is only one process, we just pass
 ;; a empty `params` and it's fine, names are taken from `name`.
-(r/defproc initial-request {:procs #{:initial-request}
-                            :local {:pc ::initial-request}}
+(r/defproc initial-request {}
   {::initial-request
    (fn [{:keys [::accounts] :as db}]
      ;; Initially, send only the companies with no children as there is no
@@ -55,7 +54,8 @@
   ;; You can ask to generate a trace example (if a violation occurs, we will
   ;; return the violation as we normally do, the trace eaxample only happens
   ;; if every check was ok).
-  (r/run-model global #{initial-request} {:gen-trace-example? true})
+  (-> (r/run-model global #{initial-request} {:gen-trace-example? true})
+      r/states-from-result)
 
   ;; TODO for implementation:
   ;; - [ ] Add database (Postgres).
