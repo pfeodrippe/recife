@@ -1184,17 +1184,27 @@ VIEW
          r/done))})"
   [name params steps]
   `(def ~name
-     (let [steps# ~steps
+     (let [keywordized-name# (keyword (str *ns*) ~(str name))
+           temp-steps# ~steps
+           ;; If you pass a function to `steps`, it means that you
+           ;; have only one step and the name of this will be derived
+           ;; from `name`.
+           steps# (if (fn? temp-steps#)
+                    {keywordized-name# temp-steps#}
+                    temp-steps#)
            temp-params# ~params
+           ;; If we don't have `:procs`, use the name of the symbol as a proc name.
            procs# (or (:procs temp-params#)
                       #{(keyword ~(str name))})
+           ;; If we don't have `:local`, just use the first step (it should have
+           ;; one only).
            local-variables# (or (:local temp-params#)
                                 {:pc (key (first steps#))})
            params# {:procs procs#
                     :local local-variables#}]
        (schema/explain-humanized schema/DefProc ['~name params# steps#] "Invalid `defproc` args")
        ^{:type ::Proc}
-       {:name (keyword (str *ns*) ~(str name))
+       {:name keywordized-name#
         :steps-keys (->> steps#
                          keys
                          (mapv #(if (vector? %)
@@ -1381,6 +1391,9 @@ VIEW
   ;; - [ ] Check that all initial global variables are namespaced.
   ;; - [ ] Use Pathom3, I don't want to be bothered how to get data (e.g.
   ;;       trace from the result map).
+  ;; - [x] Fix a problem with the usage of empty maps.
+  ;; - [ ] Return better error when some bogus thing happen at the step
+  ;;       functions.
 
   "
 == Interaction with implementation
