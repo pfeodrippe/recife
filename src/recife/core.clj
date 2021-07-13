@@ -497,8 +497,9 @@
                                      (mapv (juxt :recife/fairness :recife.operator/name))
                                      (mapv (fn [[fairness name]]
                                              [:raw (format "\\A self \\in %s: %s_vars(%s(self, main_var) %s)"
-                                                           (->> init ::procs keys
-                                                                (mapv clojure.core/name) set tla-edn/to-tla-value)
+                                                           (->> (keys (::procs init))
+                                                                set
+                                                                tla-edn/to-tla-value)
                                                            (case fairness
                                                              :recife.fairness/weakly-fair "WF"
                                                              :recife.fairness/strongly-fair "SF")
@@ -688,11 +689,13 @@ VIEW
            [(.fingerPrint tlc-successor) (get-in successor-state [:recife/metadata :context])])))
 
 (defn- file-sw-write-state
-  [this state successor _action-checks _from _length successor-state-new? _visualization _action]
-  (when successor-state-new?
-    (file-sw-save-state this successor))
-  (file-sw-rank-state this state)
-  (file-sw-save-successor this state successor))
+  [this state successor _action-checks _from _length successor-state-new? visualization _action]
+  ;; If it's stuttering, we don't put it as a successor.
+  (when-not (= visualization tlc2.util.IStateWriter$Visualization/STUTTERING)
+    (when successor-state-new?
+      (file-sw-save-state this successor))
+    (file-sw-rank-state this state)
+    (file-sw-save-successor this state successor)))
 
 ;; TODO: Move the state writers to a `state-writers` ns.
 (defrecord FileStateWriter [writer output-stream edn-states-atom file-path]
@@ -795,7 +798,8 @@ VIEW
              ;; Stop if there are no more paths to see or if we have the desired
              ;; number of paths.
              (or (= (count paths') max-number-of-paths)
-                 (= (count removed') (count (:states states))))
+                 (= (count removed') (count (:states states)))
+                 (not (->> (vec initial-states) (remove #(contains? removed' %)) seq)))
              ;; Return maps instead of positional data.
              ;; We make the output the same form as `:trace` when we have some
              ;; violation.
@@ -1245,7 +1249,7 @@ VIEW
        ^{:type ::Property}
        {:name name#
         :property expr#
-        :operator (temporal-property ::no-livelocks expr#)})))
+        :operator (temporal-property name# expr#)})))
 
 (defmacro defconstraint
   [name f]

@@ -15,7 +15,23 @@
    :id/counter 0
    :partner/history []})
 
-(r/defproc initial-request {}
+;; We are now testing a temporal property (see `defproperty` below),
+;; which means that "something good will eventually occur" (https://en.wikipedia.org/wiki/Liveness#:~:text=Liveness%20guarantees%20are%20important%20properties,something%20bad%20does%20not%20occur%22.).
+
+;; Each process of `Recife` can stutter (see https://learntla.com/temporal-logic/termination/),
+;; the process will not run (or not run anymore) and it will be stopped (in
+;; stuttering state). A real process can fail (data center dies, server is thrown
+;; into the water etc) and so a process like `initial-request` can just stop
+;; and you can't do anything about it and the "something good" will not eventually
+;; occur, too bad.
+
+;; But here we are assuming that this does not happen (if it happens in the real
+;; world, then we probably will have bigger issues) and that the world is fair
+;; enough that it will at least retry the request at some point in time. So we
+;; can use the `:fair` keyword (here as a metadata of `initial-request`) to indicate
+;; that to our process. There is also `:fair+`, but it's not widely used, learn
+;; more about this in this great Hillel's article https://www.hillelwayne.com/post/fairness/.
+(r/defproc ^:fair initial-request {}
   (fn [{:keys [::companies] :as db}]
     (let [companies-with-no-children (->> companies
                                           (medley/remove-vals (comp seq :children))
@@ -27,7 +43,8 @@
           (update ::companies merge companies-with-no-children)
           (r/done)))))
 
-(r/defproc partner-server {}
+;; We add fairness here too.
+(r/defproc ^:fair partner-server {}
   (fn [{:keys [:partner/reqs :id/counter ::companies] :as db}]
     ;; TODO: Check for unsent companies.
     ;; TODO: Maybe use non determinism instead of `first` to fetch
@@ -41,8 +58,9 @@
             (update :partner/history conj [company-name counter])
             (update :id/counter inc))))))
 
-(r/defproc webhook {:procs #{:w1}
-                    :local {:pc :webhook/handle-request}}
+;; We add fairness here as well.
+(r/defproc ^:fair webhook {:procs #{:w1}
+                           :local {:pc :webhook/handle-request}}
   {:webhook/handle-request
    (fn [{:keys [:webhook/reqs ::companies] :as db}]
      (if (every? (comp :id val) companies)
@@ -99,6 +117,8 @@
   (ra/visualize-result result)
 
   ;; TODO:
+  ;; - [x] IMPORTANT! When a temporal property is added, the successor in the
+  ;;       states file is not correct.
   ;; - [ ] Add invariants.
   ;; - [ ] Add temporal properties.
   ;; - [ ] Add two partner and two webhook processes.
