@@ -1,4 +1,4 @@
-(ns example.partner
+(ns example.partner-1
   "This is a simple protocol for a integration which requires you to sign up
   children before you sign up any parent entities, it's required you to know the
   ids of the children beforehand (yes, it's a bad API design by our integration
@@ -10,11 +10,13 @@
   so you can have grandchildren or great-grandchildren (but no loops, you cannot
   have a child C1 who has a parent P1 where C1 has P1 as one of its children
   (transitively or directly)).
+
+  See other `example.partner-*` namespaces for more checks and fixes.
   "
   (:require
    [clojure.set :as set]
-   [recife.core :as r]
-   [recife.anim :as ra]))
+   [recife.anim :as ra]
+   [recife.core :as r]))
 
 (def global
   ;; All global keywords should be namespaced so we can differentiate it
@@ -62,9 +64,6 @@
 ;; to the webhook, which will handle it.
 (r/defproc partner-server {}
   (fn [{:keys [:partner/reqs :id/counter ::companies] :as db}]
-    ;; TODO: Check for unsent companies.
-    ;; TODO: Maybe use non determinism instead of `first` to fetch
-    ;; a partner request.
     ;; If all companies have an `:id` already, we are finished.
     (if (every? (comp :id val) companies)
       (r/done db)
@@ -101,8 +100,6 @@
    (fn [{:keys [:loaded-companies] :as db}]
      ;; Companies are ready to be sent when all of its children have
      ;; an `:id`.
-     ;; TODO: Fetch one ready company (not many) non deterministically.
-     ;; TODO: Do not send if it's in transit (`:sent?`).
      (let [companies-ready (->> loaded-companies
                                 ;; If it has an `:id`, it was already sent,
                                 ;; so we ignore them.
@@ -127,16 +124,13 @@
   ;; return the violation as we normally do, the trace eaxample only happens
   ;; if every check was ok).
   (def result
+    ;; No duplicates violation.
     (r/run-model global
                  #{initial-request partner-server
                    webhook no-partner-history-duplicates}
                  {:gen-trace-example? true}))
 
   (ra/visualize-result result)
-
-  ;; TODO:
-  ;; - [ ] Add invariants.
-  ;; - [ ] Add temporal properties.
 
   ;; TODO for implementation:
   ;; - [ ] Start implementation.
