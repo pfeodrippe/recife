@@ -1320,7 +1320,7 @@ VIEW
   ;; - [ ] Profile parsing, things are slow in comparison with usual TLA+.
   ;; - [ ] (?) For performance reasons, make `db` be a custom map type.
   ;; - [x] Need to pass a seed so examples give us the same output.
-  ;; - [ ] Keep track of which process is acting so we know who is doing what.
+  ;; - [x] Keep track of which process is acting so we know who is doing what.
   ;; - [x] Show `fp`, `seed`.
   ;; - [ ] Create source map from TLA+ to clojure expression?
   ;; - [ ] Print logs to stdout.
@@ -1392,7 +1392,7 @@ VIEW
   ;; - [ ] Use Pathom3, I don't want to be bothered how to get data (e.g.
   ;;       trace from the result map).
   ;; - [x] Fix a problem with the usage of empty maps.
-  ;; - [ ] Return better error when some bogus thing happen at the step
+  ;; - [ ] Return better error when some bogus thing happens in the user-provided
   ;;       functions.
 
   "

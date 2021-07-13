@@ -13,29 +13,36 @@
   "
   (:require
    [clojure.set :as set]
-   [recife.core :as r]))
+   [recife.core :as r]
+   [recife.anim :as ra]))
 
 (def global
   ;; All global keywords should be namespaced so we can differentiate it
   ;; from local variables in our processes.
   {
-   ;; `:c1` and `:c2` are the companies names (unique).
+   ;; `:c1`, `:c2` etc are the companies names (unique).
    ;; `:children` are the children of that company.
    ::companies {:c1 {:children #{:c2}}
-                :c2 {}}
+                :c2 {}
+                :c3 {:children #{:c1}}
+                :c4 {}}
 
    ;; In the real world, we talk to our partner through a HTTP request, but here
    ;; we don't need to bother about implementation details like status, HTTP library
    ;; or error handling. We will model a API request by putting a element in a set,
    ;; which the partner process will consume.
    ;; Requests sent to the partner.
-   ::partner-reqs #{}
+   :partner/reqs #{}
 
    ;; Requests sent to the webhook.
-   ::webhook-reqs #{}
+   :webhook/reqs #{}
 
    ;; Counter used by parter to give a id to an company.
-   ::id-counter 0})
+   :id/counter 0
+
+   ;; `:partner/history` stores the companies sent by the partner to the
+   ;; webhook.
+   :partner/history []})
 
 (r/defproc initial-request {}
   (fn [{:keys [::companies] :as db}]
@@ -46,53 +53,93 @@
                                           keys
                                           set)]
       (-> db
-          (update ::partner-reqs set/union companies-with-no-children)
+          (update :partner/reqs set/union companies-with-no-children)
           ;; We want this step to happen only in the beginning, so we will "close" it
           ;; with `r/done`.
           (r/done)))))
 
-;; Represents the partner server, it just adds a id to the account and send it
+;; Represents the partner server, it just adds a id to the company and send it
 ;; to the webhook, which will handle it.
 (r/defproc partner-server {}
-  (fn [{:keys [::partner-reqs ::id-counter] :as db}]
+  (fn [{:keys [:partner/reqs :id/counter ::companies] :as db}]
     ;; TODO: Check for unsent companies.
-    ;; TODO: Maybe use non determinist instead of `first` to fetch
+    ;; TODO: Maybe use non determinism instead of `first` to fetch
     ;; a partner request.
-    (when-let [company-name (first partner-reqs)]
-      (-> db
-          (update ::partner-reqs set/difference #{company-name})
-          (update ::webhook-reqs conj [company-name id-counter])
-          (update ::id-counter inc)))))
+    ;; If all companies have an `:id` already, we are finished.
+    (if (every? (comp :id val) companies)
+      (r/done db)
+      (when-let [company-name (first reqs)]
+        (-> db
+            (update :partner/reqs set/difference #{company-name})
+            (update :webhook/reqs conj [company-name counter])
+            (update :partner/history conj [company-name counter])
+            (update :id/counter inc))))))
 
 (r/defproc webhook {:procs #{:w1}
-                    :local {:pc ::webhook-init}}
-  {::webhook-init
-   (fn [{:keys [::webhook-reqs ::companies] :as db}]
-     (when-let [[company-name id' :as req] (first webhook-reqs)]
-       ;; If we already have a id, we don't need to use the one
-       ;; from the request.
-       (let [id (or (get-in companies [company-name :id])
-                    id')]
-         (-> db
-             (update ::webhook-reqs set/difference #{req})
-             (assoc-in [::companies company-name :id] id)
-             ;; Note that `:pulled-accounts` is a local variable (unamespaced
-             ;; keyword), so it will be available for the process which created
-             ;; it (`:w1` or `:w2`).
-             ;; We are simulating here a pull from a real database (using
-             ;; possible stale data) which will be used in other steps of
-             ;; this process.
-             (assoc :pulled-accounts companies)))))})
+                    :local {:pc :webhook/handle-request}}
+  {:webhook/handle-request
+   (fn [{:keys [:webhook/reqs ::companies] :as db}]
+     ;; If all companies have an `:id` already, we are finished.
+     (if (every? (comp :id val) companies)
+       (r/done db)
+       (when-let [[company-name id :as req] (first reqs)]
+         (let [{companies' ::companies :as new-db}
+               (-> db
+                   (update :webhook/reqs set/difference #{req})
+                   (assoc-in [::companies company-name :id] id))]
+           (-> new-db
+               ;; Note that `:loaded-companies` is a local variable (unamespaced
+               ;; keyword), so it will be available for the process which created
+               ;; it (some of the keywords in `:procs`).
+               ;; We are simulating here a load from a real database (using
+               ;; possible stale data) which will be used in other steps of
+               ;; this process.
+               (assoc :loaded-companies companies')
+               (r/goto :webhook/send-to-partner))))))
+
+   :webhook/send-to-partner
+   (fn [{:keys [:loaded-companies] :as db}]
+     ;; Companies are ready to be sent when all of its children have
+     ;; an `:id`.
+     ;; TODO: Fetch one ready company (not many) non deterministically.
+     ;; TODO: Do not send if it's in transit (`:sent?`).
+     (let [companies-ready (->> loaded-companies
+                                ;; If it has an `:id`, it was already sent,
+                                ;; so we ignore them.
+                                (remove (comp :id val))
+                                (filter (fn [[_ {:keys [:children]}]]
+                                          (every? #(-> loaded-companies % :id) children)))
+                                keys
+                                set)]
+       (-> db
+           (update :partner/reqs set/union companies-ready)
+           (r/goto :webhook/handle-request))))})
+
+;; We don't want the same company being sent twice to the partner server.
+(r/definvariant no-partner-history-duplicates
+  (fn [{:keys [:partner/history]}]
+    (= (->> history (map first) distinct count)
+       (count history))))
 
 (comment
 
   ;; You can ask to generate a trace example (if a violation occurs, we will
   ;; return the violation as we normally do, the trace eaxample only happens
   ;; if every check was ok).
-  (-> (r/run-model global #{initial-request partner-server webhook} {:gen-trace-example? true})
-      r/states-from-result)
+  (def result
+    (r/run-model global
+                 #{initial-request partner-server
+                   webhook no-partner-history-duplicates}
+                 {:gen-trace-example? true}))
+
+  (ra/visualize-result result)
+
+  ;; TODO:
+  ;; - [ ] Add invariants.
+  ;; - [ ] Add temporal properties.
 
   ;; TODO for implementation:
+  ;; - [ ] Start implementation.
   ;; - [ ] Add database (Postgres).
   ;; - [ ] Daycare center communication is through an HTTP request.
 
