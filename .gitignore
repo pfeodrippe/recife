@@ -11,6 +11,7 @@ pom.xml.asc
 .lein-failures
 .nrepl-port
 .cpcache/
+.lsp/
 
 /clj-kondo
 **/.clj-kondo/.cache
