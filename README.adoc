@@ -36,6 +36,13 @@ fairness there.
 
 Open an Issue or reach out to me on https://twitter.com/pfeodrippe[Twitter].
 
+== Analyzer
+
+Test your implementation using `recife.analyzer/analyzer`, think of it like property
+base testing, but driven by the traces your model checker result generate.
+
+See link:test/example/implementation/wire_1.clj#L118[example].
+
 == How it works
 
 It uses TLA+/TLC behind the scenes, which is a very powerful model checker where
