@@ -22,7 +22,7 @@ Our mains macros/functions are
 - `r/definvariant`, you define an invariant to be tested;
 - `r/defproperty`, you define a temporal property, this is really powerful as it
   can check if something will happen (e.g. if the process will terminate or if
-  the ).
+  it will eventually send the request).
 - `r/run-model`, you run the model checker passing a global state (just a clojure
   map) and the vars defined with `r/def.*`;
 - `r/done`, you state that the process is done;
