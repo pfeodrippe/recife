@@ -1290,7 +1290,9 @@ VIEW
            ;; If we don't have `:local`, just use the first step (it should have
            ;; one only).
            local-variables# (or (:local temp-params#)
-                                {:pc (key (first steps#))})
+                                {:pc (if (vector? (key (first steps#)))
+                                       (first (key (first steps#)))
+                                       (key (first steps#)))})
            params# {:procs procs#
                     :local local-variables#}]
        (schema/explain-humanized schema/DefProc ['~name params# steps#] "Invalid `defproc` args")
