@@ -30,7 +30,7 @@
                 (empty? (get alloc c)))
        (assoc-in db [::unsat c] S)))})
 
-(r/defproc allocate {}
+(r/defproc  allocate {}
   {[:allocate
     non-deterministic-params]
    (fn [{:keys [:c :S ::unsat ::alloc] :as db}]
@@ -42,7 +42,7 @@
              (update-in [::alloc c] set/union S)
              (update-in [::unsat c] set/difference S)))))})
 
-(r/defproc return {}
+(r/defproc ^:fair return {}
   {[:return
     non-deterministic-params]
    (fn [{:keys [:c :S ::alloc] :as db}]
@@ -66,9 +66,11 @@
   [:forall {'c clients}
    [:leads-to
     [:invoke {:c 'c}
-     (fn [{:keys [:c ::unsat]}])]
+     (fn [{:keys [:c ::unsat]}]
+       (empty? (get unsat c)))]
     [:invoke {:c 'c}
-     (fn [{:keys [:c ::alloc]}])]]])
+     (fn [{:keys [:c ::alloc]}]
+       (empty? (get alloc c)))]]])
 
 (comment
   ;; ----- Invariants and properties -----

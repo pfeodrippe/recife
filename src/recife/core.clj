@@ -412,36 +412,54 @@
 
 (defn- compile-temporal-property
   [collector identifier]
-  (fn [id-and-args]
-    (parse id-and-args (fn [[result expr]]
-                         (cond
-                           (fn? expr)
-                           (let [op (eval
-                                     `(spec/defop ~(symbol (str (custom-munge identifier) "2")) {:module "spec"}
-                                        [^Value ~'main-var]
-                                        (process-config-operator ~expr ~'main-var)))]
-                             (swap! collector conj {:identifier (str (symbol (str (custom-munge identifier) "2"))
-                                                                     "(_main_var) == _main_var = _main_var")
-                                                    :op-ns (-> op meta :op-ns)})
-                             (str (symbol (str (custom-munge identifier) "2"))
-                                  "(main_var)"))
+  (let [
+        ;; With `counter` we are able to use many functions for the same
+        ;; temporal property.
+        counter (atom 100)]
+    (fn [id-and-args]
+      (parse id-and-args (fn [[result expr]]
+                           (cond
+                             (fn? expr)
+                             (let [op (eval
+                                       `(spec/defop ~(symbol (str (custom-munge identifier)
+                                                                  @counter))
+                                          {:module "spec"}
+                                          [^Value ~'main-var]
+                                          (process-config-operator ~expr ~'main-var)))]
+                               (swap! collector conj {:identifier (str (symbol (str (custom-munge identifier)
+                                                                                    @counter))
+                                                                       "(_main_var) == _main_var = _main_var")
+                                                      :op-ns (-> op meta :op-ns)})
+                               (try
+                                 (str (symbol (str (custom-munge identifier)
+                                                   @counter))
+                                      "(main_var)")
+                                 (finally
+                                   (swap! counter inc))))
 
-                           ;; This means that we called invoke and we are calling a native
-                           ;; function.
-                           (map? expr)
-                           (let [{:keys [:env] f :fn} expr
-                                 op (eval
-                                     `(spec/defop ~(symbol (str (custom-munge identifier) "2")) {:module "spec"}
-                                        [^Value ~'main-var]
-                                        (process-config-operator ~f ~'main-var)))]
-                             (swap! collector conj {:identifier (str (symbol (str (custom-munge identifier) "2"))
-                                                                     "(_main_var) == _main_var = _main_var")
-                                                    :op-ns (-> op meta :op-ns)})
-                             (str (symbol (str (custom-munge identifier) "2"))
-                                  (format "(main_var @@ %s)" (tla-edn/to-tla-value env))))
+                             ;; This means that we called invoke and we are calling a native
+                             ;; function.
+                             (map? expr)
+                             (let [{:keys [:env] f :fn} expr
+                                   op (eval
+                                       `(spec/defop ~(symbol (str (custom-munge identifier)
+                                                                  @counter))
+                                          {:module "spec"}
+                                          [^Value ~'main-var]
+                                          (process-config-operator ~f ~'main-var)))]
+                               (swap! collector conj {:identifier (str (symbol (str (custom-munge identifier)
+                                                                                    @counter))
+                                                                       "(_main_var) == _main_var = _main_var")
+                                                      :op-ns (-> op meta :op-ns)})
+                               (try
+                                 (str (symbol (str (custom-munge identifier)
+                                                   @counter))
+                                      (format "(main_var @@ %s)" (tla-edn/to-tla-value env)))
+                                 (finally
+                                   (swap! counter inc))))
 
-                           :else
-                           result)))))
+                             :else
+                             result))))))
 
 (defn temporal-property
   [identifier expr]
