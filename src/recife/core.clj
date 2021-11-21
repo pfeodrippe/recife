@@ -195,6 +195,11 @@
                       :always
                       (format "[](%s)" (parse (first args) f))
 
+                      :leads-to
+                      (format "(%s) ~> (%s)"
+                              (parse (first args) f)
+                              (parse (second args) f))
+
                       :invoke
                       (parse {:env (first args)
                               :fn (last args)}
