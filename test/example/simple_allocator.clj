@@ -1,4 +1,6 @@
 (ns example.simple-allocator
+  ;; TODO: Fix the namespace to scheduling allocator.
+  ;; TODO: Fix URL below.
   "See https://github.com/tlaplus/Examples/blob/master/specifications/allocator/SimpleAllocator.tla."
   (:require
    [clojure.math.combinatorics :as comb]
@@ -13,7 +15,8 @@
 
 (def global
   {::unsat (->> clients (mapv #(vector % #{})) (into {}))
-   ::alloc (->> resources (mapv #(vector % #{})) (into {}))})
+   ::alloc (->> resources (mapv #(vector % #{})) (into {}))
+   ::sched []})
 
 (def non-deterministic-params
   "Used for non determinism, see each `defproc` and pay attention
@@ -30,7 +33,7 @@
                 (empty? (get alloc c)))
        (assoc-in db [::unsat c] S)))})
 
-(r/defproc  allocate {}
+(r/defproc allocate {}
   {[:allocate
     non-deterministic-params]
    (fn [{:keys [:c :S ::unsat ::alloc] :as db}]
@@ -42,7 +45,7 @@
              (update-in [::alloc c] set/union S)
              (update-in [::unsat c] set/difference S)))))})
 
-(r/defproc ^:fair return {}
+(r/defproc return {}
   {[:return
     non-deterministic-params]
    (fn [{:keys [:c :S ::alloc] :as db}]
@@ -72,6 +75,9 @@
      (fn [{:keys [:c ::alloc]}]
        (empty? (get alloc c)))]]])
 
+;; TODO: SF Fairness.
+;; \A c \in Clients: SF_vars(\E S \in SUBSET Resources: Allocate(c,S))
+
 (comment
   ;; ----- Invariants and properties -----
   ;; TODO
@@ -89,6 +95,7 @@
 
   (r/run-model global #{request allocate return
                         resource-mutex clients-will-return}
-               {:trace-example? true})
+               {#_ #_:trace-example? true
+                #_ #_:debug? true})
 
   ())
