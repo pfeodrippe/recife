@@ -19,8 +19,6 @@
    ::sched []})
 
 (def non-deterministic-params
-  "Used for non determinism, see each `defproc` and pay attention
-  to the `:c` and `:S` keys."
   {:c clients
    :S (->> (seq resources) comb/subsets (mapv set))})
 
@@ -33,7 +31,7 @@
                 (empty? (get alloc c)))
        (assoc-in db [::unsat c] S)))})
 
-(r/defproc allocate {}
+(r/defproc ^:fair allocate {}
   {[:allocate
     non-deterministic-params]
    (fn [{:keys [:c :S ::unsat ::alloc] :as db}]
@@ -45,7 +43,7 @@
              (update-in [::alloc c] set/union S)
              (update-in [::unsat c] set/difference S)))))})
 
-(r/defproc return {}
+(r/defproc ^:fair return {}
   {[:return
     non-deterministic-params]
    (fn [{:keys [:c :S ::alloc] :as db}]
@@ -96,6 +94,6 @@
   (r/run-model global #{request allocate return
                         resource-mutex clients-will-return}
                {#_ #_:trace-example? true
-                #_ #_:debug? true})
+                :debug? true})
 
   ())
