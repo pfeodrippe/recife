@@ -5,6 +5,7 @@
   (:require
    [clojure.math.combinatorics :as comb]
    [clojure.set :as set]
+   [medley.core :as medley]
    [recife.core :as r]))
 
 (def clients
@@ -15,7 +16,7 @@
 
 (def global
   {::unsat (->> clients (mapv #(vector % #{})) (into {}))
-   ::alloc (->> resources (mapv #(vector % #{})) (into {}))
+   ::alloc (->> clients (mapv #(vector % #{})) (into {}))
    ::sched []})
 
 (def non-deterministic-params
@@ -33,15 +34,22 @@
 
 (r/defproc ^:fair allocate {}
   {[:allocate
-    non-deterministic-params]
-   (fn [{:keys [:c :S ::unsat ::alloc] :as db}]
+    (merge {:i-sched #(range (count (::sched %)))}
+           non-deterministic-params)]
+   (fn [{:keys [:i-sched :c :S ::sched ::unsat ::alloc] :as db}]
      (let [available-resources (set/difference resources (apply set/union (vals alloc)))]
        (when (and (seq S)
-                  (set/subset? S
-                               (set/intersection available-resources (get unsat c))))
+                  (set/subset? S (set/intersection available-resources (get unsat c)))
+                  i-sched
+                  (= (nth sched i-sched) c)
+                  (->> (take i-sched sched)
+                       (every? #(empty? (set/intersection (get unsat %) S)))))
          (-> db
              (update-in [::alloc c] set/union S)
-             (update-in [::unsat c] set/difference S)))))})
+             (update-in [::unsat c] set/difference S)
+             (assoc ::sched (if (= S (get unsat c))
+                              (vec (medley/remove-nth i-sched sched))
+                              sched))))))})
 
 (r/defproc ^:fair return {}
   {[:return
@@ -50,6 +58,19 @@
      (when (and (seq S)
                 (set/subset? S (get alloc c)))
        (update-in db [::alloc c] set/difference S)))})
+
+(defn- to-schedule
+  [{:keys [::sched ::unsat]}]
+  (set (filter #(and (seq (get unsat %))
+                     (not (contains? (set sched) %)))
+               clients)))
+
+(r/defproc schedule {}
+  {[:schedule
+    {:sq #(comb/permutations (to-schedule %))}]
+   (fn [{:keys [:sq] :as db}]
+     (when (seq sq)
+       (update db ::sched (comp vec concat) sq)))})
 
 ;; ResourceMutex ==
 ;;   \A c1,c2 \in Clients : c1 # c2 => alloc[c1] \cap alloc[c2] = {}
@@ -91,7 +112,7 @@
   ;; TODO:
   ;; - [ ] Maybe watch for new vars and serialze then to the caller JVM?
 
-  (r/run-model global #{request allocate return
+  (r/run-model global #{request allocate return schedule
                         resource-mutex clients-will-return}
                {#_ #_:trace-example? true
                 :debug? true})
