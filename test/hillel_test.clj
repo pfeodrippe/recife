@@ -364,10 +364,11 @@
              [2
               {:recife.core/procs
                {:writer {:pc :hillel.ch5-server-3/write}
-                :reader {:pc :hillel.ch5-server-3/read}}
-               :server/queue [:msg :msg]
+                :reader {:pc :hillel.ch5-server-3/notify-failure
+                         :current-message :msg}}
+               :server/queue []
                :recife/metadata
-               {:context [:hillel.ch5-server-3/write {:self :writer}]}}]
+               {:context [:hillel.ch5-server-3/read {:self :reader :notify-failure? true}]}}]
              [3
               {:recife.core/procs
                {:writer {:pc :hillel.ch5-server-3/write}
@@ -377,8 +378,7 @@
                :server/queue [:msg]
                :recife/metadata
                {:context
-                [:hillel.ch5-server-3/read
-                 {:notify-failure? true :self :reader}]}}]
+                [:hillel.ch5-server-3/write {:self :writer}]}}]
              [4
               {:recife.core/procs
                {:writer {:pc :hillel.ch5-server-3/write}
@@ -389,8 +389,8 @@
                :recife/metadata
                {:context [:hillel.ch5-server-3/write {:self :writer}]}}]]
             :trace-info {:violation {:type :deadlock}}
-            :distinct-states 14
-            :generated-states 20
+            :distinct-states 18
+            :generated-states 27
             :seed 1
             :fp 0}
            result))

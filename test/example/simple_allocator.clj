@@ -21,7 +21,7 @@
 
 (def non-deterministic-params
   {:c clients
-   :S (->> (seq resources) comb/subsets (mapv set))})
+   :S (->> (seq resources) comb/subsets (mapv set) set)})
 
 (r/defproc request {}
   {[:request
@@ -32,7 +32,13 @@
                 (empty? (get alloc c)))
        (assoc-in db [::unsat c] S)))})
 
-(r/defproc ^:fair allocate {}
+(def yyy
+  [:forall {'c clients}
+   [:fair
+    [:exists {'S (:S non-deterministic-params)}
+     [:raw "_COLON_allocate(\"allocate\", main_var @@ [c |-> c, S |-> S])"]]]])
+
+(r/defproc ^{:fairness yyy} allocate {}
   {[:allocate
     (merge {:i-sched #(range (count (::sched %)))}
            non-deterministic-params)]
@@ -56,9 +62,9 @@
    [:fair
     [:and
      [:invoke {:c 'c}
-      (fn [{:keys [:c ::unsat] }]
+      (fn [{:keys [:c ::unsat]}]
         (empty? (get unsat c)))]
-     [:raw  "_COLON_return(\"return\", main_var @@ [c |-> c, S |-> main_var[\"example___simple_allocator_SLASH_alloc\"][c]])"]]]])
+     [:raw "_COLON_return(\"return\", main_var @@ [c |-> c, S |-> main_var[\"example___simple_allocator_SLASH_alloc\"][c]])"]]]])
 
 (r/defproc ^{:fairness xxx} return {}
   {[:return
