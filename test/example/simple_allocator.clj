@@ -51,7 +51,16 @@
                               (vec (medley/remove-nth i-sched sched))
                               sched))))))})
 
-(r/defproc ^:fair return {}
+(def xxx
+  [:forall {'c clients}
+   [:fair
+    [:and
+     [:invoke {:c 'c}
+      (fn [{:keys [:c ::unsat] }]
+        (empty? (get unsat c)))]
+     [:raw  "_COLON_return(\"return\", main_var @@ [c |-> c, S |-> main_var[\"example___simple_allocator_SLASH_alloc\"][c]])"]]]])
+
+(r/defproc ^{:fairness xxx} return {}
   {[:return
     non-deterministic-params]
    (fn [{:keys [:c :S ::alloc] :as db}]
@@ -115,6 +124,7 @@
   (r/run-model global #{request allocate return schedule
                         resource-mutex clients-will-return}
                {#_ #_:trace-example? true
-                :debug? true})
+                :debug? true
+                #_ #_:run-local? true})
 
   ())

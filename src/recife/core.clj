@@ -205,6 +205,14 @@
                               :fn (last args)}
                              f)
 
+                      :fair
+                      (format "WF_vars(%s)"
+                              (parse (first args) f))
+
+                      :fair+
+                      (format "SF_vars(%s)"
+                              (parse (first args) f))
+
                       :or
                       (->> args
                            (mapv (comp #(str "(" % ")") #(parse % f)))
@@ -266,6 +274,8 @@
   (let [{:keys [:f]} (operator-local (tla-edn/to-edn params))]
     (process-operator-local f self main-var)))
 
+(declare temporal-property)
+
 (defn reg
   ([identifier expr]
    (reg identifier {} expr))
@@ -295,6 +305,8 @@
                                (-> opts meta :fair)) :recife.fairness/weakly-fair
                            (or (-> expr meta :fair+)
                                (-> opts meta :fair+)) :recife.fairness/strongly-fair)
+        :recife/fairness-map (some->> (or (-> expr meta :fairness) (-> opts meta :fairness))
+                                      (temporal-property (keyword (str (symbol identifier) "-fairness"))))
         :form (parse [:and
                       [:raw (format "\nmain_var[%s][self][\"pc\"] = %s"
                                     (tla-edn/to-tla-value ::procs)
@@ -598,26 +610,40 @@
                                       (str/join ", ")
                                       (str ", "))
                              "")
+        fairness-operators (some->> operators
+                                    (filter :recife/fairness)
+                                    seq
+                                    (mapv (juxt :recife/fairness :recife.operator/name))
+                                    (mapv (fn [[fairness name]]
+                                            [:raw (format "\\A self \\in %s: %s_vars(%s(self, main_var) %s)"
+                                                          (->> (keys (::procs init))
+                                                               set
+                                                               tla-edn/to-tla-value)
+                                                          (case fairness
+                                                            :recife.fairness/weakly-fair "WF"
+                                                            :recife.fairness/strongly-fair "SF")
+                                                          name
+                                                          (if (seq unchanged-helper-variables)
+                                                            (format "/\\ (%s)" unchanged-helper-variables)
+                                                            ""))])))
         formatted-fairness (or
-                            (some->> operators
-                                     (filter :recife/fairness)
+                            (some->> (concat fairness-operators
+                                             (some->> operators
+                                                      (filter :recife/fairness-map)
+                                                      seq
+                                                      (mapv (fn [{:keys [:recife/fairness-map]}]
+                                                              [:raw (:form fairness-map)]))))
                                      seq
-                                     (mapv (juxt :recife/fairness :recife.operator/name))
-                                     (mapv (fn [[fairness name]]
-                                             [:raw (format "\\A self \\in %s: %s_vars(%s(self, main_var) %s)"
-                                                           (->> (keys (::procs init))
-                                                                set
-                                                                tla-edn/to-tla-value)
-                                                           (case fairness
-                                                             :recife.fairness/weakly-fair "WF"
-                                                             :recife.fairness/strongly-fair "SF")
-                                                           name
-                                                           (if (seq unchanged-helper-variables)
-                                                             (format "/\\ (%s)" unchanged-helper-variables)
-                                                             ""))]))
                                      (into [:and])
                                      parse)
-                            "TRUE")]
+                            "TRUE")
+        other-identifiers (or (some->> operators
+                                       (filter :recife/fairness-map)
+                                       seq
+                                       (mapcat (fn [{:keys [:recife/fairness-map]}]
+                                                 (:identifiers fairness-map)))
+                                       (str/join "\n\n"))
+                              "")]
     (int/i "
 -------------------------------- MODULE #{spec-name} --------------------------------
 
@@ -628,6 +654,8 @@ VARIABLES main_var #{helper-variables}
 vars == << main_var #{helper-variables} >>
 
 recife_operator_local(_self, _params, _main_var) == _self = _self /\\ _params = _params /\\ _main_var = _main_var
+
+#{other-identifiers}
 
 __init ==
    #{formatted-init}
