@@ -9,7 +9,7 @@
    [recife.core :as r]))
 
 (def clients
-  #{:c1 :c2 :c3})
+  #{:c1 :c2 #_:c3})
 
 (def resources
   #{:r1 :r2})
@@ -36,13 +36,15 @@
   [:forall {'c clients}
    [:fair
     [:exists {'S (:S non-deterministic-params)}
-     [:raw "_COLON_allocate(\"allocate\", main_var @@ [c |-> c, S |-> S])"]]]])
+     [:raw "_COLON_allocate(\"allocate\", main_var @@ [c |-> \"l1\", S |-> S])"]]]])
 
-(r/defproc ^{:fairness yyy} allocate {}
+(r/defproc allocate {}
   {[:allocate
     (merge {:i-sched #(range (count (::sched %)))}
            non-deterministic-params)]
    (fn [{:keys [:i-sched :c :S ::sched ::unsat ::alloc] :as db}]
+     #_(when (= c :l1)
+       (println :>>> [c S i-sched]))
      (let [available-resources (set/difference resources (apply set/union (vals alloc)))]
        (when (and (seq S)
                   (set/subset? S (set/intersection available-resources (get unsat c)))
@@ -61,10 +63,17 @@
   [:forall {'c clients}
    [:fair
     [:and
+     #_[:invoke {:c 'c}
+      (fn [{:keys [:c ::unsat]}]
+        (empty? (get unsat c)))]
+     [:raw "_COLON_return(\"return\", main_var @@ [c |-> c, S |-> main_var[\"example___simple_allocator_SLASH_alloc\"][c]])"]]]]
+  #_[:forall {'c clients}
+   [:fair
+    [:and
      [:invoke {:c 'c}
       (fn [{:keys [:c ::unsat]}]
         (empty? (get unsat c)))]
-     [:raw "_COLON_return(\"return\", main_var @@ [c |-> c, S |-> main_var[\"example___simple_allocator_SLASH_alloc\"][c]])"]]]])
+     [:raw "main_var' = _COLON_return2(\"return\", [c |-> c, S |-> main_var[\"example___simple_allocator_SLASH_alloc\"][c]], main_var)"]]]])
 
 (r/defproc ^{:fairness xxx} return {}
   {[:return
