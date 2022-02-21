@@ -308,7 +308,7 @@
         :recife/fairness-map (some->> (or (-> expr meta :fairness) (-> opts meta :fairness))
                                       (temporal-property (keyword (str (symbol identifier) "-fairness"))))
         :form (parse [:and
-                      [:raw (format "\nmain_var[%s][self][\"pc\"] = %s"
+                      [:raw (format "\n_main_var[%s][self][\"pc\"] = %s"
                                     (tla-edn/to-tla-value ::procs)
                                     (tla-edn/to-tla-value identifier))]
                       (if (seq opts)
@@ -335,7 +335,7 @@
                                                               ;; local variable?
                                                               (keyword? v)
                                                               [:raw
-                                                               (let [mv (str " main_var[" (parse v) "] ")]
+                                                               (let [mv (str " _main_var[" (parse v) "] ")]
                                                                  (format " IF %s = {} THEN %s ELSE %s"
                                                                          mv
                                                                          (parse #{nil})
@@ -356,7 +356,7 @@
                                                                                   #{nil}))
                                                                               v)})
                                                                   [:raw (str " recife_operator_local"
-                                                                             (format "(self, %s, main_var)"
+                                                                             (format "(self, %s, _main_var)"
                                                                                      (tla-edn/to-tla-value
                                                                                       {:step identifier
                                                                                        :key k})))])
@@ -373,11 +373,11 @@
                                                       (mapv #(hash-map % (symbol (custom-munge %))))
                                                       (into {})
                                                       tla-edn/to-tla-value)
-                                                 ", main_var)")]])]
+                                                 ", _main_var)")]])]
                         ;; If no opts, send a bogus structure.
                         [:raw (str "main_var' = "
                                    (symbol (str (custom-munge identifier) "2"))
-                                   "(self, [_no |-> 0], main_var)")])
+                                   "(self, [_no |-> 0], _main_var)")])
                       ;; With it we can test deadlock.
                       [:raw "[x \\in DOMAIN main_var' \\ {\"recife_SLASH_metadata\"} |-> main_var'[x]] /= [x \\in DOMAIN main_var \\ {\"recife_SLASH_metadata\"} |-> main_var[x]]"]])
         :recife.operator/type :operator}
