@@ -43,8 +43,6 @@
     (merge {:i-sched #(range (count (::sched %)))}
            non-deterministic-params)]
    (fn [{:keys [:i-sched :c :S ::sched ::unsat ::alloc] :as db}]
-     #_(when (= c :l1)
-       (println :>>> [c S i-sched]))
      (let [available-resources (set/difference resources (apply set/union (vals alloc)))]
        (when (and (seq S)
                   (set/subset? S (set/intersection available-resources (get unsat c)))
@@ -66,11 +64,11 @@
      #_[:invoke {:c 'c}
       (fn [{:keys [:c ::unsat]}]
         (empty? (get unsat c)))]
-     [:raw "_COLON_return(\"return\", main_var @@ [c |-> c, S |-> main_var[\"example___simple_allocator_SLASH_alloc\"][c]])"]]]]
+     [:raw "main_var[\"example___simple_allocator_SLASH_unsat\"][c] = {} /\\ _COLON_return(\"return\", main_var @@ [eita |-> [c |-> c, S |-> main_var[\"example___simple_allocator_SLASH_alloc\"][c]]])"]]]]
   #_[:forall {'c clients}
    [:fair
     [:and
-     [:invoke {:c 'c}
+     #_[:invoke {:c 'c}
       (fn [{:keys [:c ::unsat]}]
         (empty? (get unsat c)))]
      [:raw "main_var' = _COLON_return2(\"return\", [c |-> c, S |-> main_var[\"example___simple_allocator_SLASH_alloc\"][c]], main_var)"]]]])
