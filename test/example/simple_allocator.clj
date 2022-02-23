@@ -32,13 +32,17 @@
                 (empty? (get alloc c)))
        (assoc-in db [::unsat c] S)))})
 
-(def yyy
+(def allocate-fairness
   [:forall {'c clients}
    [:fair
-    [:exists {'S (:S non-deterministic-params)}
-     [:raw "_COLON_allocate(\"allocate\", main_var @@ [c |-> \"l1\", S |-> S])"]]]])
+    [:exists {'S (:S non-deterministic-params)
+              'i_sched #(set (range (count (::sched %))))}
+     [:call :allocate
+      [:invoke {:c 'c :S 'S :i-sched 'i_sched}
+       (fn [{:keys [:c :S :i-sched] :as args}]
+         (assoc args ::r/extra-args {:c c :S S :i-sched i-sched}))]]]]])
 
-(r/defproc allocate {}
+(r/defproc ^{:fairness allocate-fairness} allocate {}
   {[:allocate
     (merge {:i-sched #(range (count (::sched %)))}
            non-deterministic-params)]
@@ -83,7 +87,7 @@
                      (not (contains? (set sched) %)))
                clients)))
 
-(r/defproc schedule {}
+(r/defproc ^:fair schedule {}
   {[:schedule
     {:sq #(comb/permutations (to-schedule %))}]
    (fn [{:keys [:sq] :as db}]
@@ -112,14 +116,24 @@
      (fn [{:keys [:c ::alloc]}]
        (empty? (get alloc c)))]]])
 
+;; ClientsWillObtain ==
+;;   \A c \in Clients, r \in Resources : r \in unsat[c] ~> r \in alloc[c]
+(r/defproperty clients-will-obtain
+  [:forall {'c clients
+            'r resources}
+   [:leads-to
+    [:invoke {:c 'c :r 'r}
+     (fn [{:keys [:c ::unsat :r]}]
+       (contains? (get unsat c) r))]
+    [:invoke {:c 'c :r 'r}
+     (fn [{:keys [:c ::alloc :r]}]
+       (contains? (get alloc c) r))]]])
+
 ;; TODO: SF Fairness.
 ;; \A c \in Clients: SF_vars(\E S \in SUBSET Resources: Allocate(c,S))
 
 (comment
   ;; ----- Invariants and properties -----
-  ;; TODO
-  ;; ClientsWillObtain ==
-  ;;   \A c \in Clients, r \in Resources : r \in unsat[c] ~> r \in alloc[c]
 
   ;; TODO
   ;; InfOftenSatisfied ==
@@ -128,10 +142,10 @@
   ;; TODO: Next?
 
   ;; TODO:
-  ;; - [ ] Maybe watch for new vars and serialze then to the caller JVM?
+  ;; - [ ] Profile performance.
 
   (r/run-model global #{request allocate return schedule
-                        resource-mutex clients-will-return}
+                        resource-mutex clients-will-return clients-will-obtain}
                {#_ #_:trace-example? true
                 :debug? true
                 #_ #_:run-local? true})
