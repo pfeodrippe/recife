@@ -313,87 +313,85 @@
                                (-> opts meta :fair+)) :recife.fairness/strongly-fair)
         :recife/fairness-map (some->> (or (-> expr meta :fairness) (-> opts meta :fairness))
                                       (temporal-property (keyword (str (symbol identifier) "-fairness"))))
-        :form (parse [:and
-                      [:raw (format "\nmain_var[%s][self][\"pc\"] = %s"
-                                    (tla-edn/to-tla-value ::procs)
-                                    (tla-edn/to-tla-value identifier))]
-                      (if (seq opts)
-                        [:raw (parse [:exists (->> opts
-                                                   (mapv (fn [[k v]]
-                                                           ;; Here we want to achieve non determinism.
-                                                           [(symbol (str (custom-munge k)))
-                                                            ;; If the value is empty, we return
-                                                            ;; a set with a `nil` (`#{nil}`) so
-                                                            ;; we don't have bogus deadlocks.
-                                                            (cond
-                                                              ;; If we have a coll here, then we want
-                                                              ;; to get one of these hardcoded elements.
-                                                              (coll? v)
-                                                              (if (seq v)
-                                                                (parse (set v))
-                                                                #{nil})
+        :form (parse [:if [:raw "\"eita\" \\in DOMAIN _main_var"]
+                      [:and
+                       [:raw (str "main_var' = "
+                                  (symbol (str (custom-munge identifier) "2"))
+                                  "(self, _main_var[\"eita\"], main_var)")]
+                       [:raw "[x \\in DOMAIN main_var' \\ {\"recife_SLASH_metadata\"} |-> main_var'[x]] /= [x \\in DOMAIN main_var \\ {\"recife_SLASH_metadata\"} |-> main_var[x]]"]]
+                      [:and
+                       [:raw (format "\nmain_var[%s][self][\"pc\"] = %s"
+                                     (tla-edn/to-tla-value ::procs)
+                                     (tla-edn/to-tla-value identifier))]
+                       (if (seq opts)
+                         [:raw (parse [:exists (->> opts
+                                                    (mapv (fn [[k v]]
+                                                            ;; Here we want to achieve non determinism.
+                                                            [(symbol (str (custom-munge k)))
+                                                             ;; If the value is empty, we return
+                                                             ;; a set with a `nil` (`#{nil}`) so
+                                                             ;; we don't have bogus deadlocks.
+                                                             (cond
+                                                               ;; If we have a coll here, then we want
+                                                               ;; to get one of these hardcoded elements.
+                                                               (coll? v)
+                                                               (if (seq v)
+                                                                 (parse (set v))
+                                                                 #{nil})
 
-                                                              ;; A keyword means that the user wants
-                                                              ;; to use one of the global variables
-                                                              ;; as a source of non determinism.
-                                                              ;; TODO: Maybe if the user passes a
-                                                              ;; unamespaced keyword we can use a
-                                                              ;; local variable?
-                                                              (keyword? v)
-                                                              [:raw
-                                                               (let [mv (str " main_var[" (parse v) "] ")]
-                                                                 (format " IF %s = {} THEN %s ELSE %s"
-                                                                         mv
-                                                                         (parse #{nil})
-                                                                         mv))]
+                                                               ;; A keyword means that the user wants
+                                                               ;; to use one of the global variables
+                                                               ;; as a source of non determinism.
+                                                               ;; TODO: Maybe if the user passes a
+                                                               ;; unamespaced keyword we can use a
+                                                               ;; local variable?
+                                                               (keyword? v)
+                                                               [:raw
+                                                                (let [mv (str " main_var[" (parse v) "] ")]
+                                                                  (format " IF %s = {} THEN %s ELSE %s"
+                                                                          mv
+                                                                          (parse #{nil})
+                                                                          mv))]
 
-                                                              ;; For functions, instead of creating a
-                                                              ;; new operator, we use a defmethod used
-                                                              ;; by a hardcoded operator (`recife-operator-local`).
-                                                              (fn? v)
-                                                              (do (defmethod operator-local {:step identifier
-                                                                                             :key k}
-                                                                    [_]
-                                                                    {:step identifier
-                                                                     :key k
-                                                                     :f (comp (fn [result]
-                                                                                (if (seq result)
-                                                                                  (set result)
-                                                                                  #{nil}))
-                                                                              v)})
-                                                                  [:raw (str " recife_operator_local"
-                                                                             (format "(self, %s, main_var)"
-                                                                                     (tla-edn/to-tla-value
-                                                                                      {:step identifier
-                                                                                       :key k})))])
+                                                               ;; For functions, instead of creating a
+                                                               ;; new operator, we use a defmethod used
+                                                               ;; by a hardcoded operator (`recife-operator-local`).
+                                                               (fn? v)
+                                                               (do (defmethod operator-local {:step identifier
+                                                                                              :key k}
+                                                                     [_]
+                                                                     {:step identifier
+                                                                      :key k
+                                                                      :f (comp (fn [result]
+                                                                                 (if (seq result)
+                                                                                   (set result)
+                                                                                   #{nil}))
+                                                                               v)})
+                                                                   [:raw (str " recife_operator_local"
+                                                                              (format "(self, %s, main_var)"
+                                                                                      (tla-edn/to-tla-value
+                                                                                       {:step identifier
+                                                                                        :key k})))])
 
-                                                              :else
-                                                              (throw (ex-info "Unsupported type"
-                                                                              {:step identifier
-                                                                               :opts opts
-                                                                               :value [k v]})))])))
-                                      [:raw (str "\nmain_var' = "
-                                                 (symbol (str (custom-munge identifier) "2"))
-                                                 "(self, "
-                                                 (parse
-                                                  [:if [:raw "\"eita\" \\in DOMAIN _main_var"]
-                                                   [:raw "_main_var[\"eita\"]"]
-                                                   #_[:raw (->> (keys opts)
-                                                              (mapv #(hash-map % (symbol (custom-munge %))))
-                                                              (into {})
-                                                              tla-edn/to-tla-value)]
-                                                   [:raw (->> (keys opts)
-                                                              (mapv #(hash-map % (symbol (custom-munge %))))
-                                                              (into {})
-                                                              tla-edn/to-tla-value)]])
-
-                                                 ", main_var)")]])]
-                        ;; If no opts, send a bogus structure.
-                        [:raw (str "main_var' = "
-                                   (symbol (str (custom-munge identifier) "2"))
-                                   "(self, [_no |-> 0], main_var)")])
-                      ;; With it we can test deadlock.
-                      [:raw "[x \\in DOMAIN main_var' \\ {\"recife_SLASH_metadata\"} |-> main_var'[x]] /= [x \\in DOMAIN main_var \\ {\"recife_SLASH_metadata\"} |-> main_var[x]]"]])
+                                                               :else
+                                                               (throw (ex-info "Unsupported type"
+                                                                               {:step identifier
+                                                                                :opts opts
+                                                                                :value [k v]})))])))
+                                       [:raw (str "\nmain_var' = "
+                                                  (symbol (str (custom-munge identifier) "2"))
+                                                  "(self, "
+                                                  (->> (keys opts)
+                                                       (mapv #(hash-map % (symbol (custom-munge %))))
+                                                       (into {})
+                                                       tla-edn/to-tla-value)
+                                                  ", main_var)")]])]
+                         ;; If no opts, send a bogus structure.
+                         [:raw (str "main_var' = "
+                                    (symbol (str (custom-munge identifier) "2"))
+                                    "(self, [_no |-> 0], main_var)")])
+                       ;; With it we can test deadlock.
+                       [:raw "[x \\in DOMAIN main_var' \\ {\"recife_SLASH_metadata\"} |-> main_var'[x]] /= [x \\in DOMAIN main_var \\ {\"recife_SLASH_metadata\"} |-> main_var[x]]"]]])
         :recife.operator/type :operator}
        (merge (meta expr) (meta opts))))))
 

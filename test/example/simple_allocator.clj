@@ -61,10 +61,11 @@
   [:forall {'c clients}
    [:fair
     [:and
-     #_[:invoke {:c 'c}
+     [:invoke {:c 'c}
       (fn [{:keys [:c ::unsat]}]
         (empty? (get unsat c)))]
-     [:raw "main_var[\"example___simple_allocator_SLASH_unsat\"][c] = {} /\\ _COLON_return(\"return\", main_var @@ [eita |-> [c |-> c, S |-> main_var[\"example___simple_allocator_SLASH_alloc\"][c]]])"]]]]
+     [:raw "_COLON_return(\"return\", main_var @@ [eita |-> [c |-> c, S |-> main_var[\"example___simple_allocator_SLASH_alloc\"][c]]])"]
+     #_[:raw "main_var[\"example___simple_allocator_SLASH_unsat\"][c] = {} /\\ main_var' = _COLON_return2(\"return\", [c |-> c, S |-> main_var[\"example___simple_allocator_SLASH_alloc\"][c]], main_var)"]]]]
   #_[:forall {'c clients}
    [:fair
     [:and
@@ -72,6 +73,11 @@
       (fn [{:keys [:c ::unsat]}]
         (empty? (get unsat c)))]
      [:raw "main_var' = _COLON_return2(\"return\", [c |-> c, S |-> main_var[\"example___simple_allocator_SLASH_alloc\"][c]], main_var)"]]]])
+
+#_
+(r/run-model global #{request allocate return schedule
+                      resource-mutex clients-will-return}
+             {:debug? true})
 
 (r/defproc ^{:fairness xxx} return {}
   {[:return
