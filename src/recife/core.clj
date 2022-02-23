@@ -163,7 +163,17 @@
       (serialize-obj e exception-filename)
       (throw e))))
 
-(defn- parse
+(defn process-local-operator
+  [f ^Value main-var-tla]
+  (try
+    (let [main-var (tla-edn/to-edn main-var-tla {:string-to-keyword? true})
+          result (f main-var)]
+      (tla-edn/to-tla-value result))
+    (catch Exception e
+      (serialize-obj e exception-filename)
+      (throw e))))
+
+(defn parse
   "`f` is a function which receives one argument, a vector, the
   first element is the `result` and the last one is the `expr`."
   ([expr]
@@ -212,6 +222,17 @@
                       :fair+
                       (format "SF_vars(%s)"
                               (parse (first args) f))
+
+                      :call
+                      (format "%s(%s%s)"
+                              (custom-munge (first args))
+                              (parse (first args))
+                              (if-let [call-args (seq (drop 1 args))]
+                                (str ", "
+                                     (->> call-args
+                                          (mapv #(parse % f))
+                                          (str/join ", ")))
+                                ""))
 
                       :or
                       (->> args
@@ -313,11 +334,14 @@
                                (-> opts meta :fair+)) :recife.fairness/strongly-fair)
         :recife/fairness-map (some->> (or (-> expr meta :fairness) (-> opts meta :fairness))
                                       (temporal-property (keyword (str (symbol identifier) "-fairness"))))
-        :form (parse [:if [:raw "\"eita\" \\in DOMAIN _main_var"]
+        :form (parse [:if [:raw "\"recife___core_SLASH_extra_args\" \\in DOMAIN _main_var"]
                       [:and
+                       [:raw (format "\nmain_var[%s][self][\"pc\"] = %s"
+                                     (tla-edn/to-tla-value ::procs)
+                                     (tla-edn/to-tla-value identifier))]
                        [:raw (str "main_var' = "
                                   (symbol (str (custom-munge identifier) "2"))
-                                  "(self, _main_var[\"eita\"], main_var)")]
+                                  "(self, _main_var[\"recife___core_SLASH_extra_args\"], main_var)")]
                        [:raw "[x \\in DOMAIN main_var' \\ {\"recife_SLASH_metadata\"} |-> main_var'[x]] /= [x \\in DOMAIN main_var \\ {\"recife_SLASH_metadata\"} |-> main_var[x]]"]]
                       [:and
                        [:raw (format "\nmain_var[%s][self][\"pc\"] = %s"
@@ -449,7 +473,7 @@
                                                                   @counter))
                                           {:module "spec"}
                                           [^Value ~'main-var]
-                                          (process-config-operator ~expr ~'main-var)))]
+                                          (process-local-operator ~expr ~'main-var)))]
                                (swap! collector conj {:identifier (str (symbol (str (custom-munge identifier)
                                                                                     @counter))
                                                                        "(_main_var) == _main_var = _main_var")
@@ -470,7 +494,7 @@
                                                                   @counter))
                                           {:module "spec"}
                                           [^Value ~'main-var]
-                                          (process-config-operator ~f ~'main-var)))]
+                                          (process-local-operator ~f ~'main-var)))]
                                (swap! collector conj {:identifier (str (symbol (str (custom-munge identifier)
                                                                                     @counter))
                                                                        "(_main_var) == _main_var = _main_var")

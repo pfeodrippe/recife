@@ -57,29 +57,19 @@
                               (vec (medley/remove-nth i-sched sched))
                               sched))))))})
 
-(def xxx
+(def ^:private return-fairness
   [:forall {'c clients}
    [:fair
     [:and
      [:invoke {:c 'c}
       (fn [{:keys [:c ::unsat]}]
         (empty? (get unsat c)))]
-     [:raw "_COLON_return(\"return\", main_var @@ [eita |-> [c |-> c, S |-> main_var[\"example___simple_allocator_SLASH_alloc\"][c]]])"]
-     #_[:raw "main_var[\"example___simple_allocator_SLASH_unsat\"][c] = {} /\\ main_var' = _COLON_return2(\"return\", [c |-> c, S |-> main_var[\"example___simple_allocator_SLASH_alloc\"][c]], main_var)"]]]]
-  #_[:forall {'c clients}
-   [:fair
-    [:and
-     #_[:invoke {:c 'c}
-      (fn [{:keys [:c ::unsat]}]
-        (empty? (get unsat c)))]
-     [:raw "main_var' = _COLON_return2(\"return\", [c |-> c, S |-> main_var[\"example___simple_allocator_SLASH_alloc\"][c]], main_var)"]]]])
+     [:call :return
+      [:invoke {:c 'c}
+       (fn [{:keys [:c ::alloc] :as args}]
+         (assoc args ::r/extra-args {:c c :S (get alloc c)}))]]]]])
 
-#_
-(r/run-model global #{request allocate return schedule
-                      resource-mutex clients-will-return}
-             {:debug? true})
-
-(r/defproc ^{:fairness xxx} return {}
+(r/defproc ^{:fairness return-fairness} return {}
   {[:return
     non-deterministic-params]
    (fn [{:keys [:c :S ::alloc] :as db}]
