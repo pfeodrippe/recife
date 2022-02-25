@@ -1,7 +1,7 @@
-(ns example.simple-allocator
-  ;; TODO: Fix the namespace to scheduling allocator.
-  ;; TODO: Fix URL below.
-  "See https://github.com/tlaplus/Examples/blob/master/specifications/allocator/SimpleAllocator.tla."
+(ns example.scheduling-allocator
+  "It's a translation from one of the examples in the `tlaplus/Examples` repo in Github.
+  It follows the MIT License.
+  See https://github.com/tlaplus/Examples/blob/master/specifications/allocator/SchedulingAllocator.tla"
   (:require
    [clojure.math.combinatorics :as comb]
    [clojure.set :as set]
@@ -139,15 +139,11 @@
   ;; InfOftenSatisfied ==
   ;;   \A c \in Clients : []<>(unsat[c] = {})
 
-  ;; TODO: Next?
-
   ;; TODO:
   ;; - [ ] Profile performance.
 
   (r/run-model global #{request allocate return schedule
                         resource-mutex clients-will-return clients-will-obtain}
-               {#_ #_:trace-example? true
-                :debug? true
-                #_ #_:run-local? true})
+               {:debug? true})
 
   ())
