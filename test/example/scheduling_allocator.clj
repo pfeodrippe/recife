@@ -141,9 +141,10 @@
 
   ;; TODO:
   ;; - [ ] Profile performance.
+  ;; - [ ] Create helpers for `forall`, `exists` and `invoke`.
 
   (r/run-model global #{request allocate return schedule
-                        resource-mutex clients-will-return clients-will-obtain}
-               {:debug? true})
-
+                        resource-mutex clients-will-return #_clients-will-obtain}
+               {#_ #_:debug? true
+                :workers 1})
   ())

@@ -14,7 +14,8 @@
    [tla-edn.core :as tla-edn]
    [tla-edn.spec :as spec]
    [cognitect.transit :as t]
-   [clojure.set :as set])
+   [clojure.set :as set]
+   [taoensso.tufte :as tufte :refer [defnp p defnp-]])
   (:import
    (java.io File)
    (lambdaisland.deep_diff2.diff_impl Mismatch Deletion Insertion)
@@ -22,11 +23,38 @@
    (tlc2.value.impl Value StringValue ModelValue)
    (util UniqueString)))
 
-(defn- custom-munge
+#_(defonce stats-accumulator
+  (tufte/add-accumulating-handler! {:ns-pattern "*"}))
+
+(defonce pd
+  (tufte/new-pdata))
+
+(defmacro p*
+  [id & body]
+  `(let [t0# (System/nanoTime)]
+     (tufte/with-profiling pd {}
+       (try
+         ~@body
+         (finally
+           (tufte/capture-time! pd ~id (- (System/nanoTime) t0#)))))))
+
+(defn get-x [] (Thread/sleep 50)             "x val")
+(defn get-y [] (Thread/sleep (rand-int 100)) "y val")
+
+#_(tufte/profile ; Profile any `p` forms called during body execution
+ {} ; Profiling options; we'll use the defaults for now
+  (dotimes [_ 5]
+    (p* :get-x (get-x))
+    (p* :get-y (get-y))))
+
+#_
+(println (tufte/format-grouped-pstats @stats-accumulator))
+
+(defnp- custom-munge
   [v]
   (str/replace (munge v) #"\." "___"))
 
-(defn- to-edn-string
+(defnp- to-edn-string
   [v]
   (let [s (str/replace (str v)  #"___" ".")]
     (keyword (repl/demunge s))))
@@ -44,21 +72,23 @@
   (-to-edn [v]
     (to-edn-string v)))
 
-(defmethod tla-edn/to-tla-value clojure.lang.Keyword
-  [v]
-  (StringValue. (custom-munge (symbol v))))
+(extend-protocol tla-edn/EdnToTla
+  clojure.lang.Keyword
+  (tla-edn/-to-tla-value
+    [v]
+    (StringValue. (custom-munge (symbol v))))
 
-(defmethod tla-edn/to-tla-value nil
-  [_]
-  (tla-edn/to-tla-value :recife/null))
+  nil
+  (tla-edn/-to-tla-value [_]
+    (tla-edn/to-tla-value :recife/null))
 
-(defmethod tla-edn/to-tla-value clojure.lang.Seqable
-  [v]
-  (tla-edn/to-tla-value (into [] v)))
+  clojure.lang.Seqable
+  (tla-edn/-to-tla-value [v]
+    (tla-edn/to-tla-value (into [] v)))
 
-(defmethod tla-edn/to-tla-value clojure.lang.Symbol
-  [v]
-  (ModelValue/make (str v)))
+  clojure.lang.Symbol
+  (tla-edn/-to-tla-value [v]
+    (ModelValue/make (str v))))
 
 ;; TODO: For serialized objecs, make it a custom random filename
 ;; so exceptions from concurrent executions do not mess with each other.
@@ -70,71 +100,73 @@
 
 (def ^:private Lock (Object.))
 
-(defn- serialize-obj [object filename]
+(defnp- serialize-obj [object filename]
   (locking Lock
     (when-not (.exists (io/as-file filename))
       (with-open [outp (-> (java.io.File. filename) java.io.FileOutputStream. java.io.ObjectOutputStream.)]
         (.writeObject outp object)))))
 
-(defn- deserialize-obj [filename]
+(defnp- deserialize-obj [filename]
   (with-open [inp (-> (java.io.File. filename) java.io.FileInputStream. java.io.ObjectInputStream.)]
     (.readObject inp)))
 
-(defn- process-operator*
+(defnp- process-operator*
   "Created so we can use the same \"meat\" when invoking the function
   in a context outside TLC."
   [identifier f self context main-var]
-  (let [global main-var
-        local (get-in main-var [::procs self])
-        result (f (merge {:self self} context global local))
-        result-global (medley/filter-keys namespace result)
-        result-local (medley/remove-keys namespace result)
-        metadata (if (:recife/metadata result-global)
-                   ;; There is some bug somewhere which prevent us of the form
-                   ;;    Caused by java.lang.ClassCastException
-                   ;;    clojure.lang.KeywordLookupSite$1 incompatible with
-                   ;;    clojure.lang.IPersistentCollection
-                   ;; which is triggered by multiple threads only, so we do this
-                   ;; check here to try to prevent it.
-                   (merge (:recife/metadata result-global)
-                          {:context [identifier (merge {:self self} context)]})
-                   {:context [identifier (merge {:self self} context)]})]
-    (if (nil? result)
-      (assoc main-var :recife/metadata metadata)
-      (merge
-       ;; All namespaced keywords are global.
-       (dissoc result-global :recife/metadata)
-       ;; While unamespaced keywords are part of the
-       ;; process as local variables.
-       {::procs (merge (::procs result-global)
-                       {self
-                        ;; Remove `extra-args` and `self`
-                        ;; so they don't become stateful.
-                        (apply dissoc result-local :self (keys context))})
-        :recife/metadata metadata}))))
+  (p* ::process-operator*
+      (let [global main-var
+            local (get-in main-var [::procs self])
+            result (f (merge {:self self} context global local))
+            result-global (medley/filter-keys namespace result)
+            result-local (medley/remove-keys namespace result)
+            metadata (if (:recife/metadata result-global)
+                       ;; There is some bug somewhere which prevent us of the form
+                       ;;    Caused by java.lang.ClassCastException
+                       ;;    clojure.lang.KeywordLookupSite$1 incompatible with
+                       ;;    clojure.lang.IPersistentCollection
+                       ;; which is triggered by multiple threads only, so we do this
+                       ;; check here to try to prevent it.
+                       (merge (:recife/metadata result-global)
+                              {:context [identifier (merge {:self self} context)]})
+                       {:context [identifier (merge {:self self} context)]})]
+        (if (nil? result)
+          (assoc main-var :recife/metadata metadata)
+          (merge
+           ;; All namespaced keywords are global.
+           (dissoc result-global :recife/metadata)
+           ;; While unamespaced keywords are part of the
+           ;; process as local variables.
+           {::procs (merge (::procs result-global)
+                           {self
+                            ;; Remove `extra-args` and `self`
+                            ;; so they don't become stateful.
+                            (apply dissoc result-local :self (keys context))})
+            :recife/metadata metadata})))))
 
-(defn process-operator
+(defnp process-operator
   [identifier f self-tla extra-args-tla ^Value main-var-tla]
-  (try
-    (let [self (tla-edn/to-edn self-tla {:string-to-keyword? true})
-          main-var (tla-edn/to-edn main-var-tla {:string-to-keyword? true})
-          ;; `"_no"` is a indicator that the operator is not using extra args.
-          extra-args (if (contains? (set (mapv str (.-names extra-args-tla))) "_no")
-                       {}
-                       (tla-edn/to-edn extra-args-tla))
-          result (process-operator* identifier f self extra-args main-var)]
-      (tla-edn/to-tla-value result))
-    (catch Exception e
-      (serialize-obj e exception-filename)
-      (throw e))))
+  (p* ::process-operator
+      (try
+        (let [self (p ::a (tla-edn/to-edn self-tla {:string-to-keyword? true}))
+              main-var (p ::b (tla-edn/to-edn main-var-tla {:string-to-keyword? true}))
+              ;; `"_no"` is a indicator that the operator is not using extra args.
+              extra-args (p ::c (if (contains? (set (mapv str (.-names extra-args-tla))) "_no")
+                            {}
+                            (tla-edn/to-edn extra-args-tla)))
+              result (process-operator* identifier f self extra-args main-var)]
+          (tla-edn/to-tla-value result))
+        (catch Exception e
+          (serialize-obj e exception-filename)
+          (throw e)))))
 
-(defn- process-operator-local*
+(defnp- process-operator-local*
   [f self main-var]
   (let [global main-var
         local (get-in main-var [::procs self])]
     (f (merge {:self self} global local))))
 
-(defn- process-operator-local
+(defnp- process-operator-local
   [f self-tla ^Value main-var-tla]
   (try
     (let [self (tla-edn/to-edn self-tla {:string-to-keyword? true})
@@ -145,7 +177,7 @@
       (serialize-obj e exception-filename)
       (throw e))))
 
-(defn process-config-operator
+(defnp process-config-operator
   [f ^Value main-var-tla]
   (try
     (let [main-var (tla-edn/to-edn main-var-tla {:string-to-keyword? true})
@@ -163,17 +195,18 @@
       (serialize-obj e exception-filename)
       (throw e))))
 
-(defn process-local-operator
+(defnp process-local-operator
   [f ^Value main-var-tla]
-  (try
-    (let [main-var (tla-edn/to-edn main-var-tla {:string-to-keyword? true})
-          result (f main-var)]
-      (tla-edn/to-tla-value result))
-    (catch Exception e
-      (serialize-obj e exception-filename)
-      (throw e))))
+  (p* ::process-local-operator
+      (try
+        (let [main-var (p ::dd (tla-edn/to-edn main-var-tla {:string-to-keyword? true}))
+              result (p ::ee (f main-var))]
+          (p ::ff (tla-edn/to-tla-value result)))
+        (catch Exception e
+          (serialize-obj e exception-filename)
+          (throw e)))))
 
-(defn parse
+(defnp parse
   "`f` is a function which receives one argument, a vector, the
   first element is the `result` and the last one is the `expr`."
   ([expr]
@@ -268,7 +301,7 @@
                   expr)]
      (f [result expr]))))
 
-(defn tla
+(defnp tla
   [identifier expr]
   (let [form (parse expr)]
     {:identifier (str (symbol (custom-munge identifier))
@@ -278,7 +311,7 @@
      :form form
      :recife.operator/type :tla-only}))
 
-(defn context-from-state
+(defnp context-from-state
   [state]
   (if (vector? state)
     (get-in state [1 :recife/metadata :context])
@@ -303,7 +336,7 @@
 
 (declare temporal-property)
 
-(defn reg
+(defnp reg
   ([identifier expr]
    (reg identifier {} expr))
   ([identifier opts expr]
@@ -419,7 +452,7 @@
         :recife.operator/type :operator}
        (merge (meta expr) (meta opts))))))
 
-(defn invariant
+(defnp invariant
   [identifier expr]
   (let [op (eval
             `(spec/defop ~(symbol (str (custom-munge identifier) "2")) {:module "spec"}
@@ -432,7 +465,7 @@
                 "(main_var)")
      :recife.operator/type :invariant}))
 
-(defn checker
+(defnp checker
   [identifier expr]
   (let [op (eval
             `(spec/defop ~(symbol (str (custom-munge identifier) "2")) {:module "spec"}
@@ -445,7 +478,7 @@
                 "(main_var)")
      :recife.operator/type :invariant}))
 
-(defn state-constraint
+(defnp state-constraint
   [identifier expr]
   (let [op (eval
             `(spec/defop ~(symbol (str (custom-munge identifier) "2")) {:module "spec"}
@@ -458,7 +491,7 @@
                 "(main_var)")
      :recife.operator/type :state-constraint}))
 
-(defn- compile-temporal-property
+(defnp- compile-temporal-property
   [collector identifier]
   (let [
         ;; With `counter` we are able to use many functions for the same
@@ -509,7 +542,7 @@
                              :else
                              result))))))
 
-(defn temporal-property
+(defnp temporal-property
   [identifier expr]
   (let [collector (atom [])
         form ((compile-temporal-property collector identifier) expr)]
@@ -519,15 +552,15 @@
      :form form
      :recife.operator/type :temporal-property}))
 
-(defn goto
+(defnp goto
   [db identifier]
   (assoc db :pc identifier))
 
-(defn done
+(defnp done
   [db]
   (assoc db :pc ::done))
 
-(defn all-done?
+(defnp all-done?
   [db]
   (every? #(= (:pc %) ::done)
           (-> db ::procs vals)))
@@ -539,7 +572,7 @@
      ~@body
      true))
 
-(defn one-of
+(defnp one-of
   "Tells Recife to choose one of the values as its initial value."
   ([values]
    (one-of nil values))
@@ -548,7 +581,7 @@
     ::possible-values values
     ::identifier (some->> identifier hash Math/abs (str "G__") symbol)}))
 
-(defn- module-template
+(defnp- module-template
   [{:keys [:init :next :spec-name :operators]}]
   (let [collected-ranges (atom #{})
         formatted-init-expressions (-> (->> init
@@ -739,7 +772,7 @@ VIEW
 =============================================================================
 ")))
 
-(defn- private-field
+(defnp- private-field
   ([obj fn-name-string]
    (let [m (.. obj getClass (getDeclaredField fn-name-string))]
      (. m (setAccessible true))
@@ -752,7 +785,7 @@ VIEW
 ;; EdnStateWriter
 (def ^:private edn-states-atom (atom {}))
 
-(defn- edn-save-state
+(defnp- edn-save-state
   [tlc-state]
   (let [edn-state (->> tlc-state
                        .getVals
@@ -764,13 +797,13 @@ VIEW
            {:state (dissoc edn-state :recife/metadata)
             :successors #{}})))
 
-(defn- edn-rank-state
+(defnp- edn-rank-state
   [tlc-state]
   (swap! edn-states-atom update-in
          [:ranks (dec (.getLevel tlc-state))]
          (fnil conj #{}) (.fingerPrint tlc-state)))
 
-(defn- edn-save-successor
+(defnp- edn-save-successor
   [tlc-state tlc-successor]
   (let [successor-state (->> tlc-successor
                              .getVals
@@ -782,7 +815,7 @@ VIEW
            conj
            [(.fingerPrint tlc-successor) (get-in successor-state [:recife/metadata :context])])))
 
-(defn- edn-write-state
+(defnp- edn-write-state
   [_state-writer state successor _action-checks _from _length successor-state-new? _visualization _action]
   (when successor-state-new?
     (edn-save-state successor))
@@ -832,7 +865,7 @@ VIEW
   (snapshot [_]))
 
 ;; FileStateWriter
-(defn- file-sw-save-state
+(defnp- file-sw-save-state
   [{:keys [:edn-states-atom]} tlc-state]
   (let [edn-state (->> tlc-state
                        .getVals
@@ -844,13 +877,13 @@ VIEW
            {:state (dissoc edn-state :recife/metadata)
             :successors #{}})))
 
-(defn- file-sw-rank-state
+(defnp- file-sw-rank-state
   [{:keys [:edn-states-atom]} tlc-state]
   (swap! edn-states-atom update-in
          [:ranks (dec (.getLevel tlc-state))]
          (fnil conj #{}) (.fingerPrint tlc-state)))
 
-(defn- file-sw-save-successor
+(defnp- file-sw-save-successor
   [{:keys [:edn-states-atom]} tlc-state tlc-successor]
   (let [successor-state (->> tlc-successor
                              .getVals
@@ -862,7 +895,7 @@ VIEW
            conj
            [(.fingerPrint tlc-successor) (get-in successor-state [:recife/metadata :context])])))
 
-(defn- file-sw-write-state
+(defnp- file-sw-write-state
   [this state successor _action-checks _from _length successor-state-new? visualization _action]
   ;; If it's stuttering, we don't put it as a successor.
   (when-not (= visualization tlc2.util.IStateWriter$Visualization/STUTTERING)
@@ -914,17 +947,17 @@ VIEW
 
   (snapshot [_]))
 
-(defn- states-from-file
+(defnp- states-from-file
   [file-path]
   (with-open [is (io/input-stream file-path)]
     (let [reader (t/reader is :msgpack)]
       (t/read reader))))
 
-(defn states-from-result
+(defnp states-from-result
   [{:keys [:recife/transit-states-file-path]}]
   (states-from-file transit-states-file-path))
 
-(defn random-traces-from-states
+(defnp random-traces-from-states
   ([states]
    (random-traces-from-states states 10))
   ([states max-number-of-paths]
@@ -997,7 +1030,7 @@ VIEW
                       (assoc paths' (count paths') [[state nil]])
                       (inc counter))))))))))
 
-(defn tlc-result-handler
+(defnp tlc-result-handler
   "This function is a implementation detail, you should not use it.
   It handles the TLC object and its result, generating the output we see when
   calling `run-model`."
@@ -1052,8 +1085,9 @@ VIEW
                                  state-writer (->FileStateWriter (t/writer os :msgpack) os (atom {}) file-path)]
                              (.setStateWriter tlc state-writer)
                              state-writer))
-            _ (doto tlc
-                .process)
+            _ (do (doto tlc
+                    .process)
+                  (println (tufte/format-pstats @@pd)))
             recorder-info @recorder-atom
             _ (do (def tlc tlc)
                   (def recorder-info recorder-info))
@@ -1139,11 +1173,11 @@ VIEW
       (finally
         (MP/unsubscribeRecorder recorder)))))
 
-(defn tlc-result-printer-handler
+(defnp tlc-result-printer-handler
   [tlc-runner]
   (prn (tlc-result-handler tlc-runner)))
 
-(defn- run-model*
+(defnp- run-model*
   ([init-state next-operator operators]
    (run-model* init-state next-operator operators {}))
   ([init-state next-operator operators {:keys [:seed :fp :workers :tlc-args
@@ -1244,7 +1278,7 @@ VIEW
            (throw (deserialize-obj exception-filename))
            (-> @output last edn/read-string)))))))
 
-(defn timeline-diff
+(defnp timeline-diff
   [result-map]
   (update result-map :trace
           (fn [result]
@@ -1276,7 +1310,7 @@ VIEW
                    vec)
               result))))
 
-(defn print-timeline-diff
+(defnp print-timeline-diff
   [result-map]
   (if (vector? (:trace result-map))
     (-> result-map
@@ -1284,7 +1318,7 @@ VIEW
         (update :trace ddiff/pretty-print))
     result-map))
 
-(defn run-model
+(defnp run-model
   ([init-global-state components]
    (run-model init-global-state components {}))
   ([init-global-state components opts]

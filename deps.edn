@@ -1,7 +1,5 @@
 {:aliases
- {:default-options
-  {:jvm-opts ["-Duser.language=en" "-Duser.country=US"]}
-
+ {:default-options {:jvm-opts ["-Duser.language=en" "-Duser.country=US"]}
   :depstar {:replace-deps {com.github.seancorfield/depstar {:mvn/version "2.0.193"}}
             :ns-default hf.depstar
             :exec-args {}}
@@ -53,6 +51,7 @@
   metosin/malli {:mvn/version "0.5.1"}
   quil/quil {:mvn/version "3.1.0"}
   com.cognitect/transit-clj {:mvn/version "1.0.324"}
-  pfeodrippe/arrudeia {:mvn/version "0.11.0-SNAPSHOT"}}
+  pfeodrippe/arrudeia {:mvn/version "0.11.0-SNAPSHOT"}
+  com.taoensso/tufte {:mvn/version "2.2.0"}}
 
  :paths ["src"]}
