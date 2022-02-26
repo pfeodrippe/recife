@@ -23,38 +23,24 @@
    (tlc2.value.impl Value StringValue ModelValue)
    (util UniqueString)))
 
-#_(defonce stats-accumulator
-  (tufte/add-accumulating-handler! {:ns-pattern "*"}))
-
 (defonce pd
   (tufte/new-pdata))
 
 (defmacro p*
   [id & body]
-  `(let [t0# (System/nanoTime)]
+  `(do ~@body)
+  #_`(let [t0# (System/nanoTime)]
      (tufte/with-profiling pd {}
        (try
          ~@body
          (finally
            (tufte/capture-time! pd ~id (- (System/nanoTime) t0#)))))))
 
-(defn get-x [] (Thread/sleep 50)             "x val")
-(defn get-y [] (Thread/sleep (rand-int 100)) "y val")
-
-#_(tufte/profile ; Profile any `p` forms called during body execution
- {} ; Profiling options; we'll use the defaults for now
-  (dotimes [_ 5]
-    (p* :get-x (get-x))
-    (p* :get-y (get-y))))
-
-#_
-(println (tufte/format-grouped-pstats @stats-accumulator))
-
-(defnp- custom-munge
+(defn- custom-munge
   [v]
   (str/replace (munge v) #"\." "___"))
 
-(defnp- to-edn-string
+(defn- to-edn-string
   [v]
   (let [s (str/replace (str v)  #"___" ".")]
     (keyword (repl/demunge s))))
@@ -100,24 +86,24 @@
 
 (def ^:private Lock (Object.))
 
-(defnp- serialize-obj [object filename]
+(defn- serialize-obj [object filename]
   (locking Lock
     (when-not (.exists (io/as-file filename))
       (with-open [outp (-> (java.io.File. filename) java.io.FileOutputStream. java.io.ObjectOutputStream.)]
         (.writeObject outp object)))))
 
-(defnp- deserialize-obj [filename]
+(defn- deserialize-obj [filename]
   (with-open [inp (-> (java.io.File. filename) java.io.FileInputStream. java.io.ObjectInputStream.)]
     (.readObject inp)))
 
-(defnp- process-operator*
+(defn- process-operator*
   "Created so we can use the same \"meat\" when invoking the function
   in a context outside TLC."
   [identifier f self context main-var]
   (p* ::process-operator*
       (let [global main-var
             local (get-in main-var [::procs self])
-            result (f (merge {:self self} context global local))
+            result (p :result (f (merge {:self self} context global local)))
             result-global (medley/filter-keys namespace result)
             result-local (medley/remove-keys namespace result)
             metadata (if (:recife/metadata result-global)
@@ -144,7 +130,7 @@
                             (apply dissoc result-local :self (keys context))})
             :recife/metadata metadata})))))
 
-(defnp process-operator
+(defn process-operator
   [identifier f self-tla extra-args-tla ^Value main-var-tla]
   (p* ::process-operator
       (try
@@ -160,13 +146,13 @@
           (serialize-obj e exception-filename)
           (throw e)))))
 
-(defnp- process-operator-local*
+(defn- process-operator-local*
   [f self main-var]
   (let [global main-var
         local (get-in main-var [::procs self])]
     (f (merge {:self self} global local))))
 
-(defnp- process-operator-local
+(defn- process-operator-local
   [f self-tla ^Value main-var-tla]
   (try
     (let [self (tla-edn/to-edn self-tla {:string-to-keyword? true})
@@ -177,7 +163,7 @@
       (serialize-obj e exception-filename)
       (throw e))))
 
-(defnp process-config-operator
+(defn process-config-operator
   [f ^Value main-var-tla]
   (try
     (let [main-var (tla-edn/to-edn main-var-tla {:string-to-keyword? true})
@@ -195,7 +181,7 @@
       (serialize-obj e exception-filename)
       (throw e))))
 
-(defnp process-local-operator
+(defn process-local-operator
   [f ^Value main-var-tla]
   (p* ::process-local-operator
       (try
@@ -206,7 +192,7 @@
           (serialize-obj e exception-filename)
           (throw e)))))
 
-(defnp parse
+(defn parse
   "`f` is a function which receives one argument, a vector, the
   first element is the `result` and the last one is the `expr`."
   ([expr]
@@ -301,7 +287,7 @@
                   expr)]
      (f [result expr]))))
 
-(defnp tla
+(defn tla
   [identifier expr]
   (let [form (parse expr)]
     {:identifier (str (symbol (custom-munge identifier))
@@ -311,7 +297,7 @@
      :form form
      :recife.operator/type :tla-only}))
 
-(defnp context-from-state
+(defn context-from-state
   [state]
   (if (vector? state)
     (get-in state [1 :recife/metadata :context])
@@ -336,7 +322,7 @@
 
 (declare temporal-property)
 
-(defnp reg
+(defn reg
   ([identifier expr]
    (reg identifier {} expr))
   ([identifier opts expr]
@@ -452,7 +438,7 @@
         :recife.operator/type :operator}
        (merge (meta expr) (meta opts))))))
 
-(defnp invariant
+(defn invariant
   [identifier expr]
   (let [op (eval
             `(spec/defop ~(symbol (str (custom-munge identifier) "2")) {:module "spec"}
@@ -465,7 +451,7 @@
                 "(main_var)")
      :recife.operator/type :invariant}))
 
-(defnp checker
+(defn checker
   [identifier expr]
   (let [op (eval
             `(spec/defop ~(symbol (str (custom-munge identifier) "2")) {:module "spec"}
@@ -478,7 +464,7 @@
                 "(main_var)")
      :recife.operator/type :invariant}))
 
-(defnp state-constraint
+(defn state-constraint
   [identifier expr]
   (let [op (eval
             `(spec/defop ~(symbol (str (custom-munge identifier) "2")) {:module "spec"}
@@ -491,7 +477,7 @@
                 "(main_var)")
      :recife.operator/type :state-constraint}))
 
-(defnp- compile-temporal-property
+(defn- compile-temporal-property
   [collector identifier]
   (let [
         ;; With `counter` we are able to use many functions for the same
@@ -542,7 +528,7 @@
                              :else
                              result))))))
 
-(defnp temporal-property
+(defn temporal-property
   [identifier expr]
   (let [collector (atom [])
         form ((compile-temporal-property collector identifier) expr)]
@@ -552,15 +538,15 @@
      :form form
      :recife.operator/type :temporal-property}))
 
-(defnp goto
+(defn goto
   [db identifier]
   (assoc db :pc identifier))
 
-(defnp done
+(defn done
   [db]
   (assoc db :pc ::done))
 
-(defnp all-done?
+(defn all-done?
   [db]
   (every? #(= (:pc %) ::done)
           (-> db ::procs vals)))
@@ -572,7 +558,7 @@
      ~@body
      true))
 
-(defnp one-of
+(defn one-of
   "Tells Recife to choose one of the values as its initial value."
   ([values]
    (one-of nil values))
@@ -581,7 +567,7 @@
     ::possible-values values
     ::identifier (some->> identifier hash Math/abs (str "G__") symbol)}))
 
-(defnp- module-template
+(defn- module-template
   [{:keys [:init :next :spec-name :operators]}]
   (let [collected-ranges (atom #{})
         formatted-init-expressions (-> (->> init
@@ -772,7 +758,7 @@ VIEW
 =============================================================================
 ")))
 
-(defnp- private-field
+(defn- private-field
   ([obj fn-name-string]
    (let [m (.. obj getClass (getDeclaredField fn-name-string))]
      (. m (setAccessible true))
@@ -785,7 +771,7 @@ VIEW
 ;; EdnStateWriter
 (def ^:private edn-states-atom (atom {}))
 
-(defnp- edn-save-state
+(defn- edn-save-state
   [tlc-state]
   (let [edn-state (->> tlc-state
                        .getVals
@@ -797,13 +783,13 @@ VIEW
            {:state (dissoc edn-state :recife/metadata)
             :successors #{}})))
 
-(defnp- edn-rank-state
+(defn- edn-rank-state
   [tlc-state]
   (swap! edn-states-atom update-in
          [:ranks (dec (.getLevel tlc-state))]
          (fnil conj #{}) (.fingerPrint tlc-state)))
 
-(defnp- edn-save-successor
+(defn- edn-save-successor
   [tlc-state tlc-successor]
   (let [successor-state (->> tlc-successor
                              .getVals
@@ -815,7 +801,7 @@ VIEW
            conj
            [(.fingerPrint tlc-successor) (get-in successor-state [:recife/metadata :context])])))
 
-(defnp- edn-write-state
+(defn- edn-write-state
   [_state-writer state successor _action-checks _from _length successor-state-new? _visualization _action]
   (when successor-state-new?
     (edn-save-state successor))
@@ -865,7 +851,7 @@ VIEW
   (snapshot [_]))
 
 ;; FileStateWriter
-(defnp- file-sw-save-state
+(defn- file-sw-save-state
   [{:keys [:edn-states-atom]} tlc-state]
   (let [edn-state (->> tlc-state
                        .getVals
@@ -877,13 +863,13 @@ VIEW
            {:state (dissoc edn-state :recife/metadata)
             :successors #{}})))
 
-(defnp- file-sw-rank-state
+(defn- file-sw-rank-state
   [{:keys [:edn-states-atom]} tlc-state]
   (swap! edn-states-atom update-in
          [:ranks (dec (.getLevel tlc-state))]
          (fnil conj #{}) (.fingerPrint tlc-state)))
 
-(defnp- file-sw-save-successor
+(defn- file-sw-save-successor
   [{:keys [:edn-states-atom]} tlc-state tlc-successor]
   (let [successor-state (->> tlc-successor
                              .getVals
@@ -895,7 +881,7 @@ VIEW
            conj
            [(.fingerPrint tlc-successor) (get-in successor-state [:recife/metadata :context])])))
 
-(defnp- file-sw-write-state
+(defn- file-sw-write-state
   [this state successor _action-checks _from _length successor-state-new? visualization _action]
   ;; If it's stuttering, we don't put it as a successor.
   (when-not (= visualization tlc2.util.IStateWriter$Visualization/STUTTERING)
@@ -947,17 +933,17 @@ VIEW
 
   (snapshot [_]))
 
-(defnp- states-from-file
+(defn- states-from-file
   [file-path]
   (with-open [is (io/input-stream file-path)]
     (let [reader (t/reader is :msgpack)]
       (t/read reader))))
 
-(defnp states-from-result
+(defn states-from-result
   [{:keys [:recife/transit-states-file-path]}]
   (states-from-file transit-states-file-path))
 
-(defnp random-traces-from-states
+(defn random-traces-from-states
   ([states]
    (random-traces-from-states states 10))
   ([states max-number-of-paths]
@@ -1030,7 +1016,7 @@ VIEW
                       (assoc paths' (count paths') [[state nil]])
                       (inc counter))))))))))
 
-(defnp tlc-result-handler
+(defn tlc-result-handler
   "This function is a implementation detail, you should not use it.
   It handles the TLC object and its result, generating the output we see when
   calling `run-model`."
@@ -1087,7 +1073,9 @@ VIEW
                              state-writer))
             _ (do (doto tlc
                     .process)
-                  (println (tufte/format-pstats @@pd)))
+                  (let [pstats (seq @@pd)]
+                    (when (:stats pstats)
+                      (tufte/format-pstats pstats))))
             recorder-info @recorder-atom
             _ (do (def tlc tlc)
                   (def recorder-info recorder-info))
@@ -1173,11 +1161,11 @@ VIEW
       (finally
         (MP/unsubscribeRecorder recorder)))))
 
-(defnp tlc-result-printer-handler
+(defn tlc-result-printer-handler
   [tlc-runner]
   (prn (tlc-result-handler tlc-runner)))
 
-(defnp- run-model*
+(defn- run-model*
   ([init-state next-operator operators]
    (run-model* init-state next-operator operators {}))
   ([init-state next-operator operators {:keys [:seed :fp :workers :tlc-args
@@ -1278,7 +1266,7 @@ VIEW
            (throw (deserialize-obj exception-filename))
            (-> @output last edn/read-string)))))))
 
-(defnp timeline-diff
+(defn timeline-diff
   [result-map]
   (update result-map :trace
           (fn [result]
@@ -1310,7 +1298,7 @@ VIEW
                    vec)
               result))))
 
-(defnp print-timeline-diff
+(defn print-timeline-diff
   [result-map]
   (if (vector? (:trace result-map))
     (-> result-map
@@ -1318,7 +1306,7 @@ VIEW
         (update :trace ddiff/pretty-print))
     result-map))
 
-(defnp run-model
+(defn run-model
   ([init-global-state components]
    (run-model init-global-state components {}))
   ([init-global-state components opts]

@@ -129,22 +129,29 @@
      (fn [{:keys [:c ::alloc :r]}]
        (contains? (get alloc c) r))]]])
 
-;; TODO: SF Fairness.
-;; \A c \in Clients: SF_vars(\E S \in SUBSET Resources: Allocate(c,S))
+;; InfOftenSatisfied ==
+;;   \A c \in Clients : []<>(unsat[c] = {})
+(r/defproperty inf-often-satisfied
+  [:forall {'c clients}
+   [:always
+    [:eventually
+     [:invoke {:c 'c}
+      (fn [{:keys [:c ::unsat]}]
+        (empty? (get unsat c)))]]]])
 
 (comment
-  ;; ----- Invariants and properties -----
 
   ;; TODO
-  ;; InfOftenSatisfied ==
-  ;;   \A c \in Clients : []<>(unsat[c] = {})
+  ;; AllocatorInvariant
 
   ;; TODO:
-  ;; - [ ] Profile performance.
+  ;; - [x] Profile performance.
   ;; - [ ] Create helpers for `forall`, `exists` and `invoke`.
 
   (r/run-model global #{request allocate return schedule
-                        resource-mutex clients-will-return #_clients-will-obtain}
+                        resource-mutex clients-will-return clients-will-obtain
+                        inf-often-satisfied}
                {#_ #_:debug? true
-                :workers 1})
+                #_ #_:workers 1})
+
   ())
