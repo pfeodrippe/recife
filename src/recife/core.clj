@@ -439,17 +439,20 @@
        (merge (meta expr) (meta opts))))))
 
 (defn invariant
-  [identifier expr]
-  (let [op (eval
-            `(spec/defop ~(symbol (str (custom-munge identifier) "2")) {:module "spec"}
-               [^Value ~'main-var]
-               (process-config-operator ~expr ~'main-var)))]
-    {:identifier (symbol (custom-munge identifier))
-     :op-ns (-> op meta :op-ns)
-     :identifier-2 (str (symbol (str (custom-munge identifier) "2")) "(_main_var) == _main_var = _main_var")
-     :form (str (symbol (str (custom-munge identifier) "2"))
-                "(main_var)")
-     :recife.operator/type :invariant}))
+  ([identifier expr]
+   (invariant identifier nil expr))
+  ([identifier doc-string expr]
+   (let [op (eval
+             `(spec/defop ~(symbol (str (custom-munge identifier) "2")) {:module "spec"}
+                [^Value ~'main-var]
+                (process-config-operator ~expr ~'main-var)))]
+     {:identifier (symbol (custom-munge identifier))
+      :op-ns (-> op meta :op-ns)
+      :identifier-2 (str (symbol (str (custom-munge identifier) "2")) "(_main_var) == _main_var = _main_var")
+      :form (str (symbol (str (custom-munge identifier) "2"))
+                 "(main_var)")
+      :recife.operator/type :invariant
+      :doc-string doc-string})))
 
 (defn checker
   [identifier expr]
@@ -1430,14 +1433,16 @@ VIEW
                                    (val %)))))})))
 
 (defmacro definvariant
-  [name f]
+  [name & opts]
   `(def ~name
      (let [name# (keyword (str *ns*) ~(str name))
-           f# ~f]
+           [doc-string# f#] ~(if (= (count opts) 1)
+                               [nil (first opts)]
+                               [(first opts) (last opts)])]
        ^{:type ::Invariant}
        {:name name#
         :invariant f#
-        :operator (invariant name# f#)})))
+        :operator (invariant name# doc-string# f#)})))
 
 (defmacro defproperty
   [name expr]

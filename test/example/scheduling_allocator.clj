@@ -104,6 +104,51 @@
            (set/intersection (get alloc c-1) (get alloc c-2)))
          (every? empty?))))
 
+(r/definvariant allocator-invariant-1
+  "All clients in the schedule have outstanding requests."
+  (fn [{:keys [::sched ::unsat]}]
+    (every? (fn [client]
+              (seq (get unsat client)))
+            sched)))
+
+(r/definvariant allocator-invariant-2
+  "All clients that need to be scheduled have outstanding requests."
+  (fn [{:keys [::unsat] :as db}]
+    (every? (fn [client]
+              (seq (get unsat client)))
+            (to-schedule db))))
+
+(r/definvariant allocator-invariant-3
+  "Clients never hold a resource requested by a process earlier
+in the schedule."
+  (fn [{:keys [::sched ::unsat ::alloc]}]
+    (every? (fn [i-sched]
+              (->> (take i-sched sched)
+                   (every? #(empty? (set/intersection (get alloc (get sched i-sched))
+                                                      (get unsat %))))))
+            (range (count sched)))))
+
+(r/definvariant allocator-invariant-4
+  "The allocator can satisfy the requests of any scheduled client
+assuming that the clients scheduled earlier release their resources."
+  (fn [{:keys [::unsat ::alloc ::sched]}]
+    (let [unscheduled-clients (set/difference clients (set sched))]
+      (->> sched
+           (map-indexed (fn [idx client]
+                          (let [available-resources (set/difference resources (apply set/union (vals alloc)))
+                                previous-resources (set/union available-resources
+                                                              (->> (take idx sched)
+                                                                   (mapv #(get alloc %))
+                                                                   (apply set/union))
+                                                              (->> (take idx sched)
+                                                                   (mapv #(get unsat %))
+                                                                   (apply set/union))
+                                                              (->> unscheduled-clients
+                                                                   (mapv alloc)
+                                                                   (apply set/union)))]
+                            (set/subset? (get unsat client) previous-resources))))
+           (every? true?)))))
+
 ;; ClientsWillReturn ==
 ;;   \A c \in Clients : unsat[c]={} ~> alloc[c]={}
 (r/defproperty clients-will-return
@@ -141,17 +186,14 @@
 
 (comment
 
-  ;; TODO
-  ;; AllocatorInvariant
-
   ;; TODO:
   ;; - [x] Profile performance.
   ;; - [ ] Create helpers for `forall`, `exists` and `invoke`.
 
   (r/run-model global #{request allocate return schedule
-                        resource-mutex clients-will-return clients-will-obtain
-                        inf-often-satisfied}
+                        resource-mutex allocator-invariant-1 allocator-invariant-2
+                        allocator-invariant-3 allocator-invariant-4
+                        clients-will-return clients-will-obtain inf-often-satisfied}
                {#_ #_:debug? true
                 #_ #_:workers 1})
-
   ())
