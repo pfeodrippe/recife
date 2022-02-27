@@ -48,7 +48,7 @@
         1)))
 
 (r/defproperty no-livelocks
-  [:forall {'t #{:t1 :t2}}
+  [:for-all {'t #{:t1 :t2}}
    [:eventually
     [:invoke {:t 't}
      (fn [{:keys [:t ::r/procs]}]

@@ -75,7 +75,7 @@
         1)))
 
 (r/defproperty no-livelocks
-  [:forall {'t threads}
+  [:for-all {'t threads}
    [:eventually
     [:invoke {:t 't}
      (fn [{:keys [:t ::r/procs]}]

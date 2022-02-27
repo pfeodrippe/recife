@@ -210,7 +210,7 @@
                                    (str/join ", "))
                               (parse (last args) f))
 
-                      :forall
+                      :for-all
                       (format "\\A %s : (%s)"
                               (->> (first args)
                                    (mapv (fn [[k v]]

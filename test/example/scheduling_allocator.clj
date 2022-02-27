@@ -7,7 +7,7 @@
    [clojure.set :as set]
    [medley.core :as medley]
    [recife.core :as r]
-   [recife.tla :as rt]))
+   [recife.helpers :as rh]))
 
 (def clients
   #{:c1 :c2 #_:c3})
@@ -34,7 +34,7 @@
        (assoc-in db [::unsat c] S)))})
 
 (def allocate-fairness
-  [:forall {'c clients}
+  [:for-all {'c clients}
    [:fair
     [:exists {'S (:S non-deterministic-params)
               'i_sched #(set (range (count (::sched %))))}
@@ -63,7 +63,7 @@
                               sched))))))})
 
 (def ^:private return-fairness
-  [:forall {'c clients}
+  [:for-all {'c clients}
    [:fair
     [:and
      [:invoke {:c 'c}
@@ -153,7 +153,7 @@ assuming that the clients scheduled earlier release their resources."
 ;; ClientsWillReturn ==
 ;;   \A c \in Clients : unsat[c]={} ~> alloc[c]={}
 (r/defproperty clients-will-return
-  [:forall {'c clients}
+  [:for-all {'c clients}
    [:leads-to
     [:invoke {:c 'c}
      (fn [{:keys [:c ::unsat]}]
@@ -164,28 +164,28 @@ assuming that the clients scheduled earlier release their resources."
 
 ;; ClientsWillObtain ==
 ;;   \A c \in Clients, r \in Resources : r \in unsat[c] ~> r \in alloc[c]
-(rt/defproperty clients-will-obtain
+(rh/defproperty clients-will-obtain
   [{:keys [::unsat ::alloc]}]
-  (rt/for-all [c clients
+  (rh/for-all [c clients
                r resources]
-    (rt/leads-to
+    (rh/leads-to
      (contains? (get unsat c) r)
      (contains? (get alloc c) r))))
 
 ;; InfOftenSatisfied ==
 ;;   \A c \in Clients : []<>(unsat[c] = {})
-(rt/defproperty inf-often-satisfied
+(rh/defproperty inf-often-satisfied
   [{:keys [::unsat]}]
-  (rt/for-all [c clients]
-    (rt/always
-     (rt/eventually
+  (rh/for-all [c clients]
+    (rh/always
+     (rh/eventually
       (empty? (get unsat c))))))
 
 (comment
 
   ;; TODO:
   ;; - [x] Profile performance.
-  ;; - [ ] Create helpers for `forall`, `exists` and `invoke`.
+  ;; - [ ] Create helpers for `for-all`, `exists` and `invoke`.
 
   (r/run-model global #{request allocate return schedule
                         resource-mutex allocator-invariant-1 allocator-invariant-2
