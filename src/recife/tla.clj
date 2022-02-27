@@ -24,7 +24,6 @@
 
 (defn- for-all*
   [bindings body]
-  (println :>>>>env-for-all *env*)
   (let [actual-bindings {`'~(first bindings) (second bindings)}]
     `(binding [*env* ~(add-local-vars (keys actual-bindings))]
        (eval '[:forall ~actual-bindings
@@ -37,28 +36,31 @@
   [bindings & body]
   (for-all* bindings body))
 
+(defn- invoke
+  [form]
+  (if (= (namespace (symbol (resolve (first form)))) "recife.tla")
+    form
+    `[:invoke (quote ~(->> (:local-vars *env*)
+                           (mapv (fn [l]
+                                   [(keyword l) l]))
+                           (into {})))
+      (fn [{:keys ~(vec (:local-vars *env*))
+            :as db#}]
+        (let [~(first (:global-vars *env*)) db#]
+          ~form))]))
+
 (defmacro leads-to
   [source target]
   `[:leads-to
-    [:invoke (quote ~(->> (:local-vars *env*)
-                          (mapv (fn [l]
-                                  [(keyword l) l]))
-                          (into {})))
-     (fn [{:keys ~(vec (concat (:global-vars *env*)
-                               (:local-vars *env*)))}]
-       ~source)]
-    (fn [{:keys ~(vec (concat (:global-vars *env*)
-                              (:local-vars *env*)))}]
-      ~target)])
+    ~(invoke source)
+    ~(invoke target)])
 
-#_(defmacro for-all
-    []
-    [:forall {'c clients
-              'r resources}
-     [:leads-to
-      [:invoke {:c 'c :r 'r}
-       (fn [{:keys [:c ::unsat :r]}]
-         (contains? (get unsat c) r))]
-      [:invoke {:c 'c :r 'r}
-       (fn [{:keys [:c ::alloc :r]}]
-         (contains? (get alloc c) r))]]])
+(defmacro always
+  [body]
+  `[:always
+    ~(invoke body)])
+
+(defmacro eventually
+  [body]
+  `[:eventually
+    ~(invoke body)])

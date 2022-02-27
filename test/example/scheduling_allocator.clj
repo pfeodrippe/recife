@@ -162,41 +162,10 @@ assuming that the clients scheduled earlier release their resources."
      (fn [{:keys [:c ::alloc]}]
        (empty? (get alloc c)))]]])
 
-(comment
-
-  (clojure.walk/macroexpand-all
-   '(rt/for-all [c clients
-                 r resources]
-      (rt/leads-to
-       (contains? (get unsat c) r)
-       (contains? (get alloc c) r))))
-
-  (clojure.walk/macroexpand-all
-   (quote
-    (rt/defproperty sss
-      [unsat alloc]
-      (rt/for-all [c clients
-                   r resources]
-        (rt/leads-to
-         (contains? (get unsat c) r)
-         (contains? (get alloc c) r))))))
-
-  [:forall {'c clients
-            'r resources}
-   [:leads-to
-    [:invoke {:c 'c :r 'r}
-     (fn [{:keys [:c ::unsat :r]}]
-       (contains? (get unsat c) r))]
-    [:invoke {:c 'c :r 'r}
-     (fn [{:keys [:c ::alloc :r]}]
-       (contains? (get alloc c) r))]]]
-
-  ())
-
 ;; ClientsWillObtain ==
 ;;   \A c \in Clients, r \in Resources : r \in unsat[c] ~> r \in alloc[c]
 (rt/defproperty clients-will-obtain
-  [unsat alloc]
+  [{:keys [::unsat ::alloc]}]
   (rt/for-all [c clients
                r resources]
     (rt/leads-to
@@ -205,13 +174,12 @@ assuming that the clients scheduled earlier release their resources."
 
 ;; InfOftenSatisfied ==
 ;;   \A c \in Clients : []<>(unsat[c] = {})
-(r/defproperty inf-often-satisfied
-  [:forall {'c clients}
-   [:always
-    [:eventually
-     [:invoke {:c 'c}
-      (fn [{:keys [:c ::unsat]}]
-        (empty? (get unsat c)))]]]])
+(rt/defproperty inf-often-satisfied
+  [{:keys [::unsat]}]
+  (rt/for-all [c clients]
+    (rt/always
+     (rt/eventually
+      (empty? (get unsat c))))))
 
 (comment
 
