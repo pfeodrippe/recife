@@ -5,4 +5,6 @@
  :lint-as {recife.core/defproc clojure.core/def
            recife.core/definvariant clojure.core/def
            recife.core/defproperty clojure.core/def
-           recife.core/defconstraint clojure.core/def}}
+           recife.core/defconstraint clojure.core/def
+           recife.tla/defproperty clojure.core/defn
+           recife.tla/for-all clojure.core/let}}

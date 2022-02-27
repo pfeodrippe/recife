@@ -6,7 +6,8 @@
    [clojure.math.combinatorics :as comb]
    [clojure.set :as set]
    [medley.core :as medley]
-   [recife.core :as r]))
+   [recife.core :as r]
+   [recife.tla :as rt]))
 
 (def clients
   #{:c1 :c2 #_:c3})
@@ -161,9 +162,25 @@ assuming that the clients scheduled earlier release their resources."
      (fn [{:keys [:c ::alloc]}]
        (empty? (get alloc c)))]]])
 
-;; ClientsWillObtain ==
-;;   \A c \in Clients, r \in Resources : r \in unsat[c] ~> r \in alloc[c]
-(r/defproperty clients-will-obtain
+(comment
+
+  (clojure.walk/macroexpand-all
+   '(rt/for-all [c clients
+                 r resources]
+      (rt/leads-to
+       (contains? (get unsat c) r)
+       (contains? (get alloc c) r))))
+
+  (clojure.walk/macroexpand-all
+   (quote
+    (rt/defproperty sss
+      [unsat alloc]
+      (rt/for-all [c clients
+                   r resources]
+        (rt/leads-to
+         (contains? (get unsat c) r)
+         (contains? (get alloc c) r))))))
+
   [:forall {'c clients
             'r resources}
    [:leads-to
@@ -172,7 +189,19 @@ assuming that the clients scheduled earlier release their resources."
        (contains? (get unsat c) r))]
     [:invoke {:c 'c :r 'r}
      (fn [{:keys [:c ::alloc :r]}]
-       (contains? (get alloc c) r))]]])
+       (contains? (get alloc c) r))]]]
+
+  ())
+
+;; ClientsWillObtain ==
+;;   \A c \in Clients, r \in Resources : r \in unsat[c] ~> r \in alloc[c]
+(rt/defproperty clients-will-obtain
+  [unsat alloc]
+  (rt/for-all [c clients
+               r resources]
+    (rt/leads-to
+     (contains? (get unsat c) r)
+     (contains? (get alloc c) r))))
 
 ;; InfOftenSatisfied ==
 ;;   \A c \in Clients : []<>(unsat[c] = {})
