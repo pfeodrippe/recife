@@ -7,4 +7,6 @@
            recife.core/defproperty clojure.core/def
            recife.core/defconstraint clojure.core/def
            recife.helpers/defproperty clojure.core/defn
-           recife.helpers/for-all clojure.core/let}}
+           recife.helpers/deffairness clojure.core/defn
+           recife.helpers/for-all clojure.core/let
+           recife.helpers/for-some clojure.core/let}}

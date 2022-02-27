@@ -206,7 +206,9 @@
                       (format "\\E %s : (%s)"
                               (->> (first args)
                                    (mapv (fn [[k v]]
-                                           (format "%s \\in (%s)" (parse k f) (parse v f))))
+                                           (format "%s \\in (%s)"
+                                                   (parse (custom-munge k) f)
+                                                   (parse v f))))
                                    (str/join ", "))
                               (parse (last args) f))
 
@@ -214,7 +216,9 @@
                       (format "\\A %s : (%s)"
                               (->> (first args)
                                    (mapv (fn [[k v]]
-                                           (format "%s \\in (%s)" (parse k f) (parse v f))))
+                                           (format "%s \\in (%s)"
+                                                   (parse (custom-munge k) f)
+                                                   (parse v f))))
                                    (str/join ", "))
                               (parse (last args) f))
 
@@ -230,7 +234,10 @@
                               (parse (second args) f))
 
                       :invoke
-                      (parse {:env (first args)
+                      (parse {:env (->> (first args)
+                                        (mapv (fn [[k v]]
+                                                [k (symbol (custom-munge v))]))
+                                        (into {}))
                               :fn (last args)}
                              f)
 
@@ -1218,7 +1225,11 @@ VIEW
                              flatten
                              (remove nil?)
                              vec)]
-     (when debug? (println module-contents))
+     (when debug?
+       (println (->> (str/split-lines module-contents)
+                     (map-indexed (fn [idx line]
+                                    (str (inc idx) " " line)))
+                     (str/join "\n"))))
      ;; Delete any serialization file.
      (io/delete-file exception-filename true)
      (io/delete-file invariant-data-filename true)

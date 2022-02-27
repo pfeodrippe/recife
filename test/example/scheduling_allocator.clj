@@ -33,15 +33,14 @@
                 (empty? (get alloc c)))
        (assoc-in db [::unsat c] S)))})
 
-(def allocate-fairness
-  [:for-all {'c clients}
-   [:fair
-    [:exists {'S (:S non-deterministic-params)
-              'i_sched #(set (range (count (::sched %))))}
-     [:call :allocate
-      [:invoke {:c 'c :S 'S :i-sched 'i_sched}
-       (fn [{:keys [:c :S :i-sched] :as args}]
-         (assoc args ::r/extra-args {:c c :S S :i-sched i-sched}))]]]]])
+(rh/deffairness allocate-fairness
+  [db]
+  (rh/for-all [c clients]
+    (rh/fair
+     (rh/for-some [S (:S non-deterministic-params)
+                   i-sched #(set (range (count (::sched %))))]
+       (rh/call :allocate
+         (assoc db ::r/extra-args {:c c :S S :i-sched i-sched}))))))
 
 (r/defproc ^{:fairness allocate-fairness} allocate {}
   {[:allocate
@@ -152,15 +151,12 @@ assuming that the clients scheduled earlier release their resources."
 
 ;; ClientsWillReturn ==
 ;;   \A c \in Clients : unsat[c]={} ~> alloc[c]={}
-(r/defproperty clients-will-return
-  [:for-all {'c clients}
-   [:leads-to
-    [:invoke {:c 'c}
-     (fn [{:keys [:c ::unsat]}]
-       (empty? (get unsat c)))]
-    [:invoke {:c 'c}
-     (fn [{:keys [:c ::alloc]}]
-       (empty? (get alloc c)))]]])
+(rh/defproperty clients-will-return
+  [{:keys [::unsat ::alloc]}]
+  (rh/for-all [c clients]
+    (rh/leads-to
+     (empty? (get unsat c))
+     (empty? (get alloc c)))))
 
 ;; ClientsWillObtain ==
 ;;   \A c \in Clients, r \in Resources : r \in unsat[c] ~> r \in alloc[c]
@@ -191,6 +187,7 @@ assuming that the clients scheduled earlier release their resources."
                         resource-mutex allocator-invariant-1 allocator-invariant-2
                         allocator-invariant-3 allocator-invariant-4
                         clients-will-return clients-will-obtain inf-often-satisfied}
-               {#_ #_:debug? true
+               {:debug? true
                 #_ #_:workers 1})
+
   ())
