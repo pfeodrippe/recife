@@ -1,4 +1,5 @@
 (ns recife.helpers
+  (:refer-clojure :exclude [and])
   (:require
    [recife.core :as r]))
 
@@ -26,33 +27,55 @@
                                  (if (seq? l)
                                    (last l)
                                    l))))]
-    (if (and (seq? form)
-             (not (keyword? (first form)))
-             (resolve (first form))
-             (or (::operator? (meta (resolve (first form))))
-                 (= (namespace (symbol (resolve (first form)))) "recife.helpers")))
+    (if (clojure.core/and (seq? form)
+                          (not (keyword? (first form)))
+                          (resolve (first form))
+                          (or (::operator? (meta (resolve (first form))))
+                              (= (namespace (symbol (resolve (first form)))) "recife.helpers")))
       form
       `[:invoke (quote ~(->> local-vars
                              (mapv (fn [l] [(keyword l) l]))
                              (into {})))
         (fn [{:keys ~(vec local-vars)
-                :as db#}]
-            (let [~(first global-vars) db#]
-              ~form))])))
+              :as db#}]
+          (let [~(first global-vars) db#]
+            ~form))])))
+
+(defn- parse-decl
+  [decl]
+  (if (= (count decl) 2)
+    [nil (first decl) (drop 1 decl)]
+    [(first decl) (second decl) (drop 2 decl)]))
 
 (defmacro defproperty
-  [name params & body]
-  `(r/defproperty ~name (binding [*env* (quote ~(add-global-vars
-                                                 (mapv (fn [p#] `(quote ~p#))
-                                                       params)))]
-                          (eval '~@body))))
+  {:arglists '([name doc-string? db])}
+  [name & decl]
+  (let [[_doc-string params body] (parse-decl decl)]
+    `(r/defproperty ~name
+       (binding [*env* (quote ~(add-global-vars
+                                (mapv (fn [p#] `(quote ~p#))
+                                      params)))]
+         (eval '~@body)))))
 
 (defmacro deffairness
-  [name params & body]
-  `(def ~name (binding [*env* (quote ~(add-global-vars
-                                       (mapv (fn [p#] `(quote ~p#))
-                                             params)))]
-                (eval '~@body))))
+  {:arglists '([name doc-string? db])}
+  [name & decl]
+  (let [[doc-string params body] (parse-decl decl)]
+    `(def ~(with-meta name
+             {:doc doc-string})
+       (binding [*env* (quote ~(add-global-vars
+                                (mapv (fn [p#] `(quote ~p#))
+                                      params)))]
+         (eval '~@body)))))
+
+(defmacro definvariant
+  {:arglists '([name doc-string? db])}
+  [name & decl]
+  (let [[doc-string params body] (parse-decl decl)]
+    `(r/definvariant ~name
+       ~doc-string
+       (fn ~params
+         ~@body))))
 
 (defn- for-all*
   [bindings body]
@@ -112,3 +135,7 @@
   [k body]
   `[:call ~k
     ~(invoke body)])
+
+(defmacro and
+  [& body]
+  `[:and ~@(mapv invoke body)])

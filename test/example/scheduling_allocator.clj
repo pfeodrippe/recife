@@ -61,17 +61,14 @@
                               (vec (medley/remove-nth i-sched sched))
                               sched))))))})
 
-(def ^:private return-fairness
-  [:for-all {'c clients}
-   [:fair
-    [:and
-     [:invoke {:c 'c}
-      (fn [{:keys [:c ::unsat]}]
-        (empty? (get unsat c)))]
-     [:call :return
-      [:invoke {:c 'c}
-       (fn [{:keys [:c ::alloc] :as args}]
-         (assoc args ::r/extra-args {:c c :S (get alloc c)}))]]]]])
+(rh/deffairness return-fairness
+  [{:keys [::unsat ::alloc] :as db}]
+  (rh/for-all [c clients]
+    (rh/fair
+     (rh/and
+      (empty? (get unsat c))
+      (rh/call :return
+        (assoc db ::r/extra-args {:c c :S (get alloc c)}))))))
 
 (r/defproc ^{:fairness return-fairness} return {}
   {[:return
@@ -96,58 +93,58 @@
 
 ;; ResourceMutex ==
 ;;   \A c1,c2 \in Clients : c1 # c2 => alloc[c1] \cap alloc[c2] = {}
-(r/definvariant resource-mutex
-  (fn [{:keys [::alloc]}]
-    (->> (for [c-1 clients
-               c-2 clients
-               :when (not= c-1 c-2)]
-           (set/intersection (get alloc c-1) (get alloc c-2)))
-         (every? empty?))))
+(rh/definvariant resource-mutex
+  [{:keys [::alloc]}]
+  (->> (for [c-1 clients
+             c-2 clients
+             :when (not= c-1 c-2)]
+         (set/intersection (get alloc c-1) (get alloc c-2)))
+       (every? empty?)))
 
-(r/definvariant allocator-invariant-1
+(rh/definvariant allocator-invariant-1
   "All clients in the schedule have outstanding requests."
-  (fn [{:keys [::sched ::unsat]}]
-    (every? (fn [client]
-              (seq (get unsat client)))
-            sched)))
+  [{:keys [::sched ::unsat]}]
+  (every? (fn [client]
+            (seq (get unsat client)))
+          sched))
 
-(r/definvariant allocator-invariant-2
+(rh/definvariant allocator-invariant-2
   "All clients that need to be scheduled have outstanding requests."
-  (fn [{:keys [::unsat] :as db}]
-    (every? (fn [client]
-              (seq (get unsat client)))
-            (to-schedule db))))
+  [{:keys [::unsat] :as db}]
+  (every? (fn [client]
+            (seq (get unsat client)))
+          (to-schedule db)))
 
-(r/definvariant allocator-invariant-3
+(rh/definvariant allocator-invariant-3
   "Clients never hold a resource requested by a process earlier
 in the schedule."
-  (fn [{:keys [::sched ::unsat ::alloc]}]
-    (every? (fn [i-sched]
-              (->> (take i-sched sched)
-                   (every? #(empty? (set/intersection (get alloc (get sched i-sched))
-                                                      (get unsat %))))))
-            (range (count sched)))))
+  [{:keys [::sched ::unsat ::alloc]}]
+  (every? (fn [i-sched]
+            (->> (take i-sched sched)
+                 (every? #(empty? (set/intersection (get alloc (get sched i-sched))
+                                                    (get unsat %))))))
+          (range (count sched))))
 
-(r/definvariant allocator-invariant-4
+(rh/definvariant allocator-invariant-4
   "The allocator can satisfy the requests of any scheduled client
 assuming that the clients scheduled earlier release their resources."
-  (fn [{:keys [::unsat ::alloc ::sched]}]
-    (let [unscheduled-clients (set/difference clients (set sched))]
-      (->> sched
-           (map-indexed (fn [idx client]
-                          (let [available-resources (set/difference resources (apply set/union (vals alloc)))
-                                previous-resources (set/union available-resources
-                                                              (->> (take idx sched)
-                                                                   (mapv #(get alloc %))
-                                                                   (apply set/union))
-                                                              (->> (take idx sched)
-                                                                   (mapv #(get unsat %))
-                                                                   (apply set/union))
-                                                              (->> unscheduled-clients
-                                                                   (mapv alloc)
-                                                                   (apply set/union)))]
-                            (set/subset? (get unsat client) previous-resources))))
-           (every? true?)))))
+  [{:keys [::unsat ::alloc ::sched]}]
+  (let [unscheduled-clients (set/difference clients (set sched))]
+    (->> sched
+         (map-indexed (fn [idx client]
+                        (let [available-resources (set/difference resources (apply set/union (vals alloc)))
+                              previous-resources (set/union available-resources
+                                                            (->> (take idx sched)
+                                                                 (mapv #(get alloc %))
+                                                                 (apply set/union))
+                                                            (->> (take idx sched)
+                                                                 (mapv #(get unsat %))
+                                                                 (apply set/union))
+                                                            (->> unscheduled-clients
+                                                                 (mapv alloc)
+                                                                 (apply set/union)))]
+                          (set/subset? (get unsat client) previous-resources))))
+         (every? true?))))
 
 ;; ClientsWillReturn ==
 ;;   \A c \in Clients : unsat[c]={} ~> alloc[c]={}
