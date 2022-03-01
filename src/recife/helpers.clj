@@ -77,6 +77,14 @@
        (fn ~params
          ~@body))))
 
+(defmacro defconstraint
+  {:arglists '([name doc-string? db])}
+  [name & decl]
+  (let [[_doc-string params body] (parse-decl decl)]
+    `(r/defconstraint ~name
+       (fn ~params
+         ~@body))))
+
 (defn- for-all*
   [bindings body]
   (let [actual-bindings {`'~(first bindings) (second bindings)}]

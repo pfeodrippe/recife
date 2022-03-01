@@ -1,6 +1,7 @@
 (ns hillel.ch5-cache-2
   (:require
-   [recife.core :as r]))
+   [recife.core :as r]
+   [recife.helpers :as rh]))
 
 (def resource-cap 6)
 
@@ -34,9 +35,9 @@
    (fn [db]
      (assoc db :cache/resources-left resource-cap))})
 
-(r/definvariant invariant
-  (fn [{:keys [:cache/resources-left]}]
-    (>= resources-left 0)))
+(rh/definvariant invariant
+  [{:keys [:cache/resources-left]}]
+  (>= resources-left 0))
 
 (comment
 

@@ -1,6 +1,7 @@
 (ns hillel.ch5-cache-4
   (:require
-   [recife.core :as r]))
+   [recife.core :as r]
+   [recife.helpers :as rh]))
 
 (def max-consumer-req 1)
 
@@ -36,9 +37,9 @@
    (fn [{:keys [:cache/resource-cap] :as db}]
      (assoc db :cache/resources-left resource-cap))})
 
-(r/definvariant invariant
-  (fn [{:keys [:cache/resources-left]}]
-    (>= resources-left 0)))
+(rh/definvariant invariant
+  [{:keys [:cache/resources-left]}]
+  (>= resources-left 0))
 
 (comment
 

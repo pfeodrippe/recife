@@ -3,7 +3,8 @@
    [clojure.set :as set]
    [medley.core :as medley]
    [recife.anim :as ra]
-   [recife.core :as r]))
+   [recife.core :as r]
+   [recife.helpers :as rh]))
 
 (def global
   {::companies {:c1 {:children #{:c2 :c4}}
@@ -120,26 +121,26 @@
              (assoc :global/locked? false)
              (r/goto :webhook/handle-request)))))})
 
-(r/definvariant no-partner-history-duplicates
-  (fn [{:keys [:partner/history]}]
-    (= (->> history (map first) distinct count)
-       (count history))))
+(rh/definvariant no-partner-history-duplicates
+  [{:keys [:partner/history]}]
+  (= (->> history (map first) distinct count)
+     (count history)))
 
 ;; All companies will have an `:id` in the end of everything.
-;; We say that at some point in time (`:eventually`) and forever
+;; We say that at some point in time (`eventually`) and forever
 ;; (`always`) the companies will have an id (which is our main goal).
-(r/defproperty all-companies-will-have-an-id
-  [:eventually
-   [:always
-    (fn [{:keys [::companies]}]
-      (and (->> (vals companies)
-                (every? :id))
-           ;; Also check that the ids are in the correct order.
-           (> (-> companies :c3 :id)
-              (-> companies :c1 :id)
-              (-> companies :c4 :id))
-           (> (-> companies :c1 :id)
-              (-> companies :c2 :id))))]])
+(rh/defproperty all-companies-will-have-an-id
+  [{:keys [::companies]}]
+  (rh/eventually
+   (rh/always
+    (and (->> (vals companies)
+              (every? :id))
+         ;; Also check that the ids are in the correct order.
+         (> (-> companies :c3 :id)
+            (-> companies :c1 :id)
+            (-> companies :c4 :id))
+         (> (-> companies :c1 :id)
+            (-> companies :c2 :id))))))
 
 (comment
 
