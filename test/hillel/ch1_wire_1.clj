@@ -1,6 +1,7 @@
 (ns hillel.ch1-wire-1
   (:require
-   [recife.core :as r]))
+   [recife.core :as r]
+   [recife.helpers :as rh]))
 
 (def global
   {:account/alice 5
@@ -27,10 +28,10 @@
          (update :account/bob + (:amount db))
          r/done))})
 
-(r/definvariant invariant
-  (fn [db]
-    (and (>= (:account/alice db) 0)
-         (>= (:account/bob db) 0))))
+(rh/definvariant invariant
+  [db]
+  (and (>= (:account/alice db) 0)
+       (>= (:account/bob db) 0)))
 
 (comment
 

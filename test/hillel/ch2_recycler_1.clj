@@ -1,6 +1,7 @@
 (ns hillel.ch2-recycler-1
   (:require
-   [recife.core :as r]))
+   [recife.core :as r]
+   [recife.helpers :as rh]))
 
 (def global
   {:trash/capacity 10
@@ -30,7 +31,7 @@
              (update :trash/bin conj item)))
        (r/done db)))})
 
-(r/definvariant invariant
-  (fn [db]
-    (and (>= (:trash/capacity db) 0)
-         (>= (:recycle/capacity db) 0))))
+(rh/definvariant invariant
+  [db]
+  (and (>= (:trash/capacity db) 0)
+       (>= (:recycle/capacity db) 0)))

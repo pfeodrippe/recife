@@ -1,6 +1,7 @@
 (ns hillel.ch6-traffic
   (:require
-   [recife.core :as r]))
+   [recife.core :as r]
+   [recife.helpers :as rh]))
 
 (def global
   {:traffic/at-light? true
@@ -24,8 +25,9 @@
                                   :green :red})
        (r/done db)))})
 
-(r/defproperty termination
-  [:eventually r/all-done?])
+(rh/defproperty termination
+  [db]
+  (rh/eventually (r/all-done? db)))
 
 (comment
 

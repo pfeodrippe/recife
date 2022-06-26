@@ -16,7 +16,8 @@
   (:require
    [clojure.set :as set]
    [recife.anim :as ra]
-   [recife.core :as r]))
+   [recife.core :as r]
+   [recife.helpers :as rh]))
 
 (def global
   ;; All global keywords should be namespaced so we can differentiate it
@@ -115,10 +116,10 @@
            (r/goto :webhook/handle-request))))})
 
 ;; We don't want the same company being sent twice to the partner server.
-(r/definvariant no-partner-history-duplicates
-  (fn [{:keys [:partner/history]}]
-    (= (->> history (map first) distinct count)
-       (count history))))
+(rh/definvariant no-partner-history-duplicates
+  [{:keys [:partner/history]}]
+  (= (->> history (map first) distinct count)
+     (count history)))
 
 (comment
 

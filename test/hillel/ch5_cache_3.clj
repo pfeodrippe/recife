@@ -1,7 +1,8 @@
 (ns hillel.ch5-cache-3
   (:require
+   [malli.core :as m]
    [recife.core :as r]
-   [malli.core :as m]))
+   [recife.helpers :as rh]))
 
 (def max-consumer-req 1)
 
@@ -45,22 +46,20 @@
                                           [k (assoc m :ran? false)]))
                                   (into {}))))))})
 
-(r/definvariant invariant
-  (fn [{:keys [:cache/resources-left]}]
-    ;; See that you also can pass a two-sized vector as the result
-    ;; of `invariant` so you can see this in the output (it also works
-    ;; with temporal properties).
-    ;; It's any serializable datea (`edn` is serializable). It's used
-    ;; in the `Elle` example so we can have its output.
-    [(>= resources-left 0) {:well [:this :is :it]}]))
+(rh/definvariant invariant
+  [{:keys [:cache/resources-left]}]
+  ;; See that you also can pass a two-sized vector as the result
+  ;; of `invariant` so you can see this in the output (it also works
+  ;; with temporal properties).
+  [(>= resources-left 0) {:well [:this :is :it]}])
 
-(r/definvariant type-ok
-  (fn [db]
-    ;; As this is just normal Clojure code, you can use whatever
-    ;; libarry you want, e.g. `Malli` to check for your own schema.
-    (m/validate [:map [:cache/resource-cap int?
-                       :cache/resources-left int?]]
-                db)))
+(rh/definvariant type-ok
+  [db]
+  ;; As this is just normal Clojure code, you can use whatever
+  ;; libarry you want, e.g. `Malli` to check for your own schema.
+  (m/validate [:map [:cache/resource-cap int?
+                     :cache/resources-left int?]]
+              db))
 
 (comment
 

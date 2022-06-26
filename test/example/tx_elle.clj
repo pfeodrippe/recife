@@ -4,7 +4,8 @@
   (:require
    [elle.list-append :as elle-append]
    [recife.core :as r]
-   [recife.anim :as ra]))
+   [recife.anim :as ra]
+   [recife.helpers :as rh]))
 
 (def global
   "`:tx/writes` is used to pass data from the `::client` process
@@ -64,20 +65,20 @@
          (update-in [:recife/metadata :history] conj [[:r :x reads]])
          (r/goto ::client-write)))})
 
-(r/definvariant serializable?
-  (fn [{:keys [:recife/metadata]}]
-    (let [result (->> (:history metadata)
-                      (mapv (fn [transaction] {:type :ok, :value transaction}))
-                      (elle-append/check {:consistency-models [:serializable], :directory "out"}))]
-      ;; We can return a boolean or a two-sized vector. For the last one, the first
-      ;; is a boolean and the second one is date you want to appear in the
-      ;; output (if the boolean  is `false`).
-      [(:valid? result) result])))
+(rh/definvariant serializable?
+  [{:keys [:recife/metadata]}]
+  (let [result (->> (:history metadata)
+                    (mapv (fn [transaction] {:type :ok, :value transaction}))
+                    (elle-append/check {:consistency-models [:serializable], :directory "out"}))]
+    ;; We can return a boolean or a two-sized vector. For the last one, the first
+    ;; is a boolean and the second one is date you want to appear in the
+    ;; output (if the boolean  is `false`).
+    [(:valid? result) result]))
 
-(r/defconstraint constraint
-  (fn [{:keys [:recife/metadata]}]
-    ;; As the growing is unbounded, just check until we have 20 transactions.
-    (<= (-> metadata :history count) 20)))
+(rh/defconstraint constraint
+  [{:keys [:recife/metadata]}]
+  ;; As the growing is unbounded, just check until we have 20 transactions.
+  (<= (-> metadata :history count) 20))
 
 (comment
 

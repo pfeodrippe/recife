@@ -1,7 +1,8 @@
 (ns hillel.ch2-telephone-2
   (:require
    [recife.core :as r]
-   [recife.anim :as ra]))
+   [recife.anim :as ra]
+   [recife.helpers :as rh]))
 
 (def global
   {:tel/to-send [1 2 3]
@@ -34,16 +35,16 @@
          (= (count (:tel/received new-db)) 3)
          r/done)))})
 
-(r/defproperty eventually-always-ordered
-  [:eventually
-   [:always
-    (fn [{:keys [:tel/received] :as db}]
-      (r/implies (r/all-done? db)
-                 (= received [1 2 3])))]])
+(rh/defproperty eventually-always-ordered
+  [{:keys [:tel/received] :as db}]
+  (rh/eventually
+   (rh/always
+    (r/implies (r/all-done? db)
+               (= received [1 2 3])))))
 
 (comment
 
-  ;; ok.
+  ;; deadlock.
   (def result (r/run-model global #{sender receiver eventually-always-ordered}))
 
   (ra/visualize-result result)

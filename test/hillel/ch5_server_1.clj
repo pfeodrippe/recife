@@ -1,6 +1,7 @@
 (ns hillel.ch5-server-1
   (:require
-   [recife.core :as r]))
+   [recife.core :as r]
+   [recife.helpers :as rh]))
 
 (def max-queue-size 2)
 
@@ -24,9 +25,9 @@
            (update :server/queue rest)
            (assoc :current-message (first queue)))))})
 
-(r/definvariant bounded-queue
-  (fn [{:keys [:server/queue]}]
-    (<= (count queue) max-queue-size)))
+(rh/definvariant bounded-queue
+  [{:keys [:server/queue]}]
+  (<= (count queue) max-queue-size))
 
 (comment
 

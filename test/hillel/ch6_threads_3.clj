@@ -1,7 +1,8 @@
 (ns hillel.ch6-threads-3
   (:require
+   [recife.anim :as ra]
    [recife.core :as r]
-   [recife.anim :as ra]))
+   [recife.helpers :as rh]))
 
 (def threads #{:t1 :t2 :t3})
 
@@ -66,20 +67,19 @@
    (fn [db]
      (r/goto db ::p1))})
 
-(r/definvariant at-most-one-critical
-  (fn [{:keys [::r/procs]}]
-    (<= (->> procs
-             vals
-             (filter (comp #{::cs} :pc))
-             count)
-        1)))
+(rh/definvariant at-most-one-critical
+  [{:keys [::r/procs]}]
+  (<= (->> procs
+           vals
+           (filter (comp #{::cs} :pc))
+           count)
+      1))
 
-(r/defproperty no-livelocks
-  [:forall {'t threads}
-   [:eventually
-    [:invoke {:t 't}
-     (fn [{:keys [:t ::r/procs]}]
-       (= (get-in procs [t :pc]) ::cs))]]])
+(rh/defproperty no-livelocks
+  [{:keys [::r/procs]}]
+  (rh/for-all [t threads]
+    (rh/eventually
+     (= (get-in procs [t :pc]) ::cs))))
 
 (comment
 
