@@ -15,26 +15,14 @@
    [tla-edn.spec :as spec]
    [cognitect.transit :as t]
    [clojure.set :as set]
-   [taoensso.tufte :as tufte :refer [defnp p defnp-]])
+   [taoensso.tufte :as tufte :refer [defnp p defnp-]]
+   [recife.util :as u :refer [p*]])
   (:import
    (java.io File)
    (lambdaisland.deep_diff2.diff_impl Mismatch Deletion Insertion)
    (tlc2.output IMessagePrinterRecorder MP EC)
    (tlc2.value.impl Value StringValue ModelValue)
    (util UniqueString)))
-
-(defonce pd
-  (tufte/new-pdata))
-
-(defmacro p*
-  [id & body]
-  `(do ~@body)
-  #_`(let [t0# (System/nanoTime)]
-     (tufte/with-profiling pd {}
-       (try
-         ~@body
-         (finally
-           (tufte/capture-time! pd ~id (- (System/nanoTime) t0#)))))))
 
 (defn- custom-munge
   [v]
@@ -46,17 +34,31 @@
     (keyword (repl/demunge s))))
 
 (extend-protocol tla-edn/TLAPlusEdn
+  tlc2.value.impl.RecordValue
+  (-to-edn [v]
+    (p* ::tla-edn--record
+        (let [name->value (p* ::tla-edn--zipmap
+                              (zipmap (p* ::tla-edn--zipmap-keys
+                                          (mapv tla-edn/-to-edn (.-names v)))
+                                      (p* ::tla-edn--zipmap-values
+                                          (mapv tla-edn/-to-edn (.-values v)))))]
+          (if (= name->value {:tla-edn.record/empty? true})
+            {}
+            name->value))))
+
   StringValue
   (-to-edn [v]
-    (let [s (str/replace (str (.val v)) #"___" ".")
-          k (keyword (repl/demunge s))]
-      (if (= k :recife/null)
-        nil
-        k)))
+    (p* ::tla-edn--string
+        (let [s (str/replace (str (.val v)) #"___" ".")
+              k (keyword (repl/demunge s))]
+          (if (= k :recife/null)
+            nil
+            k))))
 
   UniqueString
   (-to-edn [v]
-    (to-edn-string v)))
+    (p* ::tla-edn--unique-string
+        (to-edn-string v))))
 
 (extend-protocol tla-edn/EdnToTla
   clojure.lang.Keyword
@@ -134,12 +136,15 @@
   [identifier f self-tla extra-args-tla ^Value main-var-tla]
   (p* ::process-operator
       (try
-        (let [self (p ::a (tla-edn/to-edn self-tla {:string-to-keyword? true}))
-              main-var (p ::b (tla-edn/to-edn main-var-tla {:string-to-keyword? true}))
+        (let [self (p ::to-edn-self-tla
+                      (tla-edn/to-edn self-tla {:string-to-keyword? true}))
+              main-var (p ::to-edn-main-var-tla
+                          (tla-edn/to-edn main-var-tla {:string-to-keyword? true}))
               ;; `"_no"` is a indicator that the operator is not using extra args.
-              extra-args (p ::c (if (contains? (set (mapv str (.-names extra-args-tla))) "_no")
-                            {}
-                            (tla-edn/to-edn extra-args-tla)))
+              extra-args (p ::extra-args
+                            (if (contains? (set (mapv str (.-names extra-args-tla))) "_no")
+                              {}
+                              (tla-edn/to-edn extra-args-tla)))
               result (process-operator* identifier f self extra-args main-var)]
           (tla-edn/to-tla-value result))
         (catch Exception e
@@ -185,9 +190,9 @@
   [f ^Value main-var-tla]
   (p* ::process-local-operator
       (try
-        (let [main-var (p ::dd (tla-edn/to-edn main-var-tla {:string-to-keyword? true}))
-              result (p ::ee (f main-var))]
-          (p ::ff (tla-edn/to-tla-value result)))
+        (let [main-var (p ::local-op-to-edn-main-var-tla (tla-edn/to-edn main-var-tla {:string-to-keyword? true}))
+              result (p ::local-op-result (f main-var))]
+          (p ::local-op-to-tla (tla-edn/to-tla-value result)))
         (catch Exception e
           (serialize-obj e exception-filename)
           (throw e)))))
@@ -1083,9 +1088,9 @@ VIEW
                              state-writer))
             _ (do (doto tlc
                     .process)
-                  (let [pstats (seq @@pd)]
+                  (let [pstats @@u/pd]
                     (when (:stats pstats)
-                      (tufte/format-pstats pstats))))
+                      (println (str "\n\n" (tufte/format-pstats pstats))))))
             recorder-info @recorder-atom
             _ (do (def tlc tlc)
                   (def recorder-info recorder-info))
@@ -1269,8 +1274,8 @@ VIEW
              (loop []
                (when-let [line (read-line)]
                  ;; If it's a EDN hashmap, do not print it.
-                 (when-not (str/starts-with? line "{:")
-                   (println line))
+                 (when-let [last-line (last @output)]
+                   (println last-line))
                  (swap! output conj line)
                  (recur)))))
          ;; Wait until the process finishes.
@@ -1474,6 +1479,13 @@ VIEW
        {:name name#
         :constraint f#
         :operator (state-constraint name# f#)})))
+
+(comment
+
+  ;; TODO (from 2022-12-17):
+  ;; - [ ] Use Clerk for for visualization
+
+  ())
 
 (comment
 

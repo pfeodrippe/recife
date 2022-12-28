@@ -18,7 +18,6 @@
          (assoc :flag true)
          (r/goto ::p2)))
 
-
    ::p2
    (fn [{:keys [::r/procs :self] :as db}]
      (if (->> procs
@@ -85,8 +84,18 @@
 
   ;; back-to-state at around 30-32 states (back to 2-4)
   (def result
-    (r/run-model global #{thread at-most-one-critical no-livelocks}))
+    (r/run-model global #{thread at-most-one-critical no-livelocks} #_{:run-local? true}))
 
   (ra/visualize-result result)
+
+  ;; TLA+ comparison.
+  "
+Time	 Diameter	Found	Distinct	Queue
+00:00:00	0	4	4	4
+00:00:03	10	11 100	3 732	1 136
+00:00:17	38	94 984	23 412	0"
+
+  ;; CLJ
+  "Finished in 01min 04s at (2022-12-27 21:56:27)"
 
   ())

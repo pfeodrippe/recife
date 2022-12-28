@@ -1,9 +1,11 @@
 (ns tla-edn.core
+  (:require
+   [clojure.string :as str]
+   [recife.util :refer [p*]])
   (:import
    (tlc2.value.impl Value IntValue RecordValue BoolValue FcnRcdValue
                     StringValue TupleValue SetEnumValue BoolValue)
-   (util UniqueString))
-  (:require [clojure.string :as str]))
+   (util UniqueString)))
 
 (def ^:private ^:dynamic *string-to-keyword?* false)
 
@@ -21,52 +23,60 @@
 (extend-protocol TLAPlusEdn
   tlc2.value.impl.RecordValue
   (-to-edn [v]
-    (let [name->value (zipmap (mapv -to-edn (.-names v))
-                              (mapv -to-edn (.-values v)))]
-      (if (= name->value {:tla-edn.record/empty? true})
-        {}
-        name->value)))
+    (p* ::record
+        (let [name->value (zipmap (mapv -to-edn (.-names v))
+                                  (mapv -to-edn (.-values v)))]
+          (if (= name->value {:tla-edn.record/empty? true})
+            {}
+            name->value))))
 
   tlc2.value.impl.FcnRcdValue
   (-to-edn [v]
-    (zipmap (mapv #(-to-edn (.val %)) (.-domain v))
-            (mapv -to-edn (.-values v))))
+    (p* ::fcn
+        (zipmap (mapv #(-to-edn (.val %)) (.-domain v))
+                (mapv -to-edn (.-values v)))))
 
   tlc2.value.impl.TupleValue
   (-to-edn [v]
-    (mapv -to-edn (.getElems v)))
+    (p* ::tuple
+        (mapv -to-edn (.getElems v))))
 
   tlc2.value.impl.SetEnumValue
   (-to-edn [v]
-    (set (mapv -to-edn (.toArray (.-elems v)))))
+    (p* ::set
+        (set (mapv -to-edn (.toArray (.-elems v))))))
 
   tlc2.value.impl.IntValue
   (-to-edn [v]
-    (.val v))
+    (p* ::int
+        (.val v)))
 
   tlc2.value.impl.StringValue
   (-to-edn [v]
-    (let [s (str (.val v))]
-      (if (str/includes? s "__")
-        (let [[nmsp n] (str/split s #"__")]
-          (keyword nmsp n))
-        (if *string-to-keyword?*
-          (keyword s)
-          s))))
+    (p* ::string
+        (let [s (str (.val v))]
+          (if (str/includes? s "__")
+            (let [[nmsp n] (str/split s #"__")]
+              (keyword nmsp n))
+            (if *string-to-keyword?*
+              (keyword s)
+              s)))))
 
   UniqueString
   (-to-edn [v]
-    (let [s (str v)]
-      (if (str/includes? s "__")
-        (let [[nmsp n] (str/split s #"__")]
-          (keyword nmsp n))
-        (if *string-to-keyword?*
-          (keyword s)
-          s))))
+    (p* ::unique-string
+        (let [s (str v)]
+          (if (str/includes? s "__")
+            (let [[nmsp n] (str/split s #"__")]
+              (keyword nmsp n))
+            (if *string-to-keyword?*
+              (keyword s)
+              s)))))
 
   tlc2.value.impl.BoolValue
   (-to-edn [v]
-    (.getVal v)))
+    (p* ::bool
+        (.getVal v))))
 
 (defprotocol EdnToTla
   (-to-tla-value [this]))
