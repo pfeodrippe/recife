@@ -33,15 +33,38 @@
   (let [s (str/replace (str v)  #"___" ".")]
     (keyword (repl/demunge s))))
 
+(defonce keys-cache (atom {}))
+(defonce values-cache (atom {}))
+
+(defn record-keys
+  [v]
+  (mapv #(or (get @keys-cache %)
+             (p* ::k-no-cache
+                 (let [result (tla-edn/-to-edn %)]
+                   (swap! keys-cache assoc % result)
+                   result)))
+        #_tla-edn/-to-edn
+        (.-names v)))
+
+(defn record-values
+  [v]
+  (mapv #(or (get @values-cache (str %))
+             (p* ::v-no-cache
+                 (let [result (tla-edn/-to-edn %)]
+                   (swap! values-cache assoc (str %) result)
+                   result)))
+        #_tla-edn/-to-edn
+        (.-values v)))
+
 (extend-protocol tla-edn/TLAPlusEdn
   tlc2.value.impl.RecordValue
   (-to-edn [v]
     (p* ::tla-edn--record
         (let [name->value (p* ::tla-edn--zipmap
                               (zipmap (p* ::tla-edn--zipmap-keys
-                                          (mapv tla-edn/-to-edn (.-names v)))
+                                          (record-keys v))
                                       (p* ::tla-edn--zipmap-values
-                                          (mapv tla-edn/-to-edn (.-values v)))))]
+                                          (record-values v))))]
           (if (= name->value {:tla-edn.record/empty? true})
             {}
             name->value))))

@@ -6,7 +6,8 @@
   (tufte/new-pdata {:dynamic? true}))
 
 (def enable-tufte
-  #_false true)
+  #_false
+  true)
 
 (defmacro p*
   [id & body]

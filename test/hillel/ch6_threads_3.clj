@@ -4,7 +4,7 @@
    [recife.core :as r]
    [recife.helpers :as rh]))
 
-(def threads #{:t1 :t2 :t3})
+(def threads #{:t1 :t2 :t3 :t4})
 
 (def global
   {:thread/next-thread (r/one-of threads)})
