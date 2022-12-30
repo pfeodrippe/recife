@@ -4,7 +4,7 @@
    [recife.core :as r]
    [recife.helpers :as rh]))
 
-(def threads #{:t1 :t2 :t3 :t4})
+(def threads #{:t1 :t2 :t3 #_:t4})
 
 (def global
   {:thread/next-thread (r/one-of threads)})
@@ -87,6 +87,12 @@
     (r/run-model global #{thread at-most-one-critical no-livelocks} #_{:run-local? true}))
 
   (ra/visualize-result result)
+
+  ;; TODO:
+  ;; - [ ] Check if we can use potemkin defmap to create an abstraction over
+  ;;       RecordValue
+  ;; - [ ] Change tla+ code to create a Clojure map in RecordValue?
+  ;; - [ ] Support TLC simulate option
 
   ;; TLA+ comparison.
   "

@@ -16,12 +16,13 @@
    [cognitect.transit :as t]
    [clojure.set :as set]
    [taoensso.tufte :as tufte :refer [defnp p defnp-]]
-   [recife.util :as u :refer [p*]])
+   [recife.util :as u :refer [p*]]
+   [potemkin :refer [def-map-type]])
   (:import
    (java.io File)
    (lambdaisland.deep_diff2.diff_impl Mismatch Deletion Insertion)
    (tlc2.output IMessagePrinterRecorder MP EC)
-   (tlc2.value.impl Value StringValue ModelValue)
+   (tlc2.value.impl Value StringValue ModelValue RecordValue)
    (util UniqueString)))
 
 (defn- custom-munge
@@ -36,24 +37,106 @@
 (defonce keys-cache (atom {}))
 (defonce values-cache (atom {}))
 
+(defn- record-info-from-record
+  [record]
+  (let [names (mapv tla-edn/to-edn (.-names record))]
+    {:names names
+     :names-index (set names)
+     :values (.-values record)}))
+
+(declare build-record-map)
+
+(def-map-type TlaRecordMap [record record-info]
+  (get [_ k default-value]
+       (if (contains? (:names-index record-info) k)
+         (.select record (StringValue. (name k)))
+         default-value))
+
+  (assoc [_ k v]
+         (build-record-map (conj (into [] (.-names record))
+                                 (UniqueString/of (name k)))
+                           (conj (into [] (.-values record))
+                                 (tla-edn/to-tla-value v))))
+
+  (dissoc [_ k]
+          (let [names (transient [])
+                values (transient [])]
+            (loop [record-names (.names record)
+                   record-values (.values record)]
+              (let [n (first record-names)]
+                (when n
+                  (when-not (= (tla-edn/to-edn n) k)
+                    (conj! names n)
+                    (conj! values (first record-values)))
+                  (recur (rest record-names) (rest record-values)))))
+            (build-record-map (persistent! names)
+                              (persistent! values))))
+
+  (keys [_] (:names record-info))
+
+  (empty [_] (build-record-map [] [])))
+
+(comment
+
+  (:a (build-record-map (tla-edn/to-tla-value {:a 4})))
+
+  (.record (assoc (build-record-map (tla-edn/to-tla-value {:a 4})) :g 10))
+
+  (.record (-> (assoc (build-record-map (tla-edn/to-tla-value {:a 4})) :g 10)
+               (dissoc :a)))
+
+  (keys (assoc (build-record-map (tla-edn/to-tla-value {:a 4})) :g 10))
+
+  ())
+
+(defn- build-record-map
+  ([record]
+   (TlaRecordMap. record (record-info-from-record record)))
+  ([names values]
+   (let [record (RecordValue.
+                 (into-array UniqueString names)
+                 (into-array Value values)
+                 false)]
+     (TlaRecordMap. record (record-info-from-record record)))))
+
+(comment
+
+  #_(let [record
+        record-info (build-record-info record)]
+    (def record record)
+    (def record-info record-info)
+    #_(aset (.-names record) 0 (UniqueString/of "b"))
+    #_(aset (.-values record) 0 (StringValue. "dd"))
+    (.select record (StringValue. "b")))
+
+  (RecordValue. (into-array UniqueString (conj (into [] (.-names record)) (UniqueString/of "eita")))
+                (into-array Value (conj (into [] (.-values record)) (StringValue. "eita")))
+                false)
+
+  ;; TODO: Maybe also keep a companion Clojure map?
+
+
+
+  ())
+
 (defn record-keys
   [v]
-  (mapv #(or (get @keys-cache %)
+  (mapv #_#(or (get @keys-cache %)
              (p* ::k-no-cache
                  (let [result (tla-edn/-to-edn %)]
                    (swap! keys-cache assoc % result)
                    result)))
-        #_tla-edn/-to-edn
+        tla-edn/-to-edn
         (.-names v)))
 
 (defn record-values
   [v]
-  (mapv #(or (get @values-cache (str %))
+  (mapv #_#(or (get @values-cache (str %))
              (p* ::v-no-cache
                  (let [result (tla-edn/-to-edn %)]
                    (swap! values-cache assoc (str %) result)
                    result)))
-        #_tla-edn/-to-edn
+        tla-edn/-to-edn
         (.-values v)))
 
 (extend-protocol tla-edn/TLAPlusEdn
@@ -128,7 +211,7 @@
   (p* ::process-operator*
       (let [global main-var
             local (get-in main-var [::procs self])
-            result (p :result (f (merge {:self self} context global local)))
+            result (p ::result (f (merge {:self self} context global local)))
             result-global (medley/filter-keys namespace result)
             result-local (medley/remove-keys namespace result)
             metadata (if (:recife/metadata result-global)
@@ -164,12 +247,13 @@
               main-var (p ::to-edn-main-var-tla
                           (tla-edn/to-edn main-var-tla {:string-to-keyword? true}))
               ;; `"_no"` is a indicator that the operator is not using extra args.
-              extra-args (p ::extra-args
-                            (if (contains? (set (mapv str (.-names extra-args-tla))) "_no")
-                              {}
+              extra-args (if (contains? (set (mapv str (.-names extra-args-tla))) "_no")
+                           {}
+                           (p ::to-edn-extra-args
                               (tla-edn/to-edn extra-args-tla)))
               result (process-operator* identifier f self extra-args main-var)]
-          (tla-edn/to-tla-value result))
+          (p ::to-tla-value
+             (tla-edn/to-tla-value result)))
         (catch Exception e
           (serialize-obj e exception-filename)
           (throw e)))))
