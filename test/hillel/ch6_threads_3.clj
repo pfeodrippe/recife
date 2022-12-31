@@ -100,11 +100,12 @@
   ;;       RecordValue
   ;; - [x] Add most type hints
   ;;   - 64s -> 45s for :t4
-  ;; - [ ] Assoc-1 (assoc with dissoc)
-  ;;   - TBD
+  ;; - [ ] Check if to-tla function for TlaRecordMap is being used
   ;; - [ ] Change tla+ code to create a Clojure map in RecordValue?
   ;; - [ ] Try to add helper functions that deal with TLC values directly
   ;; - [ ] Support TLC simulate option
+  ;; - [ ] Should we just rely on simulate?
+  ;;   - With it, we may be able to test things faster, but not covering everything
 
   "
 pId                                             nCalls        Min      50% ≤      90% ≤      95% ≤      99% ≤        Max       Mean   MAD      Clock  Total

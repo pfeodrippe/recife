@@ -42,12 +42,8 @@
 
 (defn- record-info-from-record
   [record]
-  (p* ::record-info-from-record
-      (let [names (p* ::record-info-from-record--to-edn
-                      (mapv tla-edn/to-edn (.-names ^RecordValue record)))]
-        {:names names
-         :names-index (set names)
-         :values (.-values ^RecordValue record)})))
+  {:names (delay (p* ::record-info-from-record--to-edn
+                     (mapv tla-edn/to-edn (.-names ^RecordValue record))))})
 
 (declare build-record-map)
 
@@ -56,13 +52,13 @@
 (def-map-type TlaRecordMap [record record-info]
   (get [_ k default-value]
        (p* ::tla-record-map--get
-           (if (contains? (:names-index @record-info) k)
+           (if (contains? (set @(:names @record-info)) k)
              (let [result (.select ^RecordValue record ^StringValue (tla-edn/to-tla-value k))]
                (tla-edn/to-edn result))
              default-value)))
 
   (assoc [this k v]
-         (if (contains? (:names-index @record-info) k)
+         (if (contains? (set @(:names @record-info)) k)
            (p* ::tla-record-map--assoc-1
                (let [record'
                      (p* ::tla-record-map--assoc-1-dissoc
@@ -96,7 +92,7 @@
 
   (keys [_]
         (p* ::tla-record-map--keys
-            (:names @record-info)))
+            @(:names @record-info)))
 
   (empty [_]
          (p* ::tla-record-map--empty
@@ -738,7 +734,9 @@
    {::type ::one-of
     ::possible-values values
     ::identifier (when-let [v (some->> identifier hash)]
-                   (-> (Math/abs ^Integer v) (str "G__") symbol))}))
+                   (->> (Math/abs ^Integer v)
+                        (str "G__")
+                        symbol))}))
 
 (defn- module-template
   [{:keys [:init :next :spec-name :operators]}]
