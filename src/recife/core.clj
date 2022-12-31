@@ -34,7 +34,7 @@
   (let [s (str/replace (str v)  #"___" ".")]
     (keyword (repl/demunge s))))
 
-(defonce keys-cache (atom {}))
+(defonce string-cache (atom {}))
 (defonce values-cache (atom {}))
 
 (defn- record-info-from-record
@@ -46,37 +46,63 @@
 
 (declare build-record-map)
 
+;; TODO: Maybe also keep a companion Clojure map?
+;; TODO: We may store the index for a given k.
 (def-map-type TlaRecordMap [record record-info]
   (get [_ k default-value]
-       (if (contains? (:names-index record-info) k)
-         (.select record (StringValue. (name k)))
-         default-value))
+       (p* ::tla-record-map--get
+           (if (contains? (:names-index record-info) k)
+             (let [result (.select record (tla-edn/to-tla-value k))]
+               (tla-edn/to-edn result))
+             default-value)))
 
-  (assoc [_ k v]
-         (build-record-map (conj (into [] (.-names record))
-                                 (UniqueString/of (name k)))
-                           (conj (into [] (.-values record))
-                                 (tla-edn/to-tla-value v))))
+  (assoc [this k v]
+         (if (contains? (:names-index record-info) k)
+           (p* ::tla-record-map--assoc-1
+               (let [record'
+                     (p* ::tla-record-map--assoc-1-dissoc
+                         (.record (dissoc this k)))]
+                 (build-record-map
+                  (conj (into [] (.-names record'))
+                        (UniqueString/of (custom-munge (symbol k))))
+                  (conj (into [] (.-values record'))
+                        (tla-edn/to-tla-value v)))))
+           (p* ::tla-record-map--assoc-2
+               (build-record-map
+                (conj (into [] (.-names record))
+                      (UniqueString/of (custom-munge (symbol k))))
+                (conj (into [] (.-values record))
+                      (tla-edn/to-tla-value v))))))
 
   (dissoc [_ k]
-          (let [names (transient [])
-                values (transient [])]
-            (loop [record-names (.names record)
-                   record-values (.values record)]
-              (let [n (first record-names)]
-                (when n
-                  (when-not (= (tla-edn/to-edn n) k)
-                    (conj! names n)
-                    (conj! values (first record-values)))
-                  (recur (rest record-names) (rest record-values)))))
-            (build-record-map (persistent! names)
-                              (persistent! values))))
+          (p* ::tla-record-map--dissoc
+              (let [names (transient [])
+                    values (transient [])]
+                (loop [record-names (.names record)
+                       record-values (.values record)]
+                  (let [n (first record-names)]
+                    (when n
+                      (when-not (= (tla-edn/to-edn n) k)
+                        (conj! names n)
+                        (conj! values (first record-values)))
+                      (recur (rest record-names) (rest record-values)))))
+                (build-record-map (persistent! names)
+                                  (persistent! values)))))
 
-  (keys [_] (:names record-info))
+  (keys [_]
+        (p* ::tla-record-map--keys
+            (:names record-info)))
 
-  (empty [_] (build-record-map [] [])))
+  (empty [_]
+         (p* ::tla-record-map--empty
+             (build-record-map [] []))))
 
 (comment
+
+  (let [{:keys [g] :as xx} (assoc (build-record-map (tla-edn/to-tla-value {:a 4}))
+                                  :g 10
+                                  :g 30)]
+    g)
 
   (:a (build-record-map (tla-edn/to-tla-value {:a 4})))
 
@@ -89,6 +115,31 @@
 
   ())
 
+(comment
+
+  (assoc (tla-edn/to-edn (tla-edn/to-tla-value {:a/b 10}))
+         :flag 10)
+
+  (merge (tla-edn/to-edn (tla-edn/to-tla-value {:a/b 10}))
+         {:g 10})
+
+  (build-record-map (tla-edn/to-tla-value {:a/b 10}))
+
+  (-> (tla-edn/to-edn (tla-edn/to-tla-value {:a/b 10}))
+      (assoc :flag true)
+      #_tla-edn/to-tla-value)
+
+  (-> (tla-edn/to-edn (tla-edn/to-tla-value {:a/b 10}))
+      (assoc :flag {:a 4})
+      tla-edn/to-tla-value)
+
+  (-> (tla-edn/to-edn (tla-edn/to-tla-value {:a/b 10}))
+      (assoc :flag {:a 4})
+      :flag
+      vals)
+
+  ())
+
 (defn- build-record-map
   ([record]
    (TlaRecordMap. record (record-info-from-record record)))
@@ -98,26 +149,6 @@
                  (into-array Value values)
                  false)]
      (TlaRecordMap. record (record-info-from-record record)))))
-
-(comment
-
-  #_(let [record
-        record-info (build-record-info record)]
-    (def record record)
-    (def record-info record-info)
-    #_(aset (.-names record) 0 (UniqueString/of "b"))
-    #_(aset (.-values record) 0 (StringValue. "dd"))
-    (.select record (StringValue. "b")))
-
-  (RecordValue. (into-array UniqueString (conj (into [] (.-names record)) (UniqueString/of "eita")))
-                (into-array Value (conj (into [] (.-values record)) (StringValue. "eita")))
-                false)
-
-  ;; TODO: Maybe also keep a companion Clojure map?
-
-
-
-  ())
 
 (defn record-keys
   [v]
@@ -142,29 +173,38 @@
 (extend-protocol tla-edn/TLAPlusEdn
   tlc2.value.impl.RecordValue
   (-to-edn [v]
-    (p* ::tla-edn--record
-        (let [name->value (p* ::tla-edn--zipmap
-                              (zipmap (p* ::tla-edn--zipmap-keys
-                                          (record-keys v))
-                                      (p* ::tla-edn--zipmap-values
-                                          (record-values v))))]
-          (if (= name->value {:tla-edn.record/empty? true})
-            {}
-            name->value))))
+    (build-record-map v))
+  #_(-to-edn [v]
+      (p* ::tla-edn--record
+          (let [name->value (p* ::tla-edn--zipmap
+                                (zipmap (p* ::tla-edn--zipmap-keys
+                                            (record-keys v))
+                                        (p* ::tla-edn--zipmap-values
+                                            (record-values v))))]
+            (if (= name->value {:tla-edn.record/empty? true})
+              {}
+              name->value))))
 
   StringValue
-  (-to-edn [v]
+  (-to-edn [v']
     (p* ::tla-edn--string
-        (let [s (str/replace (str (.val v)) #"___" ".")
-              k (keyword (repl/demunge s))]
-          (if (= k :recife/null)
-            nil
-            k))))
+        (let [v (.val v')]
+          (or (get @string-cache v)
+              (let [s (str/replace (str v) #"___" ".")
+                    k (keyword (repl/demunge s))
+                    result (if (= k :recife/null)
+                             nil
+                             k)]
+                (swap! string-cache assoc v result)
+                result)))))
 
   UniqueString
   (-to-edn [v]
     (p* ::tla-edn--unique-string
-        (to-edn-string v))))
+        (or (get @string-cache v)
+            (let [result (to-edn-string v)]
+              (swap! string-cache assoc v result)
+              result)))))
 
 (extend-protocol tla-edn/EdnToTla
   clojure.lang.Keyword
@@ -182,7 +222,12 @@
 
   clojure.lang.Symbol
   (tla-edn/-to-tla-value [v]
-    (ModelValue/make (str v))))
+    (ModelValue/make (str v)))
+
+  TlaRecordMap
+  (tla-edn/-to-tla-value [v]
+    (p* ::to-tla--tla-record-map
+        (.record v))))
 
 ;; TODO: For serialized objecs, make it a custom random filename
 ;; so exceptions from concurrent executions do not mess with each other.
