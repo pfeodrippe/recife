@@ -4,7 +4,7 @@
    [recife.core :as r]
    [recife.helpers :as rh]))
 
-(def threads #{:t1 :t2 :t3})
+(def threads #{:t1 :t2 :t3 #_:t4})
 
 (def global
   {:thread/next-thread (r/one-of threads)})
@@ -94,10 +94,14 @@
   ;; TODO:
   ;; - [x] Cache unique string
   ;;   - 14% to 4%
-  ;; - [ ] Cache string
+  ;; - [x] Cache string
   ;;   - 4% to 1%
-  ;; - [ ] Check if we can use potemkin defmap to create an abstraction over
+  ;; - [x] Check if we can use potemkin defmap to create an abstraction over
   ;;       RecordValue
+  ;; - [x] Add most type hints
+  ;;   - 64s -> 45s for :t4
+  ;; - [ ] Assoc-1 (assoc with dissoc)
+  ;;   - TBD
   ;; - [ ] Change tla+ code to create a Clojure map in RecordValue?
   ;; - [ ] Try to add helper functions that deal with TLC values directly
   ;; - [ ] Support TLC simulate option

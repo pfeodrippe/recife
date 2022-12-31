@@ -25,6 +25,9 @@
    (tlc2.value.impl Value StringValue ModelValue RecordValue)
    (util UniqueString)))
 
+(set! *warn-on-reflection* false)
+#_(set! *warn-on-reflection* true)
+
 (defn- custom-munge
   [v]
   (str/replace (munge v) #"\." "___"))
@@ -39,10 +42,12 @@
 
 (defn- record-info-from-record
   [record]
-  (let [names (mapv tla-edn/to-edn (.-names record))]
-    {:names names
-     :names-index (set names)
-     :values (.-values record)}))
+  (p* ::record-info-from-record
+      (let [names (p* ::record-info-from-record--to-edn
+                      (mapv tla-edn/to-edn (.-names ^RecordValue record)))]
+        {:names names
+         :names-index (set names)
+         :values (.-values ^RecordValue record)})))
 
 (declare build-record-map)
 
@@ -51,35 +56,35 @@
 (def-map-type TlaRecordMap [record record-info]
   (get [_ k default-value]
        (p* ::tla-record-map--get
-           (if (contains? (:names-index record-info) k)
-             (let [result (.select record (tla-edn/to-tla-value k))]
+           (if (contains? (:names-index @record-info) k)
+             (let [result (.select ^RecordValue record ^StringValue (tla-edn/to-tla-value k))]
                (tla-edn/to-edn result))
              default-value)))
 
   (assoc [this k v]
-         (if (contains? (:names-index record-info) k)
+         (if (contains? (:names-index @record-info) k)
            (p* ::tla-record-map--assoc-1
                (let [record'
                      (p* ::tla-record-map--assoc-1-dissoc
-                         (.record (dissoc this k)))]
+                         (.record ^TlaRecordMap (dissoc this k)))]
                  (build-record-map
-                  (conj (into [] (.-names record'))
+                  (conj (into [] (.-names ^RecordValue record'))
                         (UniqueString/of (custom-munge (symbol k))))
-                  (conj (into [] (.-values record'))
+                  (conj (into [] (.-values ^RecordValue record'))
                         (tla-edn/to-tla-value v)))))
            (p* ::tla-record-map--assoc-2
                (build-record-map
-                (conj (into [] (.-names record))
+                (conj (into [] (.-names ^RecordValue record))
                       (UniqueString/of (custom-munge (symbol k))))
-                (conj (into [] (.-values record))
+                (conj (into [] (.-values ^RecordValue record))
                       (tla-edn/to-tla-value v))))))
 
   (dissoc [_ k]
           (p* ::tla-record-map--dissoc
               (let [names (transient [])
                     values (transient [])]
-                (loop [record-names (.names record)
-                       record-values (.values record)]
+                (loop [record-names (.-names ^RecordValue record)
+                       record-values (.-values ^RecordValue record)]
                   (let [n (first record-names)]
                     (when n
                       (when-not (= (tla-edn/to-edn n) k)
@@ -91,7 +96,7 @@
 
   (keys [_]
         (p* ::tla-record-map--keys
-            (:names record-info)))
+            (:names @record-info)))
 
   (empty [_]
          (p* ::tla-record-map--empty
@@ -142,13 +147,13 @@
 
 (defn- build-record-map
   ([record]
-   (TlaRecordMap. record (record-info-from-record record)))
+   (TlaRecordMap. record (delay (record-info-from-record record))))
   ([names values]
    (let [record (RecordValue.
-                 (into-array UniqueString names)
-                 (into-array Value values)
+                 (tla-edn/typed-array UniqueString names)
+                 (tla-edn/typed-array Value values)
                  false)]
-     (TlaRecordMap. record (record-info-from-record record)))))
+     (TlaRecordMap. record (delay (record-info-from-record record))))))
 
 (defn record-keys
   [v]
@@ -158,7 +163,7 @@
                    (swap! keys-cache assoc % result)
                    result)))
         tla-edn/-to-edn
-        (.-names v)))
+        (.-names ^RecordValue v)))
 
 (defn record-values
   [v]
@@ -168,7 +173,7 @@
                    (swap! values-cache assoc (str %) result)
                    result)))
         tla-edn/-to-edn
-        (.-values v)))
+        (.-values ^RecordValue v)))
 
 (extend-protocol tla-edn/TLAPlusEdn
   tlc2.value.impl.RecordValue
@@ -210,7 +215,7 @@
   clojure.lang.Keyword
   (tla-edn/-to-tla-value
     [v]
-    (StringValue. (custom-munge (symbol v))))
+    (StringValue. ^String (custom-munge (symbol v))))
 
   nil
   (tla-edn/-to-tla-value [_]
@@ -239,13 +244,13 @@
 
 (def ^:private Lock (Object.))
 
-(defn- serialize-obj [object filename]
+(defn- serialize-obj [object ^String filename]
   (locking Lock
     (when-not (.exists (io/as-file filename))
       (with-open [outp (-> (java.io.File. filename) java.io.FileOutputStream. java.io.ObjectOutputStream.)]
         (.writeObject outp object)))))
 
-(defn- deserialize-obj [filename]
+(defn- deserialize-obj [^String filename]
   (with-open [inp (-> (java.io.File. filename) java.io.FileInputStream. java.io.ObjectInputStream.)]
     (.readObject inp)))
 
@@ -292,7 +297,7 @@
               main-var (p ::to-edn-main-var-tla
                           (tla-edn/to-edn main-var-tla {:string-to-keyword? true}))
               ;; `"_no"` is a indicator that the operator is not using extra args.
-              extra-args (if (contains? (set (mapv str (.-names extra-args-tla))) "_no")
+              extra-args (if (contains? (set (mapv str (.-names ^RecordValue extra-args-tla))) "_no")
                            {}
                            (p ::to-edn-extra-args
                               (tla-edn/to-edn extra-args-tla)))
@@ -732,7 +737,8 @@
   ([identifier values]
    {::type ::one-of
     ::possible-values values
-    ::identifier (some->> identifier hash Math/abs (str "G__") symbol)}))
+    ::identifier (when-let [v (some->> identifier hash)]
+                   (-> (Math/abs ^Integer v) (str "G__") symbol))}))
 
 (defn- module-template
   [{:keys [:init :next :spec-name :operators]}]
@@ -926,11 +932,11 @@ VIEW
 ")))
 
 (defn- private-field
-  ([obj fn-name-string]
+  ([^Object obj ^String fn-name-string]
    (let [m (.. obj getClass (getDeclaredField fn-name-string))]
      (. m (setAccessible true))
      (. m (get obj))))
-  ([obj super-klass fn-name-string]
+  ([^Object obj ^Class super-klass ^String fn-name-string]
    (let [m (.. super-klass (getDeclaredField fn-name-string))]
      (. m (setAccessible true))
      (. m (get obj)))))
@@ -939,7 +945,7 @@ VIEW
 (def ^:private edn-states-atom (atom {}))
 
 (defn- edn-save-state
-  [tlc-state]
+  [^tlc2.tool.TLCState tlc-state]
   (let [edn-state (->> tlc-state
                        .getVals
                        (some #(when (= (str (key %)) "main_var")
@@ -951,13 +957,13 @@ VIEW
             :successors #{}})))
 
 (defn- edn-rank-state
-  [tlc-state]
+  [^tlc2.tool.TLCState tlc-state]
   (swap! edn-states-atom update-in
          [:ranks (dec (.getLevel tlc-state))]
          (fnil conj #{}) (.fingerPrint tlc-state)))
 
 (defn- edn-save-successor
-  [tlc-state tlc-successor]
+  [^tlc2.tool.TLCState tlc-state ^tlc2.tool.TLCState tlc-successor]
   (let [successor-state (->> tlc-successor
                              .getVals
                              (some #(when (= (str (key %)) "main_var")
@@ -1019,7 +1025,7 @@ VIEW
 
 ;; FileStateWriter
 (defn- file-sw-save-state
-  [{:keys [:edn-states-atom]} tlc-state]
+  [{:keys [:edn-states-atom]} ^tlc2.tool.TLCState tlc-state]
   (let [edn-state (->> tlc-state
                        .getVals
                        (some #(when (= (str (key %)) "main_var")
@@ -1031,13 +1037,13 @@ VIEW
             :successors #{}})))
 
 (defn- file-sw-rank-state
-  [{:keys [:edn-states-atom]} tlc-state]
+  [{:keys [:edn-states-atom]} ^tlc2.tool.TLCState tlc-state]
   (swap! edn-states-atom update-in
          [:ranks (dec (.getLevel tlc-state))]
          (fnil conj #{}) (.fingerPrint tlc-state)))
 
 (defn- file-sw-save-successor
-  [{:keys [:edn-states-atom]} tlc-state tlc-successor]
+  [{:keys [:edn-states-atom]} ^tlc2.tool.TLCState tlc-state ^tlc2.tool.TLCState tlc-successor]
   (let [successor-state (->> tlc-successor
                              .getVals
                              (some #(when (= (str (key %)) "main_var")
@@ -1090,7 +1096,7 @@ VIEW
   (close [_]
     (t/write writer @edn-states-atom)
     (reset! edn-states-atom nil)
-    (.close output-stream))
+    (.close ^java.io.OutputStream output-stream))
 
   (getDumpFileName [_])
 
@@ -1236,9 +1242,9 @@ VIEW
                            (let [file-path (.getAbsolutePath (File/createTempFile "transit-output" ".msgpack"))
                                  os (io/output-stream file-path)
                                  state-writer (->FileStateWriter (t/writer os :msgpack) os (atom {}) file-path)]
-                             (.setStateWriter tlc state-writer)
+                             (.setStateWriter ^tlc2.TLC tlc state-writer)
                              state-writer))
-            _ (do (doto tlc
+            _ (do (doto ^tlc2.TLC tlc
                     .process)
                   (let [pstats @@u/pd]
                     (when (:stats pstats)
@@ -1247,10 +1253,11 @@ VIEW
             _ (do (def tlc tlc)
                   (def recorder-info recorder-info))
             {:keys [:trace
-                    :info]} (if-some [error-trace (-> (private-field tlc "recorder")
+                    :info]} (if-some [error-trace (-> ^tlc2.output.ErrorTraceMessagePrinterRecorder
+                                                      (private-field tlc "recorder")
                                                       .getMCErrorTrace
                                                       (.orElse nil))]
-                              (let [states (->> (.getStates error-trace)
+                              (let [states (->> (.getStates ^tlc2.model.MCError error-trace)
                                                 (mapv bean))
                                     stuttering-state (some #(when (:stuttering %) %) states)
                                     back-to-state (some #(when (:backToState %) %) states)]
@@ -1264,8 +1271,9 @@ VIEW
                                              (mapv (fn [state]
                                                      (->> state
                                                           :variables
-                                                          (some #(when (= (.getName %) "main_var")
-                                                                   (.getTLCValue %))))))
+                                                          (some #(when (= (.getName ^tlc2.model.MCVariable %)
+                                                                          "main_var")
+                                                                   (.getTLCValue ^tlc2.model.MCVariable %))))))
                                              (mapv tla-edn/to-edn)
                                              (map-indexed (fn [idx v] [idx v]))
                                              (into []))
@@ -1300,7 +1308,7 @@ VIEW
                                   :else
                                   {:trace :ok})))]
         (-> {:trace (cond
-                      (nil? (some-> tlc2.TLCGlobals/mainChecker .theFPSet .size))
+                      (nil? (some-> ^tlc2.tool.AbstractChecker tlc2.TLCGlobals/mainChecker .theFPSet .size))
                       :error
 
                       (and (= trace :ok) (:trace-example? opts))

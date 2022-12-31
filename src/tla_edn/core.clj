@@ -7,6 +7,9 @@
                     StringValue TupleValue SetEnumValue BoolValue)
    (util UniqueString)))
 
+#_(set! *warn-on-reflection* false)
+(set! *warn-on-reflection* true)
+
 (def ^:private ^:dynamic *string-to-keyword?* false)
 
 (defprotocol TLAPlusEdn
@@ -33,7 +36,8 @@
   tlc2.value.impl.FcnRcdValue
   (-to-edn [v]
     (p* ::fcn
-        (zipmap (mapv #(-to-edn (.val %)) (.-domain v))
+        (zipmap (mapv #(-to-edn (.val ^StringValue %))
+                      (.-domain v))
                 (mapv -to-edn (.-values v)))))
 
   tlc2.value.impl.TupleValue
@@ -98,7 +102,7 @@
     (if (empty? coll)
       (-to-tla-value {:tla-edn.record/empty? true})
       (RecordValue.
-       (typed-array UniqueString (mapv #(-> % key ^String -to-tla-value .getVal) coll))
+       (typed-array UniqueString (mapv #(-> % key ^StringValue -to-tla-value .getVal) coll))
        (typed-array Value (mapv #(-> % val -to-tla-value) coll))
        false)))
 

@@ -5,9 +5,8 @@
 (defonce pd
   (tufte/new-pdata {:dynamic? true}))
 
-(def enable-tufte
-  #_false
-  true)
+(def enable-tufte false)
+#_(def enable-tufte true)
 
 (defmacro p*
   [id & body]
