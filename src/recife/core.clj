@@ -28,6 +28,8 @@
 (set! *warn-on-reflection* false)
 #_(set! *warn-on-reflection* true)
 
+#_(set! *unchecked-math* :warn-on-boxed)
+
 (defn- custom-munge
   [v]
   (str/replace (munge v) #"\." "___"))
@@ -58,22 +60,64 @@
              default-value)))
 
   (assoc [this k v]
-         (if (contains? (set @(:names @record-info)) k)
-           (p* ::tla-record-map--assoc-1
-               (let [record'
-                     (p* ::tla-record-map--assoc-1-dissoc
-                         (.record ^TlaRecordMap (dissoc this k)))]
+         (p* ::tla-record-map--assoc-1
+             (let [val-tla (p* ::val-tla-unique
+                               (UniqueString/of (custom-munge (symbol k))))
+                   ;; This is a much work solution (~5x) as strings are not
+                   ;; interned, while unique strings are.
+                   #_(p* ::val-tla
+                         (.val (tla-edn/to-tla-value k)))
+
+                   ^{:tag "[Lutil.UniqueString;"}
+                   names (.-names ^RecordValue record)
+
+                   ^{:tag "[Ltlc2.value.impl.Value;"}
+                   values (.-values ^RecordValue record)
+
+                   *new-key? (volatile! true)
+                   length (alength names)
+
+                   ^{:tag "[Lutil.UniqueString;"}
+                   new-names (make-array UniqueString length)
+
+                   ^{:tag "[Ltlc2.value.impl.Value;"}
+                   new-values (make-array Value length)]
+               (loop [idx 0]
+                 (if (< idx length)
+                   (do
+                     (let [name' (aget names idx)]
+                       (if (p ::hash
+                              (= (hash val-tla) (hash name')))
+                         (do (vreset! *new-key? false)
+                             (aset new-names idx name')
+                             (aset new-values idx (tla-edn/to-tla-value v)))
+                         (do (aset new-names idx name')
+                             (aset new-values idx (aget values idx)))))
+                     (recur (unchecked-inc idx)))
+                   (if @*new-key?
+                     (build-record-map
+                      (conj (into [] names)
+                            val-tla)
+                      (conj (into [] values)
+                            (tla-edn/to-tla-value v)))
+                     (build-record-map new-names new-values))))))
+         ;; Old code, just for maintained for reference.
+         #_(if (contains? (set @(:names @record-info)) k)
+             (p* ::tla-record-map--assoc-1
+                 (let [record'
+                       (p* ::tla-record-map--assoc-1-dissoc
+                           (.record ^TlaRecordMap (dissoc this k)))]
+                   (build-record-map
+                    (conj (into [] (.-names ^RecordValue record'))
+                          (UniqueString/of (custom-munge (symbol k))))
+                    (conj (into [] (.-values ^RecordValue record'))
+                          (tla-edn/to-tla-value v)))))
+             (p* ::tla-record-map--assoc-2
                  (build-record-map
-                  (conj (into [] (.-names ^RecordValue record'))
+                  (conj (into [] (.-names ^RecordValue record))
                         (UniqueString/of (custom-munge (symbol k))))
-                  (conj (into [] (.-values ^RecordValue record'))
-                        (tla-edn/to-tla-value v)))))
-           (p* ::tla-record-map--assoc-2
-               (build-record-map
-                (conj (into [] (.-names ^RecordValue record))
-                      (UniqueString/of (custom-munge (symbol k))))
-                (conj (into [] (.-values ^RecordValue record))
-                      (tla-edn/to-tla-value v))))))
+                  (conj (into [] (.-values ^RecordValue record))
+                        (tla-edn/to-tla-value v))))))
 
   (dissoc [_ k]
           (p* ::tla-record-map--dissoc
@@ -99,6 +143,16 @@
              (build-record-map [] []))))
 
 (comment
+
+  (set! *warn-on-reflection* true)
+
+
+  (set! *warn-on-reflection* false)
+
+
+
+
+
 
   (let [{:keys [g] :as xx} (assoc (build-record-map (tla-edn/to-tla-value {:a 4}))
                                   :g 10
