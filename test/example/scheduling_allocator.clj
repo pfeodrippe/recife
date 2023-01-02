@@ -10,7 +10,7 @@
    [recife.helpers :as rh]))
 
 (def clients
-  #{:c1 :c2 #_:c3})
+  #{:c1 :c2 :c3})
 
 (def resources
   #{:r1 :r2})
@@ -186,5 +186,7 @@ assuming that the clients scheduled earlier release their resources."
                         clients-will-return clients-will-obtain inf-often-satisfied}
                {:debug? true
                 #_ #_:workers 1})
+
+  ;; 3m20 to 47s (~4.25x) after the performance improvements!!
 
   ())
