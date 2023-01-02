@@ -1406,7 +1406,7 @@ VIEW
              :seed (private-field tlc "seed")
              :fp (private-field tlc "fpIndex")}
             (merge (when simulator
-                     {:simulator
+                     {:simulation
                       {:states-count (long (private-field simulator "numOfGenStates"))
                        :traces-count (long (private-field simulator "numOfGenTraces"))}}))
             (medley/assoc-some :recife/transit-states-file-path (:file-path state-writer))))
@@ -1573,6 +1573,7 @@ VIEW
     result-map))
 
 (defn run-model
+  "Check `opts` in `run-model*`."
   ([init-global-state components]
    (run-model init-global-state components {}))
   ([init-global-state components opts]
