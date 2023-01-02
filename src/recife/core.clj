@@ -4,6 +4,7 @@
    [clojure.edn :as edn]
    [clojure.java.io :as io]
    [clojure.repl :as repl]
+   [babashka.process :as p]
    [clojure.string :as str]
    [clojure.walk :as walk]
    [lambdaisland.deep-diff2 :as ddiff]
@@ -22,7 +23,7 @@
    (java.io File)
    (lambdaisland.deep_diff2.diff_impl Mismatch Deletion Insertion)
    (tlc2.output IMessagePrinterRecorder MP EC)
-   (tlc2.value.impl Value StringValue ModelValue RecordValue)
+   (tlc2.value.impl Value StringValue ModelValue RecordValue IntValue IntervalValue)
    (util UniqueString)))
 
 (set! *warn-on-reflection* false)
@@ -167,9 +168,7 @@
 
   (set! *warn-on-reflection* false)
 
-
-
-
+  (tla-edn/to-edn (tla-edn/to-tla-value 1/4))
 
 
   (let [{:keys [g] :as xx} (assoc (build-record-map (tla-edn/to-tla-value {:a 4}))
@@ -277,7 +276,13 @@
         (or (get @string-cache v)
             (let [result (to-edn-string v)]
               (swap! string-cache assoc v result)
-              result)))))
+              result))))
+
+  ;; We use interval value to encode clojure ratios.
+  IntervalValue
+  (-to-edn [v]
+    (clojure.lang.Ratio. (BigInteger/valueOf (.-low v))
+                         (BigInteger/valueOf (.-high v)))))
 
 (extend-protocol tla-edn/EdnToTla
   clojure.lang.Keyword
@@ -300,7 +305,15 @@
   TlaRecordMap
   (tla-edn/-to-tla-value [v]
     (p* ::to-tla--tla-record-map
-        (.record v))))
+        (.record v)))
+
+  clojure.lang.Ratio
+  (tla-edn/-to-tla-value [v]
+    (IntervalValue. (int (numerator v)) (int (denominator v))))
+
+  BigInteger
+  (tla-edn/-to-tla-value [v]
+    (IntValue/gen v)))
 
 ;; TODO: For serialized objecs, make it a custom random filename
 ;; so exceptions from concurrent executions do not mess with each other.
@@ -783,6 +796,7 @@
   (assoc db :pc identifier))
 
 (defn done
+  "Finishes step so deadlock is not triggered for this step."
   [db]
   (assoc db :pc ::done))
 
@@ -1425,13 +1439,25 @@ VIEW
   (prn (tlc-result-handler tlc-runner)))
 
 (defn- run-model*
+  "Run model.
+
+  When you want to interrupt the process, you can add `:async true`
+  to `opts`. When a process has `generate` or `simulate` set, it's async by
+  default (but you can override it). You can use `.close` or `deref` on the
+  return to destroy the process or getting the value out of it, respectively."
   ([init-state next-operator operators]
    (run-model* init-state next-operator operators {}))
   ([init-state next-operator operators {:keys [:seed :fp :workers :tlc-args
                                                :raw-output? :run-local? :debug?
                                                :complete-response?
-                                               simulate]
-                                        :or {workers (if simulate 1 :auto)}
+                                               depth async simulate generate]
+                                        :or {workers (if (or generate simulate)
+                                                       1 :auto)
+                                             ;; Use some fixed depth for `generate`
+                                             ;; mode as infinite states may happen
+                                             ;; for specs that use this flag.
+                                             depth (when generate
+                                                     5)}
                                         :as opts}]
    ;; Do some validation.
    (some->> (m/explain schema/Operator next-operator)
@@ -1445,7 +1471,11 @@ VIEW
             (ex-info "Some operator is invalid")
             throw)
    ;; Run model.
-   (let [file (doto (File/createTempFile "eita" ".tla") .delete) ; we are interested in the random name of the folder
+   (let [async (if (contains? opts :async)
+                 async
+                 (or simulate generate))
+
+         file (doto (File/createTempFile "eita" ".tla") .delete) ; we are interested in the random name of the folder
          abs-path (-> file .getAbsolutePath (str/split #"\.") first (str "/spec.tla"))
          opts-file-path (-> file .getAbsolutePath (str/split #"\.") first (str "/opts.edn"))
          _ (io/make-parents abs-path)
@@ -1462,6 +1492,8 @@ VIEW
          _ (spit opts-file-path opts)
          tlc-opts (->> (cond-> []
                          simulate (conj "-simulate")
+                         generate (conj "-generate")
+                         depth (conj "-depth" depth)
                          seed (conj "-seed" seed)
                          fp (conj "-fp" fp)
                          workers (conj "-workers" (if (keyword? workers)
@@ -1514,23 +1546,33 @@ VIEW
                        :loaded-classes loaded-classes
                        :complete-response? true
                        :raw-args [(str "-DRECIFE_OPTS_FILE_PATH=" opts-file-path)]})
-             output (atom [])]
+             output (atom [])
+             output-streaming (future
+                                (with-open [rdr (io/reader (:out result))]
+                                  (binding [*in* rdr]
+                                    (loop []
+                                      (when-let [line (read-line)]
+                                        ;; If it's a EDN hashmap, do not print it.
+                                        (when-let [last-line (last @output)]
+                                          (println last-line))
+                                        (swap! output conj line)
+                                        (recur))))))
+             process (proxy [java.io.Closeable clojure.lang.IDeref] []
+                       (close []
+                         (p/destroy result)
+                         (println "\n\n------- TLA+ process destroyed ------\n\n"))
+                       (deref []
+                         @output-streaming
+                         ;; Wait until the process finishes.
+                         @result
+                         ;; Throw exception or return EDN result.
+                         (if (.exists (io/as-file exception-filename))
+                           (throw (deserialize-obj exception-filename))
+                           (-> @output last edn/read-string))))]
          ;; Read line by line so we can stream the output to the user.
-         (with-open [rdr (io/reader (:out result))]
-           (binding [*in* rdr]
-             (loop []
-               (when-let [line (read-line)]
-                 ;; If it's a EDN hashmap, do not print it.
-                 (when-let [last-line (last @output)]
-                   (println last-line))
-                 (swap! output conj line)
-                 (recur)))))
-         ;; Wait until the process finishes.
-         @result
-         ;; Throw exception or return EDN result.
-         (if (.exists (io/as-file exception-filename))
-           (throw (deserialize-obj exception-filename))
-           (-> @output last edn/read-string)))))))
+         (if async
+           process
+           @process))))))
 
 (defn timeline-diff
   [result-map]

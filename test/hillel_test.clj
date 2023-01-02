@@ -19,7 +19,8 @@
 (def ^:private default-options
   {:seed 1
    :fp 0
-   :workers 1})
+   :workers 1
+   :async false})
 
 (defn- simulate-assert
   [result]
