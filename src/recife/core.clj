@@ -40,6 +40,7 @@
     (keyword (repl/demunge s))))
 
 (defonce string-cache (atom {}))
+(defonce keyword-cache (atom {}))
 (defonce values-cache (atom {}))
 
 (defn- record-info-from-record
@@ -54,15 +55,32 @@
 (def-map-type TlaRecordMap [record record-info]
   (get [_ k default-value]
        (p* ::tla-record-map--get
-           (if (contains? (set @(:names @record-info)) k)
-             (let [result (.select ^RecordValue record ^StringValue (tla-edn/to-tla-value k))]
-               (tla-edn/to-edn result))
-             default-value)))
+           (let [val-tla (or (get @keyword-cache k)
+                             (let [result (UniqueString/of (custom-munge (symbol k)))]
+                               (swap! keyword-cache assoc k result)
+                               result))
+
+                 ^{:tag "[Lutil.UniqueString;"}
+                 names (.-names ^RecordValue record)
+
+                 length (alength names)]
+             (loop [idx 0]
+               (if (< idx length)
+                 (let [name' (aget names idx)]
+                   (if (= (hash val-tla) (hash name'))
+                     (tla-edn/to-edn
+                      (aget ^{:tag "[Ltlc2.value.impl.Value;"} (.-values ^RecordValue record)
+                            idx))
+                     (recur (unchecked-inc idx))))
+                 default-value)))))
 
   (assoc [this k v]
          (p* ::tla-record-map--assoc-1
              (let [val-tla (p* ::val-tla-unique
-                               (UniqueString/of (custom-munge (symbol k))))
+                               (or (get @keyword-cache k)
+                                   (let [result (UniqueString/of (custom-munge (symbol k)))]
+                                     (swap! keyword-cache assoc k result)
+                                     result)))
                    ;; This is a much work solution (~5x) as strings are not
                    ;; interned, while unique strings are.
                    #_(p* ::val-tla

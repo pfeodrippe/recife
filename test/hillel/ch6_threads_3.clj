@@ -104,6 +104,8 @@
   ;;   - 14.99uS to 6.17us
   ;; - [x] ch6_threads_3
   ;;   - 64s -> 34s for :t4
+  ;; - [x] keyword cache
+  ;;   - 34s -> 24s
   ;; - [ ] Check if to-tla function for TlaRecordMap is being used
   ;; - [ ] Change tla+ code to create a Clojure map in RecordValue?
   ;; - [ ] Try to add helper functions that deal with TLC values directly
