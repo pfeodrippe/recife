@@ -1322,6 +1322,9 @@ VIEW
             recorder-info @recorder-atom
             _ (do (def tlc tlc)
                   (def recorder-info recorder-info))
+
+            simulator tlc2.TLCGlobals/simulator
+
             {:keys [:trace
                     :info]} (if-some [error-trace (-> ^tlc2.output.ErrorTraceMessagePrinterRecorder
                                                       (private-field tlc "recorder")
@@ -1377,8 +1380,14 @@ VIEW
 
                                   :else
                                   {:trace :ok})))]
+
+        ;; `do` for debugging.
+        #_(do (def recorder-value @recorder-atom)
+              (def simulator simulator))
+
         (-> {:trace (cond
-                      (nil? (some-> ^tlc2.tool.AbstractChecker tlc2.TLCGlobals/mainChecker .theFPSet .size))
+                      (and (nil? (some-> ^tlc2.tool.AbstractChecker tlc2.TLCGlobals/mainChecker .theFPSet .size))
+                           (nil? simulator))
                       :error
 
                       (and (= trace :ok) (:trace-example? opts))
@@ -1396,7 +1405,12 @@ VIEW
              :generated-states (some-> tlc2.TLCGlobals/mainChecker .getStatesGenerated)
              :seed (private-field tlc "seed")
              :fp (private-field tlc "fpIndex")}
+            (merge (when simulator
+                     {:simulator
+                      {:states-count (long (private-field simulator "numOfGenStates"))
+                       :traces-count (long (private-field simulator "numOfGenTraces"))}}))
             (medley/assoc-some :recife/transit-states-file-path (:file-path state-writer))))
+
       (catch Exception ex
         (serialize-obj ex exception-filename)
         {:trace :error
@@ -1415,8 +1429,10 @@ VIEW
    (run-model* init-state next-operator operators {}))
   ([init-state next-operator operators {:keys [:seed :fp :workers :tlc-args
                                                :raw-output? :run-local? :debug?
-                                               :complete-response?]
-                                        :or {workers :auto} :as opts}]
+                                               :complete-response?
+                                               simulate]
+                                        :or {workers (if simulate 1 :auto)}
+                                        :as opts}]
    ;; Do some validation.
    (some->> (m/explain schema/Operator next-operator)
             me/humanize
@@ -1445,6 +1461,7 @@ VIEW
          ;; in the tlc-handler function.
          _ (spit opts-file-path opts)
          tlc-opts (->> (cond-> []
+                         simulate (conj "-simulate")
                          seed (conj "-seed" seed)
                          fp (conj "-fp" fp)
                          workers (conj "-workers" (if (keyword? workers)

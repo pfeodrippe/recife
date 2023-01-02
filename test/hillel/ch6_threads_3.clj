@@ -4,7 +4,7 @@
    [recife.core :as r]
    [recife.helpers :as rh]))
 
-(def threads #{:t1 :t2 :t3 #_ :t4})
+(def threads #{:t1 :t2 :t3 :t4})
 
 (def global
   {:thread/next-thread (r/one-of threads)})
@@ -84,10 +84,12 @@
 
   ;; back-to-state at around 30-32 states (back to 2-4)
   (def result
-    (r/run-model global #{thread at-most-one-critical no-livelocks} #_{:run-local? true}
-                 {:workers 1
+    (r/run-model global #{thread at-most-one-critical no-livelocks}
+                 {#_ #_:workers 1
                   :fp 0
-                  :seed 1}))
+                  :seed 1
+                  :simulate true
+                  #_ #_:run-local? true}))
 
   (ra/visualize-result result)
 
@@ -106,14 +108,14 @@
   ;;   - 64s -> 34s for :t4
   ;; - [x] keyword cache
   ;;   - 34s -> 24s
-  ;; - [ ] Check if to-tla function for TlaRecordMap is being used
-  ;; - [ ] Change tla+ code to create a Clojure map in RecordValue?
-  ;; - [ ] Try to add helper functions that deal with TLC values directly
-  ;; - [ ] Support TLC simulate option
-  ;; - [ ] Should we just rely on simulate?
-  ;;   - With it, we may be able to test things faster, but not covering everything
+  ;; - [x] Add support for simulation
+  ;;   - [x] Read trace
+  ;;   - [x] Get number of states checked and the number of traces
+  ;;   - [x] For multiple workers, get first trace
+  ;; - [ ] Check statistics http://conf.tlapl.us/2022/JackMarkusTLA+Statistics.pdf
   ;; - [ ] Create macro that sends data from chilren processes  to the current
   ;;       JVM
+  ;; - [ ] Add Clerk
 
   ;; TLA+ comparison.
   "
