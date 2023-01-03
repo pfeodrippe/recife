@@ -3,7 +3,9 @@
 
   Also see https://www.youtube.com/watch?v=cYenTPD7740."
   (:require
-   [recife.core :as r]))
+   [recife.core :as r]
+   [recife.helpers :as rh]
+   [recife.communication :as r.buf]))
 
 (def states-map
   {:s0 {:h :s1 :t :s2}
@@ -30,16 +32,28 @@
                   ::probability (/ probability 2)
                   ::face next-face))))})
 
+(rh/defconstraint eita
+  [{:keys [::face]}]
+  (do
+    (r.buf/save! face)
+    true))
+
 (comment
 
+  (count (r.buf/read-contents))
+
   (def result
-    (r/run-model global #{next*}
+    (r/run-model global #{next* eita}
                  {:workers 1
                   :generate true}))
 
   (.close result)
 
   ;; TODO:
-  ;; - [ ] Find a way to send a STOP command for simulate/generate flags
+  ;; - [x] Find a way to send a STOP command for simulate/generate flags
+  ;; - [ ] Generate real-time charts with Clerk
+  ;; - [ ] Maybe add -noTE when running simulate/generate?
+  ;; - [ ] Add spec for EWD998
+  ;; - [ ] Add implicit `do` to helper macros
 
   ())

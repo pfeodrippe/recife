@@ -1,5 +1,6 @@
 (ns recife.core
   (:require
+   [recife.communication :as r.buf]
    [alandipert.interpol8 :as int]
    [clojure.edn :as edn]
    [clojure.java.io :as io]
@@ -1318,6 +1319,10 @@ VIEW
                     (tlc-runner))
             ;; Read opts file from JVM property.
             opts (some-> (System/getProperty "RECIFE_OPTS_FILE_PATH") slurp edn/read-string)
+            _ (when-let [channel-path (::channel-file-path opts)]
+                (println "Creating channel path at" channel-path)
+                (r.buf/set-buf (r.buf/buf-create {:file (io/file channel-path)
+                                                  :truncate true})))
             state-writer (when (or (:dump-states? opts)
                                    ;; If we want to show a trace example (if no
                                    ;; violation is found), then we have to
@@ -1487,9 +1492,11 @@ VIEW
                            :operators all-operators
                            :spec-name file-name})
          _ (spit abs-path module-contents)
+         _ (do (reset! r.buf/*contents [])
+               (r.buf/start-sync-loop!))
          ;; Also put a file with opts in the same folder so we can read configuration
          ;; in the tlc-handler function.
-         _ (spit opts-file-path opts)
+         _ (spit opts-file-path (merge opts {::channel-file-path (str r.buf/channel-file)}))
          tlc-opts (->> (cond-> []
                          simulate (conj "-simulate")
                          generate (conj "-generate")
