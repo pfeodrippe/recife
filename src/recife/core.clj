@@ -1457,12 +1457,7 @@ VIEW
                                                :complete-response?
                                                depth async simulate generate]
                                         :or {workers (if (or generate simulate)
-                                                       1 :auto)
-                                             ;; Use some fixed depth for `generate`
-                                             ;; mode as infinite states may happen
-                                             ;; for specs that use this flag.
-                                             depth (when generate
-                                                     5)}
+                                                       1 :auto)}
                                         :as opts}]
    ;; Do some validation.
    (some->> (m/explain schema/Operator next-operator)
@@ -1493,12 +1488,13 @@ VIEW
                            :spec-name file-name})
          _ (spit abs-path module-contents)
          _ (when generate
-             (r.buf/sync!)              ; sync so we can make sure that the writer can write
+             (r.buf/sync!) ; sync so we can make sure that the writer can write
              (reset! r.buf/*contents [])
+             (r.buf/reset-buf!)
              (r.buf/start-sync-loop!))
          ;; Also put a file with opts in the same folder so we can read configuration
          ;; in the tlc-handler function.
-         _ (spit opts-file-path (merge opts {::channel-file-path (str r.buf/channel-file)}))
+         _ (spit opts-file-path (merge opts {::channel-file-path (str @r.buf/*channel-file)}))
          tlc-opts (->> (cond-> []
                          simulate (conj "-simulate")
                          generate (conj "-generate")

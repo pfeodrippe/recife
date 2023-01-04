@@ -18,43 +18,46 @@
 
 (def global
   {::state :s0
-   ::probability 1
+   ::prob 1
    ::face (r/one-of #{:h :t})})
+
+(def done #{:1 :2 :3 :4 :5 :6})
 
 (r/defproc ^:fair next* {}
   {[::next
     {:next-face #{:h :t}}]
-   (fn [{:keys [::state ::probability ::face next-face] :as db}]
-     (if (contains? #{:1 :2 :3 :4 :5 :6} state)
+   (fn [{:keys [::state ::prob ::face next-face] :as db}]
+     (if (contains? done state)
        (r/done db)
        (-> db
            (assoc ::state (get-in states-map [state face])
-                  ::probability (/ probability 2)
+                  ::prob (/ prob 2)
                   ::face next-face))))})
 
 (rh/defconstraint eita
-  [{:keys [::face]}]
-  (do
-    (r.buf/save! #_{:a face
-                  :b (repeat (rand-int 5) 4)} face)
-    true))
+  [{:keys [::face ::state ::prob]}]
+  (r/implies
+   (contains? done state)
+   (r.buf/save! {:face face
+                 :state state
+                 :prob prob})))
 
 (comment
-
-  "7163 in 17s"
-  "112400 in 16s"
-  "89424 in 16s for complex"
-
-  (count (r.buf/read-contents))
-  (frequencies (r.buf/read-contents))
-  (take 500 (r.buf/read-contents))
 
   (def result
     (r/run-model global #{next* eita}
                  {:workers 1
-                  :generate true}))
+                  :generate true
+                  :depth 15}))
 
   (.close result)
+
+  (count (r.buf/read-contents))
+  (frequencies (r.buf/read-contents))
+  (frequencies (mapv :face (r.buf/read-contents)))
+  (frequencies (mapv :state (r.buf/read-contents)))
+  (into (sorted-map) (frequencies (mapv :prob (r.buf/read-contents))))
+  (take 500 (r.buf/read-contents))
 
   ;; TODO:
   ;; - [x] Find a way to send a STOP command for simulate/generate flags

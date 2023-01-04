@@ -1,13 +1,14 @@
 (ns recife.communication
   (:require
-   [clojure.edn :as edn])
+   [clojure.edn :as edn]
+   [com.climate.claypoole :as clay])
   (:import
    (java.nio.channels FileChannel FileChannel$MapMode)
    (java.nio.file StandardOpenOption OpenOption)
    (java.io File)))
 
-(defonce channel-file
-  (File/createTempFile "my-file" ".txt"))
+(defonce *channel-file
+  (atom (File/createTempFile "my-file" ".txt")))
 
 (defonce *contents
   (atom []))
@@ -16,7 +17,7 @@
   ([]
    (buf-create {}))
   ([{:keys [file truncate]
-     :or {file channel-file}}]
+     :or {file @*channel-file}}]
    (let [channel (FileChannel/open (.toPath file)
                                    (into-array OpenOption
                                                (concat [StandardOpenOption/READ
@@ -30,6 +31,11 @@
 
 (defonce ^:private *buf
   (atom (buf-create)))
+
+(defn reset-buf!
+  []
+  (reset! *channel-file (File/createTempFile "my-file" ".txt"))
+  (reset! *buf (buf-create)))
 
 (defn set-buf
   [buf]
@@ -53,14 +59,22 @@
          nil
 
          (or (= c \newline) (zero? (int c)))
-         (edn/read-string line)
+         (try
+           (edn/read-string line)
+           (catch Exception ex
+             (println "Cannot read line" {:line line})
+             (throw ex)))
 
          :else
          (recur (.get buf) (str line c)))))))
 
 (defn- can-write?
   []
-  (not= (str (.get @*buf 0)) "1"))
+  (try
+    (not= (str (.get @*buf 0)) "1")
+    (catch Exception ex
+      (println "Exception in `can-write?`" ex)
+      false)))
 
 (defn- can-read?
   []
@@ -91,61 +105,71 @@
 
 (defn save!
   [v]
-  (future
-    (locking lock
-      (try
-        (while (not (can-write?)))
+  (locking lock
+    (try
+      (while (not (can-write?)))
 
-        (when (zero? (.position @*buf))
-          (buf-write 0))
+      (when (zero? (.position @*buf))
+        (buf-write 0))
 
-        (buf-write v)
-        (swap! *saved conj v)
+      (buf-write v)
+      (swap! *saved conj v)
 
-        (when (= (count @*saved) 100)
-          (buf-write nil)
-          (buf-rewind)
-          (buf-write 1)
-          (buf-rewind)
-          (reset! *saved []))
+      (when (= (count @*saved) 100)
+        (buf-write nil)
+        (buf-rewind)
+        (buf-write 1)
+        (buf-rewind)
+        (reset! *saved []))
 
-        (catch Exception ex
-          (println ex)
-          (throw ex))))))
+      (catch Exception ex
+        (println ex)
+        (throw ex))))
+  true)
+
+(defonce ^:private lock-sync
+  (Object.))
 
 (defn sync!
   []
-  (boolean
-   (when (can-read?)
-     (buf-rewind)
-     ;; Discard first line.
-     (buf-read-next-line)
-     (loop [v (buf-read-next-line)]
-       (when v
-         (swap! *contents conj v)
-         (recur (buf-read-next-line))))
-     (buf-rewind)
-     (buf-write 0)
-     (buf-write nil))))
+  (locking lock-sync
+    (boolean
+     (when (can-read?)
+       (buf-rewind)
+       ;; Discard first line.
+       (buf-read-next-line)
+       (loop [v (buf-read-next-line)]
+         (when v
+           (swap! *contents conj v)
+           (recur (buf-read-next-line))))
+       (buf-rewind)
+       (buf-write 0)
+       (buf-write nil)))))
 
 (defonce ^:private *sync-loop (atom nil))
+
+(defonce ^:private pool (clay/threadpool 2))
 
 (defn start-sync-loop!
   []
   (when-not @*sync-loop
     (reset! *sync-loop
-            (future
+            (clay/future
+              pool
+              (println "Starting sync loop...")
               (while (not (Thread/interrupted))
                 (Thread/sleep 1)
                 (try
                   (sync!)
                   (catch Exception e
-                    (println e))))))))
+                    (println e))))
+              (println "STOPPING the future...")))))
 
 (defn stop-sync-loop!
   []
   (when-let [fut @*sync-loop]
-    (future-cancel fut)
+    (println "Stopping sync loop...")
+    (.cancel fut true)
     (reset! *sync-loop nil)
     (sync!)))
 
@@ -168,12 +192,24 @@
 
   (save! {:a 30})
 
-  (buf-read-next-line)
   (buf-rewind)
+  (for [_ (range 100)]
+    (buf-read-next-line))
+
+  (buf-rewind)
+  (loop [v (buf-read-next-line)
+         x []]
+    (if v
+      (recur (buf-read-next-line)
+             (conj x v))
+      x))
+
+  (do (.clear @*buf)
+      true)
 
   (.position @*buf)
 
-  (str channel-file)
+  (str @*channel-file)
 
 
   ())
