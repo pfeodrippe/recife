@@ -1563,13 +1563,18 @@ VIEW
                                         (swap! output conj line)
                                         (recur))))))
              t0 (System/nanoTime)
+             *destroyed? (atom false)
              process (proxy [java.io.Closeable clojure.lang.IDeref] []
                        (close []
-                         (p/destroy result)
-                         (when generate
-                           (r.buf/stop-sync-loop!))
-                         (println (format "\n\n------- TLA+ process destroyed after %s seconds ------\n\n"
-                                          (Math/round (/ (- (System/nanoTime) t0) 1E9)))))
+                         (if @*destroyed?
+                           (println "\n\n------- TLA+ process already destroyed ------\n\n")
+                           (do
+                             (reset! *destroyed? true)
+                             (p/destroy result)
+                             (when generate
+                               (r.buf/stop-sync-loop!))
+                             (println (format "\n\n------- TLA+ process destroyed after %s seconds ------\n\n"
+                                              (Math/round (/ (- (System/nanoTime) t0) 1E9)))))))
                        (deref []
                          @output-streaming
                          ;; Wait until the process finishes.
