@@ -35,12 +35,19 @@
 (rh/defconstraint eita
   [{:keys [::face]}]
   (do
-    (r.buf/save! face)
+    (r.buf/save! #_{:a face
+                  :b (repeat (rand-int 5) 4)} face)
     true))
 
 (comment
 
+  "7163 in 17s"
+  "112400 in 16s"
+  "89424 in 16s for complex"
+
   (count (r.buf/read-contents))
+  (frequencies (r.buf/read-contents))
+  (take 500 (r.buf/read-contents))
 
   (def result
     (r/run-model global #{next* eita}
@@ -51,9 +58,10 @@
 
   ;; TODO:
   ;; - [x] Find a way to send a STOP command for simulate/generate flags
+  ;; - [x] Send batches of 100 instead of only 1
   ;; - [ ] Generate real-time charts with Clerk
-  ;; - [ ] Maybe add -noTE when running simulate/generate?
   ;; - [ ] Add spec for EWD998
   ;; - [ ] Add implicit `do` to helper macros
+  ;; - [ ] Maybe add -noTE when running simulate/generate?
 
   ())

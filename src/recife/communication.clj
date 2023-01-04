@@ -79,36 +79,54 @@
   ([buf edn]
    (buf-write buf edn {}))
   ([buf edn {:keys [offset]}]
-   (let [arr (.toCharArray (str (pr-str edn) "\n"))]
+   (let [arr (.toCharArray (if edn
+                             (str (pr-str edn) "\n")
+                             (str (char 0))))]
      (if offset
        (.put buf arr offset (alength arr))
-       (.put buf (.toCharArray (str (pr-str edn) "\n")))))
+       (.put buf arr)))
    true))
+
+(def ^:private *saved (atom []))
 
 (defn save!
   [v]
-  (locking lock
-    (try
-      (while (not (can-write?)))
-      (buf-rewind)
-      (buf-write 0)
-      (buf-write v)
-      (buf-rewind)
-      (buf-write 1)
-      (catch Exception ex
-        (println ex)
-        (throw ex)))))
+  (future
+    (locking lock
+      (try
+        (while (not (can-write?)))
+
+        (when (zero? (.position @*buf))
+          (buf-write 0))
+
+        (buf-write v)
+        (swap! *saved conj v)
+
+        (when (= (count @*saved) 100)
+          (buf-write nil)
+          (buf-rewind)
+          (buf-write 1)
+          (buf-rewind)
+          (reset! *saved []))
+
+        (catch Exception ex
+          (println ex)
+          (throw ex))))))
 
 (defn sync!
   []
   (boolean
    (when (can-read?)
      (buf-rewind)
-     (let [v (do (buf-read-next-line)   ; discard first line
-                 (buf-read-next-line))]
-       (swap! *contents conj v))
+     ;; Discard first line.
+     (buf-read-next-line)
+     (loop [v (buf-read-next-line)]
+       (when v
+         (swap! *contents conj v)
+         (recur (buf-read-next-line))))
      (buf-rewind)
-     (buf-write 0))))
+     (buf-write 0)
+     (buf-write nil))))
 
 (defonce ^:private *sync-loop (atom nil))
 
@@ -117,12 +135,19 @@
   (when-not @*sync-loop
     (reset! *sync-loop
             (future
-              (while true
+              (while (not (Thread/interrupted))
                 (Thread/sleep 1)
                 (try
                   (sync!)
                   (catch Exception e
                     (println e))))))))
+
+(defn stop-sync-loop!
+  []
+  (when-let [fut @*sync-loop]
+    (future-cancel fut)
+    (reset! *sync-loop nil)
+    (sync!)))
 
 (defn read-contents
   []

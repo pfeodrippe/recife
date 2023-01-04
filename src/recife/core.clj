@@ -1492,8 +1492,10 @@ VIEW
                            :operators all-operators
                            :spec-name file-name})
          _ (spit abs-path module-contents)
-         _ (do (reset! r.buf/*contents [])
-               (r.buf/start-sync-loop!))
+         _ (when generate
+             (r.buf/sync!)              ; sync so we can make sure that the writer can write
+             (reset! r.buf/*contents [])
+             (r.buf/start-sync-loop!))
          ;; Also put a file with opts in the same folder so we can read configuration
          ;; in the tlc-handler function.
          _ (spit opts-file-path (merge opts {::channel-file-path (str r.buf/channel-file)}))
@@ -1564,14 +1566,20 @@ VIEW
                                           (println last-line))
                                         (swap! output conj line)
                                         (recur))))))
+             t0 (System/nanoTime)
              process (proxy [java.io.Closeable clojure.lang.IDeref] []
                        (close []
                          (p/destroy result)
-                         (println "\n\n------- TLA+ process destroyed ------\n\n"))
+                         (when generate
+                           (r.buf/stop-sync-loop!))
+                         (println (format "\n\n------- TLA+ process destroyed after %s seconds ------\n\n"
+                                          (Math/round (/ (- (System/nanoTime) t0) 1E9)))))
                        (deref []
                          @output-streaming
                          ;; Wait until the process finishes.
                          @result
+                         (when generate
+                           (r.buf/stop-sync-loop!))
                          ;; Throw exception or return EDN result.
                          (if (.exists (io/as-file exception-filename))
                            (throw (deserialize-obj exception-filename))
