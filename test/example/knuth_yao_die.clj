@@ -10,7 +10,8 @@
    [recife.buffer :as r.buf]))
 
 (def states-map
-  {:s0 {:h :s1 :t :s2}
+  {:crooked {:h :s0 :t :s0}
+   :s0 {:h :s1 :t :s2}
    :s1 {:h :s3 :t :s4}
    :s2 {:h :s5 :t :s6}
    :s3 {:h :s1 :t :1}
@@ -18,8 +19,11 @@
    :s5 {:h :4 :t :5}
    :s6 {:h :6 :t :s2}})
 
+;; Flag which control crookness.
+(def crooked? true)
+
 (def global
-  {::state :s0
+  {::state (if crooked? :crooked :s0)
    ::prob 1
    ::face (r/one-of #{:h :t})})
 
@@ -27,13 +31,27 @@
 
 (r/defproc ^:fair next* {}
   {[::next
-    {:next-face #{:h :t}}]
+    {:next-face (fn [_]
+                  (if-not crooked?
+                    #{:h :t}
+                    ;; Crooked coin.
+                    (if (> (rand-int 8) 2)
+                      #{:h}
+                      #{:t})
+                    ;; Another crooked coin.
+                    ;; below. ~70% of the faces should be heads.
+                    ;; Comment above `if` and uncomment below.
+                    #_(if (> (rand-int 10) 2)
+                        #{:h}
+                        #{:t})))}]
    (fn [{:keys [::state ::prob ::face next-face] :as db}]
      (if (contains? done state)
        (r/done db)
        (-> db
            (assoc ::state (get-in states-map [state face])
-                  ::prob (/ prob 2)
+                  ::prob (if (= state :crooked)
+                           prob
+                           (/ prob 2))
                   ::face next-face))))})
 
 (rh/defconstraint eita
@@ -72,7 +90,7 @@
   ;;   - [x] Try to improve plotly perf by batching clerk/recompute!
   ;; - [x] Open PR for TLC with typo fixes
   ;; - [x] See how to pull from atom instead of pushing
-  ;; - [ ] Test crooked die
+  ;; - [x] Test crooked die
   ;; - [ ] Add spec for EWD998
   ;; - [ ] Add implicit `do` to helper macros
   ;; - [ ] Maybe add -noTE when running simulate/generate?
