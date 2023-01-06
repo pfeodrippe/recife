@@ -1,25 +1,25 @@
 (ns recife.core
   (:require
-   [recife.communication :as r.buf]
    [alandipert.interpol8 :as int]
+   [babashka.process :as p]
    [clojure.edn :as edn]
    [clojure.java.io :as io]
    [clojure.repl :as repl]
-   [babashka.process :as p]
+   [clojure.set :as set]
    [clojure.string :as str]
    [clojure.walk :as walk]
+   [cognitect.transit :as t]
    [lambdaisland.deep-diff2 :as ddiff]
    [malli.core :as m]
    [malli.error :as me]
    [medley.core :as medley]
+   [potemkin :refer [def-map-type]]
+   [recife.buffer :as r.buf]
    [recife.schema :as schema]
-   [tla-edn.core :as tla-edn]
-   [tla-edn.spec :as spec]
-   [cognitect.transit :as t]
-   [clojure.set :as set]
-   [taoensso.tufte :as tufte :refer [defnp p defnp-]]
    [recife.util :as u :refer [p*]]
-   [potemkin :refer [def-map-type]])
+   [taoensso.tufte :as tufte :refer [defnp p defnp-]]
+   [tla-edn.core :as tla-edn]
+   [tla-edn.spec :as spec])
   (:import
    (java.io File)
    (lambdaisland.deep_diff2.diff_impl Mismatch Deletion Insertion)

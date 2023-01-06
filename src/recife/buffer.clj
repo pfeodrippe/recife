@@ -1,4 +1,4 @@
-(ns recife.communication
+(ns recife.buffer
   (:require
    [clojure.edn :as edn]
    [com.climate.claypoole :as clay])
@@ -12,6 +12,9 @@
 
 (defonce *contents
   (atom []))
+
+(defonce ^:private *new-contents?
+  (atom false))
 
 (defn buf-create
   ([]
@@ -142,6 +145,8 @@
          (when v
            (swap! *contents conj v)
            (recur (buf-read-next-line))))
+       (when (seq @*contents)
+         (reset! *new-contents? true))
        (buf-rewind)
        (buf-write 0)
        (buf-write nil)))))
@@ -175,7 +180,12 @@
 
 (defn read-contents
   []
+  (reset! *new-contents? false)
   @*contents)
+
+(defn has-new-contents?
+  []
+  @*new-contents?)
 
 (comment
 

@@ -1,103 +1,13 @@
 (ns example.knuth-yao-die
   "Based on https://github.com/tlaplus/Examples/blob/master/specifications/KnuthYao/KnuthYao.tla.
 
-  Also see https://www.youtube.com/watch?v=cYenTPD7740."
-  {:nextjournal.clerk/visibility {:code :hide :result :hide}}
+  Also see https://www.youtube.com/watch?v=cYenTPD7740.
+
+  See `example.knuth-yao-die.clerk` to see some charts."
   (:require
    [recife.core :as r]
    [recife.helpers :as rh]
-   [recife.communication :as r.buf]
-   [nextjournal.clerk :as-alias clerk]
-   [nextjournal.clerk.viewer :as-alias viewer]
-   [nextjournal.clerk.render :as-alias render]))
-
-(def this-ns (symbol (str *ns*)))
-
-(defmacro j
-  "Just in time loading of dependencies."
-  [sym]
-  `(requiring-resolve (symbol (or (some-> (get (ns-aliases this-ns) (symbol (namespace '~sym)))
-                                          str)
-                                  (namespace '~sym))
-                              (name '~sym))))
-
-(defmacro in-clerk
-  "Create a macro that checks if we are running from Recife's
-  child process so we can require clerk only for the parent one."
-  [& body]
-  (when-not (System/getenv "RECIFE_OPTS_FILE_PATH")
-    `(do
-       (require '[nextjournal.clerk :as clerk])
-       ~@body)))
-
-;; ◊page-name[{:subtitle "6-sided die"}]{knuth yao}
-
-^{::clerk/sync true}
-(defonce *fe-data (atom {}))
-
-(add-watch r.buf/*contents ::contents
-           (fn [_k _r _old new]
-             (when (zero? (mod (count new) 100))
-               (future
-                 (reset! *fe-data {:faces (frequencies (mapv :face new))
-                                   :states (->> (frequencies (mapv :state new))
-                                                sort
-                                                (mapv second))})))))
-
-(defonce *t-before (atom (System/nanoTime)))
-(defonce *happening (atom nil))
-
-(comment
-
-  (def result
-    (r/run-model global #{next* eita}
-                 {:workers 1
-                  :generate true
-                  :depth 15}))
-
-  (.close result)
-
-  (count (r.buf/read-contents))
-
-  (frequencies (r.buf/read-contents))
-  (frequencies (mapv :face (r.buf/read-contents)))
-  (frequencies (mapv :state (r.buf/read-contents)))
-  (into (sorted-map) (frequencies (mapv :prob (r.buf/read-contents))))
-  (take 500 (r.buf/read-contents))
-
-  ())
-
-(defn sync-atom-changed [key atom old-state new-state]
-  (when (nil? @*happening)
-    (locking *happening
-      (reset! *happening :some)
-      (reset! *t-before (System/nanoTime))
-      (eval '(nextjournal.clerk/recompute!))
-      (reset! *happening nil))))
-
-(add-watch *fe-data `*fe-data sync-atom-changed)
-
-^{::clerk/visibility {:result :show}}
-(in-clerk
- (clerk/plotly {:data [{:values (let [{:keys [h t]
-                                       :or {h 1 t 0}}
-                                      (:faces @*fe-data)]
-                                  [h t])
-                        :labels ["h" "t"]
-                        :type "pie"}]
-                :layout {:height 300 :width 600}
-                :config {:displayModeBar false
-                         :displayLogo false}}))
-
-^{::clerk/visibility {:result :show}}
-(in-clerk
- (clerk/plotly {:data [{:y (:states @*fe-data)
-                        :x (mapv inc (range 6))
-                        :type "bar"}]
-                :layout {:height 600 :width 600}
-                :config {:displayModeBar false
-                         :displayLogo false}}))
-
+   [recife.buffer :as r.buf]))
 
 (def states-map
   {:s0 {:h :s1 :t :s2}
@@ -136,11 +46,23 @@
 
 (comment
 
-  (do (require '[nextjournal.clerk.webserver :as webserver])
-      (require '[nextjournal.clerk.eval :as eval])
-      (require 'com.pfeodrippe.tooling.clerk)
+  (def result
+    (r/run-model global #{next* eita}
+                 {:workers 1
+                  :generate true
+                  :depth 15}))
 
-      ((j clerk/serve!) {:watch-paths ["test/example"]}))
+  (.close result)
+
+  (count (r.buf/read-contents))
+
+  (frequencies (r.buf/read-contents))
+  (frequencies (mapv :face (r.buf/read-contents)))
+  (frequencies (mapv :state (r.buf/read-contents)))
+  (into (sorted-map) (frequencies (mapv :prob (r.buf/read-contents))))
+  (take 500 (r.buf/read-contents))
+
+  ()
 
   ;; TODO:
   ;; - [x] Find a way to send a STOP command for simulate/generate flags
@@ -148,7 +70,9 @@
   ;; - [x] Generate real-time charts with Clerk
   ;;   - [x] Use plotly
   ;;   - [x] Try to improve plotly perf by batching clerk/recompute!
-  ;; - [ ] Open PR for TLC with typo fixes
+  ;; - [x] Open PR for TLC with typo fixes
+  ;; - [x] See how to pull from atom instead of pushing
+  ;; - [ ] Test crooked die
   ;; - [ ] Add spec for EWD998
   ;; - [ ] Add implicit `do` to helper macros
   ;; - [ ] Maybe add -noTE when running simulate/generate?
