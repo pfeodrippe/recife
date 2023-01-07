@@ -41,9 +41,9 @@
   (let [s (str/replace (str v)  #"___" ".")]
     (keyword (repl/demunge s))))
 
-(defonce string-cache (atom {}))
-(defonce keyword-cache (atom {}))
-(defonce values-cache (atom {}))
+(defonce ^:private string-cache (atom {}))
+(defonce ^:private keyword-cache (atom {}))
+(defonce ^:private values-cache (atom {}))
 
 (defn- record-info-from-record
   [record]
@@ -223,7 +223,7 @@
                  false)]
      (TlaRecordMap. record (delay (record-info-from-record record))))))
 
-(defn record-keys
+(defn- record-keys
   [v]
   (mapv #_#(or (get @keys-cache %)
              (p* ::k-no-cache
@@ -233,7 +233,7 @@
         tla-edn/-to-edn
         (.-names ^RecordValue v)))
 
-(defn record-values
+(defn- record-values
   [v]
   (mapv #_#(or (get @values-cache (str %))
              (p* ::v-no-cache
@@ -1470,6 +1470,9 @@ VIEW
             (hash-map :error)
             (ex-info "Some operator is invalid")
             throw)
+   (when-let [simple-keywords (seq (remove qualified-keyword? (keys init-state)))]
+     (throw (ex-info "For the initial state, all the keywords should be namespaced. Recife uses the convention in which namespaced keywords are global ones, while other keywords are process-local."
+                     {:keywords-without-namespace simple-keywords})))
    ;; Run model.
    (let [async (if (contains? opts :async)
                  async

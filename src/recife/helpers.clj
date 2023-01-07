@@ -1,6 +1,7 @@
 (ns recife.helpers
   (:refer-clojure :exclude [and])
   (:require
+   [clojure.math.combinatorics :as comb]
    [recife.core :as r]))
 
 (def ^:dynamic *env* {:global-vars [] :local-vars []})
@@ -147,3 +148,17 @@
 (defmacro and
   [& body]
   `[:and ~@(mapv invoke body)])
+
+(defn combine
+  "Get all the possible combinations of the domain with the values.
+
+  See https://www.learntla.com/core/functions.html#function-sets and
+  `-maps` at https://github.com/Viasat/salt#maps."
+  [domain values]
+  (let [domain->pairs (->> (for [a (set domain)
+                                 b (set values)]
+                             [a b])
+                           (group-by first))]
+    (->> (apply comb/cartesian-product (vals domain->pairs))
+         (mapv #(into {} %))
+         set)))

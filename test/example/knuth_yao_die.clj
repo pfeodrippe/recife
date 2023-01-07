@@ -91,8 +91,5 @@
   ;; - [x] Open PR for TLC with typo fixes
   ;; - [x] See how to pull from atom instead of pushing
   ;; - [x] Test crooked die
-  ;; - [ ] Add spec for EWD998
-  ;; - [ ] Add implicit `do` to helper macros
-  ;; - [ ] Maybe add -noTE when running simulate/generate?
 
   ())
