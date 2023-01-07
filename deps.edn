@@ -20,7 +20,8 @@
                      clj-http/clj-http {:mvn/version "3.12.3"}
                      clj-http-fake/clj-http-fake {:mvn/version "1.0.3"}
                      com.github.seancorfield/honeysql {:mvn/version "2.0.0-rc5"}
-                     metosin/muuntaja {:mvn/version "0.6.8"}}
+                     metosin/muuntaja {:mvn/version "0.6.8"}
+                     io.github.pfeodrippe/dev-tooling {:mvn/version "1.0.47"}}
         :extra-paths ["test"]}
   :test {:extra-deps {nubank/matcher-combinators {:mvn/version "3.1.4"}
                       lambdaisland/kaocha {:mvn/version "1.0-612"}
@@ -39,7 +40,8 @@
                       clj-http/clj-http {:mvn/version "3.12.3"}
                       clj-http-fake/clj-http-fake {:mvn/version "1.0.3"}
                       com.github.seancorfield/honeysql {:mvn/version "2.0.0-rc5"}
-                      metosin/muuntaja {:mvn/version "0.6.8"}}
+                      metosin/muuntaja {:mvn/version "0.6.8"}
+                      io.github.pfeodrippe/dev-tooling {:mvn/version "1.0.47"}}
          :extra-paths ["test"]
          :main-opts   ["-m" "kaocha.runner"]}}
 
@@ -54,7 +56,6 @@
   pfeodrippe/arrudeia {:mvn/version "0.11.0-SNAPSHOT"}
   com.taoensso/tufte {:mvn/version "2.4.5"}
   potemkin/potemkin {:mvn/version "0.4.6"}
-  org.clj-commons/claypoole {:mvn/version "1.2.2"}
-  io.github.pfeodrippe/dev-tooling {:mvn/version "1.0.47"}}
+  org.clj-commons/claypoole {:mvn/version "1.2.2"}}
 
  :paths ["src"]}
