@@ -24,7 +24,7 @@
    (java.io File)
    (lambdaisland.deep_diff2.diff_impl Mismatch Deletion Insertion)
    (tlc2.output IMessagePrinterRecorder MP EC)
-   (tlc2.value.impl Value StringValue ModelValue RecordValue IntValue IntervalValue)
+   (tlc2.value.impl Value StringValue ModelValue RecordValue FcnRcdValue IntValue IntervalValue)
    (util UniqueString)))
 
 (set! *warn-on-reflection* false)
@@ -283,7 +283,15 @@
   IntervalValue
   (-to-edn [v]
     (clojure.lang.Ratio. (BigInteger/valueOf (.-low v))
-                         (BigInteger/valueOf (.-high v)))))
+                         (BigInteger/valueOf (.-high v))))
+
+  ;; TODO: Maybe optimize it later by creating something analogous to
+  ;; TlaRecordMap.
+  tlc2.value.impl.FcnRcdValue
+  (-to-edn [v]
+    (p* ::fcn
+        (zipmap (mapv tla-edn/-to-edn (.-domain v))
+                (mapv tla-edn/-to-edn (.-values v))))))
 
 (extend-protocol tla-edn/EdnToTla
   clojure.lang.Keyword
@@ -314,7 +322,25 @@
 
   BigInteger
   (tla-edn/-to-tla-value [v]
-    (IntValue/gen v)))
+    (IntValue/gen v))
+
+  clojure.lang.APersistentMap
+  (-to-tla-value [coll]
+    (cond
+      (empty? coll)
+      (tla-edn/-to-tla-value {:tla-edn.record/empty? true})
+
+      (every? keyword? (keys coll))
+      (RecordValue.
+       (tla-edn/typed-array UniqueString (mapv #(-> % key ^StringValue tla-edn/to-tla-value .getVal) coll))
+       (tla-edn/typed-array Value (mapv #(-> % val tla-edn/to-tla-value) coll))
+       false)
+
+      :else
+      (FcnRcdValue.
+       (tla-edn/typed-array Value (mapv #(-> % key tla-edn/to-tla-value) coll))
+       (tla-edn/typed-array Value (mapv #(-> % val tla-edn/to-tla-value) coll))
+       false))))
 
 ;; TODO: For serialized objecs, make it a custom random filename
 ;; so exceptions from concurrent executions do not mess with each other.
@@ -1455,6 +1481,7 @@ VIEW
   ([init-state next-operator operators {:keys [:seed :fp :workers :tlc-args
                                                :raw-output? :run-local? :debug?
                                                :complete-response?
+                                               no-deadlock
                                                depth async simulate generate]
                                         :or {workers (if (or generate simulate)
                                                        1 :auto)}
@@ -1504,6 +1531,7 @@ VIEW
                          depth (conj "-depth" depth)
                          seed (conj "-seed" seed)
                          fp (conj "-fp" fp)
+                         no-deadlock (conj "-deadlock")
                          workers (conj "-workers" (if (keyword? workers)
                                                     (name workers)
                                                     workers))
