@@ -90,7 +90,8 @@
                   {#_ #_:workers 1
                    :fp 0
                    :seed 1
-                   :simulate true
+                   :async true
+                   #_ #_:simulate true
                    #_ #_:run-local? true}))
 
   (ra/visualize-result result)

@@ -79,28 +79,40 @@
 
 (rh/defconstraint state-constraint
   [{::keys [counter pending token]}]
-  (and (every? #(and (<= (get counter %) 1)
-                     (<= (get pending %) 1))
+  (and (every? #(and (<= (get counter %) 1 #_3)
+                     (<= (get pending %) 1 #_3))
                nodes)
        (<= (:q token) 9)))
 
+(defn terminated?
+  [{::keys [token counter color active pending]}]
+  (= (zero? (:pos token))
+     (= (:color token) :white)
+     (zero? (+ (:q token) (get counter 0)))
+     (= (get color 0) :white)
+     (not (get active 0))
+     (zero? (get pending 0))))
+
 (comment
 
+  ;; It takes ~23s for 3 nodes, 1 worker and no trace example.
   (def result
     (r/run-model global #{initiate-probe pass-token
                           send-msg recv-msg deactivate
                           state-constraint}
                  {:no-deadlock true
                   :async true
-                  :workers 1
+                  :workers 1 #_:auto
                   :seed 1
                   :fp 0
-                  #_ #_:trace-example? true
+                  #_ #_     :trace-example? true
                   #_ #_:generate true
                   #_ #_:depth 15}))
 
   (.close result)
   @result
+
+  ;; For statistics, see `EWD998_opts`.
 
   (count (r.buf/read-contents))
 
@@ -115,13 +127,21 @@
   ;; - [x] Add spec for EWD998
   ;; - [x] Check why we have so few states
   ;; - [-] Check perf
-  ;;   - [-] It's not that easy, we need more profiling
+  ;;   - It's not that easy, we need more profiling
+  ;;   - Merge in `::r/result--merge` is slow
   ;; - [ ] Add statistics
+  ;; - [ ] It seems that adding `currentState` slow things down
+  ;;   - [ ] Maybe the field could be non-static?
   ;; - [ ] If you are starting a new Recife run, destroy any previous async runs
+  ;; - [ ] See if exceptions are being thrown
+  ;; - [ ] Add a way to for users plugins
+  ;;   - [ ] Function that's run before and after the call
+  ;;   - [ ] Function that's run wrapping the call
   ;; - [ ] Add implicit `do` to helper macros
   ;;   - [ ] Improve args description
   ;; - [ ] Maybe add -noTE when running simulate/generate?
   ;; - [ ] How to improve simulation of a step?
-  ;; - [ ] Visualize trace with Clerk.
+  ;; - [ ] Visualize trace with Clerk
+  ;; - [ ] Could we create a custom class implementing `Value`?
 
   ())

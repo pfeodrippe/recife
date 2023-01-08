@@ -2,7 +2,8 @@
   (:refer-clojure :exclude [and])
   (:require
    [clojure.math.combinatorics :as comb]
-   [recife.core :as r]))
+   [recife.core :as r])
+  (:import (tlc2.tool.impl Tool)))
 
 (def ^:dynamic *env* {:global-vars [] :local-vars []})
 
@@ -169,3 +170,9 @@
                   (mapv last (sort-by first %))
                   (into {} %)))
          set)))
+
+(defn get-level
+  "Get current TLC level (depth in a trace)."
+  []
+  (when Tool/currentState
+    (.getLevel Tool/currentState)))
