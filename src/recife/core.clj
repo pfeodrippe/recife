@@ -25,7 +25,8 @@
    (java.io File)
    (lambdaisland.deep_diff2.diff_impl Mismatch Deletion Insertion)
    (tlc2.output IMessagePrinterRecorder MP EC)
-   (tlc2.value.impl Value StringValue ModelValue RecordValue FcnRcdValue IntValue IntervalValue)
+   (tlc2.value.impl Value StringValue ModelValue RecordValue FcnRcdValue IntValue IntervalValue
+                    TupleValue SetEnumValue)
    (util UniqueString)))
 
 (set! *warn-on-reflection* false)
@@ -306,7 +307,8 @@
 
   clojure.lang.Seqable
   (tla-edn/-to-tla-value [v]
-    (tla-edn/to-tla-value (into [] v)))
+    (p* ::to-tla--seqable
+        (tla-edn/to-tla-value (into [] v))))
 
   clojure.lang.Symbol
   (tla-edn/-to-tla-value [v]
@@ -327,21 +329,41 @@
 
   clojure.lang.APersistentMap
   (-to-tla-value [coll]
-    (cond
-      (empty? coll)
-      (tla-edn/-to-tla-value {:tla-edn.record/empty? true})
+    (p* ::to-tla--map
+        (cond
+          (empty? coll)
+          (tla-edn/-to-tla-value {:tla-edn.record/empty? true})
 
-      (every? keyword? (keys coll))
-      (RecordValue.
-       (tla-edn/typed-array UniqueString (mapv #(-> % key ^StringValue tla-edn/to-tla-value .getVal) coll))
-       (tla-edn/typed-array Value (mapv #(-> % val tla-edn/to-tla-value) coll))
-       false)
+          (every? keyword? (keys coll))
+          (RecordValue.
+           (tla-edn/typed-array UniqueString (mapv #(-> % key ^StringValue tla-edn/to-tla-value .getVal) coll))
+           (tla-edn/typed-array Value (mapv #(-> % val tla-edn/to-tla-value) coll))
+           false)
 
-      :else
-      (FcnRcdValue.
-       (tla-edn/typed-array Value (mapv #(-> % key tla-edn/to-tla-value) coll))
-       (tla-edn/typed-array Value (mapv #(-> % val tla-edn/to-tla-value) coll))
-       false))))
+          :else
+          (FcnRcdValue.
+           (tla-edn/typed-array Value (mapv #(-> % key tla-edn/to-tla-value) coll))
+           (tla-edn/typed-array Value (mapv #(-> % val tla-edn/to-tla-value) coll))
+           false))))
+
+  clojure.lang.PersistentVector
+  (-to-tla-value [coll]
+    (p* ::to-tla--vector
+        (TupleValue.
+         (tla-edn/typed-array Value (mapv #(-> % tla-edn/-to-tla-value) coll)))))
+
+  clojure.lang.PersistentList
+  (-to-tla-value [coll]
+    (p* ::to-tla--list
+        (TupleValue.
+         (tla-edn/typed-array Value (mapv #(-> % tla-edn/-to-tla-value) coll)))))
+
+  clojure.lang.PersistentHashSet
+  (-to-tla-value [coll]
+    (p* ::to-tla--hash-set
+        (SetEnumValue.
+         (tla-edn/typed-array Value (mapv #(-> % tla-edn/-to-tla-value) coll))
+         false))))
 
 ;; TODO: For serialized objecs, make it a custom random filename
 ;; so exceptions from concurrent executions do not mess with each other.
@@ -370,7 +392,8 @@
   (p* ::process-operator*
       (let [global main-var
             local (get-in main-var [::procs self])
-            result (p ::result (f (merge {:self self} context global local)))
+            result (p ::result (f (p* ::result--merge
+                                      (merge {:self self} global context local))))
             result-global (medley/filter-keys namespace result)
             result-local (medley/remove-keys namespace result)
             metadata (if (:recife/metadata result-global)
@@ -1360,8 +1383,19 @@ VIEW
                                  state-writer (->FileStateWriter (t/writer os :msgpack) os (atom {}) file-path)]
                              (.setStateWriter ^tlc2.TLC tlc state-writer)
                              state-writer))
+            *finished-properly? (atom false)
+            ;; TODO: We have to do more work to finish the process properly with
+            ;; a SIGTERM.
+            _ (.addShutdownHook (Runtime/getRuntime)
+                                (Thread. ^Runnable (fn []
+                                                     (when-not *finished-properly?
+                                                       (let [pstats @@u/pd]
+                                                         (when (:stats pstats)
+                                                           (println (str "\n\n" (tufte/format-pstats pstats)))))
+                                                       (println {:unfinished? true})))))
             _ (do (doto ^tlc2.TLC tlc
                     .process)
+                  (reset! *finished-properly? true)
                   (let [pstats @@u/pd]
                     (when (:stats pstats)
                       (println (str "\n\n" (tufte/format-pstats pstats))))))
@@ -1609,16 +1643,6 @@ VIEW
                        :complete-response? true
                        :raw-args [(str "-DRECIFE_OPTS_FILE_PATH=" opts-file-path)]})
              output (atom [])
-             output-streaming (future
-                                (with-open [rdr (io/reader (:out result))]
-                                  (binding [*in* rdr]
-                                    (loop []
-                                      (when-let [line (read-line)]
-                                        ;; If it's a EDN hashmap, do not print it.
-                                        (when-let [last-line (last @output)]
-                                          (println last-line))
-                                        (swap! output conj line)
-                                        (recur))))))
              t0 (System/nanoTime)
              *destroyed? (atom false)
              process (RecifeModel.
@@ -1637,7 +1661,6 @@ VIEW
 
                         clojure.lang.IDeref
                         (deref [_]
-                          @output-streaming
                           ;; Wait until the process finishes.
                           @result
                           (reset! *destroyed? true)
@@ -1646,7 +1669,18 @@ VIEW
                           ;; Throw exception or return EDN result.
                           (if (.exists (io/as-file exception-filename))
                             (throw (deserialize-obj exception-filename))
-                            (-> @output last edn/read-string)))))]
+                            (-> @output last edn/read-string)))))
+             _output-streaming (future
+                                 (with-open [rdr (io/reader (:out result))]
+                                   (binding [*in* rdr]
+                                     (loop []
+                                       (when-let [line (read-line)]
+                                         ;; If it's a EDN hashmap, do not print it.
+                                         (when-let [last-line (last @output)]
+                                           (println last-line))
+                                         (swap! output conj line)
+                                         (recur)))))
+                                 @process)]
          ;; Read line by line so we can stream the output to the user.
          (if async
            process

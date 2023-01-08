@@ -82,7 +82,7 @@
   (and (every? #(and (<= (get counter %) 1)
                      (<= (get pending %) 1))
                nodes)
-       (<= (:q token) 6)))
+       (<= (:q token) 9)))
 
 (comment
 
@@ -93,11 +93,14 @@
                  {:no-deadlock true
                   :async true
                   :workers 1
+                  :seed 1
+                  :fp 0
                   #_ #_:trace-example? true
                   #_ #_:generate true
                   #_ #_:depth 15}))
 
   (.close result)
+  @result
 
   (count (r.buf/read-contents))
 
@@ -107,15 +110,14 @@
   (into (sorted-map) (frequencies (mapv :prob (r.buf/read-contents))))
   (take 500 (r.buf/read-contents))
 
-  ()
-
   ;; TODO:
   ;; - [x] Sets of functions
   ;; - [x] Add spec for EWD998
   ;; - [x] Check why we have so few states
-  ;; - [ ] Check perf
+  ;; - [-] Check perf
+  ;;   - [-] It's not that easy, we need more profiling
   ;; - [ ] Add statistics
-  ;; - [ ] If you are starting a new Recife, destroy any previous async runs
+  ;; - [ ] If you are starting a new Recife run, destroy any previous async runs
   ;; - [ ] Add implicit `do` to helper macros
   ;;   - [ ] Improve args description
   ;; - [ ] Maybe add -noTE when running simulate/generate?
