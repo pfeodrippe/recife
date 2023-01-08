@@ -158,7 +158,14 @@
   (let [domain->pairs (->> (for [a (set domain)
                                  b (set values)]
                              [a b])
-                           (group-by first))]
+                           (group-by first))
+        domain-seq? (when (every? number? domain)
+                      (let [domain-max (apply max domain)
+                            domain-range (range (inc domain-max))]
+                        (= (set domain-range)
+                           (set domain))))]
     (->> (apply comb/cartesian-product (vals domain->pairs))
-         (mapv #(into {} %))
+         (mapv #(if domain-seq?
+                  (mapv last (sort-by first %))
+                  (into {} %)))
          set)))

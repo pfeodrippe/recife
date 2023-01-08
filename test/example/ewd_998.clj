@@ -9,14 +9,14 @@
    [recife.helpers :as rh]
    [recife.buffer :as r.buf]))
 
-(def nodes (set (range 2 #_3)))
+(def nodes (set (range 3)))
 (def colors #{:white :black})
 
 (def global
   {::active (r/one-of (rh/combine nodes #{true false}))
    ::color (r/one-of (rh/combine nodes colors))
-   ::counter (zipmap nodes (repeat 0))
-   ::pending (zipmap nodes (repeat 0))
+   ::counter (repeat (count nodes) 0)
+   ::pending (repeat (count nodes) 0)
    ::token {:pos 0 :q 0 :color :black}})
 
 (r/defproc initiate-probe {}
@@ -47,7 +47,7 @@
                                               (:color token)))))
            (assoc-in [::color i] :white))))})
 
-(r/defproc environment {}
+(r/defproc send-msg {}
   {[::send-msg
     {:i nodes
      :receiver nodes}]
@@ -56,9 +56,10 @@
                 (not= i receiver))
        (-> db
            (update-in [::counter i] inc)
-           (update-in [::pending receiver] inc))))
+           (update-in [::pending receiver] inc))))})
 
-   [::recv-msg
+(r/defproc recv-msg {}
+  {[::recv-msg
     {:i nodes}]
    (fn [{::keys [pending] :keys [i] :as db}]
      (when (pos? (get pending i))
@@ -66,9 +67,10 @@
            (update-in [::pending i] dec)
            (update-in [::counter i] dec)
            (assoc-in [::color i] :black)
-           (assoc-in [::active i] true))))
+           (assoc-in [::active i] true))))})
 
-   [::deactivate
+(r/defproc deactivate {}
+  {[::deactivate
     {:i nodes}]
    (fn [{::keys [active] :keys [i] :as db}]
      (when (get active i)
@@ -77,19 +79,21 @@
 
 (rh/defconstraint state-constraint
   [{::keys [counter pending token]}]
-  (and (every? #(and (<= (get counter %) 3)
-                     (<= (get pending %) 3))
+  (and (every? #(and (<= (get counter %) 1)
+                     (<= (get pending %) 1))
                nodes)
-       (<= (:q token) 9)))
+       (<= (:q token) 6)))
 
 (comment
 
   (def result
     (r/run-model global #{initiate-probe pass-token
-                          environment
+                          send-msg recv-msg deactivate
                           state-constraint}
                  {:no-deadlock true
-                  #_ #_:workers 1
+                  :async true
+                  :workers 1
+                  #_ #_:trace-example? true
                   #_ #_:generate true
                   #_ #_:depth 15}))
 
@@ -106,10 +110,16 @@
   ()
 
   ;; TODO:
-  ;; - [ ] Sets of functions
-  ;; - [ ] Add spec for EWD998
+  ;; - [x] Sets of functions
+  ;; - [x] Add spec for EWD998
+  ;; - [x] Check why we have so few states
+  ;; - [ ] Check perf
+  ;; - [ ] Add statistics
+  ;; - [ ] If you are starting a new Recife, destroy any previous async runs
   ;; - [ ] Add implicit `do` to helper macros
   ;;   - [ ] Improve args description
   ;; - [ ] Maybe add -noTE when running simulate/generate?
+  ;; - [ ] How to improve simulation of a step?
+  ;; - [ ] Visualize trace with Clerk.
 
   ())

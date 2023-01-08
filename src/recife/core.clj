@@ -4,6 +4,7 @@
    [babashka.process :as p]
    [clojure.edn :as edn]
    [clojure.java.io :as io]
+   [clojure.pprint :as pp]
    [clojure.repl :as repl]
    [clojure.set :as set]
    [clojure.string :as str]
@@ -1469,6 +1470,28 @@ VIEW
   [tlc-runner]
   (prn (tlc-result-handler tlc-runner)))
 
+;; We create a record just so we can use `simple-dispatch`.
+(defrecord RecifeModel [v]
+  java.io.Closeable
+  (close [_]
+    (.close v))
+
+  clojure.lang.IDeref
+  (deref [_]
+    @v)
+
+  Object
+  (toString [_]
+    "# RecifeModel {}"))
+
+(defmethod print-method RecifeModel
+  [_o ^java.io.Writer w]
+  (.write w "# RecifeModel {}"))
+
+(defmethod pp/simple-dispatch RecifeModel
+  [^RecifeModel _]
+  (pr "# RecifeModel {}"))
+
 (defn- run-model*
   "Run model.
 
@@ -1482,7 +1505,10 @@ VIEW
                                                :raw-output? :run-local? :debug?
                                                :complete-response?
                                                no-deadlock
-                                               depth async simulate generate]
+                                               depth async simulate generate
+                                               ;; Below opts are used in the child
+                                               ;; process.
+                                               trace-example? dump-states?]
                                         :or {workers (if (or generate simulate)
                                                        1 :auto)}
                                         :as opts}]
@@ -1595,27 +1621,32 @@ VIEW
                                         (recur))))))
              t0 (System/nanoTime)
              *destroyed? (atom false)
-             process (proxy [java.io.Closeable clojure.lang.IDeref] []
-                       (close []
-                         (if @*destroyed?
-                           (println "\n\n------- TLA+ process already destroyed ------\n\n")
-                           (do
-                             (reset! *destroyed? true)
-                             (p/destroy result)
-                             (when generate
-                               (r.buf/stop-sync-loop!))
-                             (println (format "\n\n------- TLA+ process destroyed after %s seconds ------\n\n"
-                                              (Math/round (/ (- (System/nanoTime) t0) 1E9)))))))
-                       (deref []
-                         @output-streaming
-                         ;; Wait until the process finishes.
-                         @result
-                         (when generate
-                           (r.buf/stop-sync-loop!))
-                         ;; Throw exception or return EDN result.
-                         (if (.exists (io/as-file exception-filename))
-                           (throw (deserialize-obj exception-filename))
-                           (-> @output last edn/read-string))))]
+             process (RecifeModel.
+                      (reify
+                        java.io.Closeable
+                        (close [_]
+                          (if @*destroyed?
+                            (println "\n\n------- TLA+ process already destroyed ------\n\n")
+                            (do
+                              (reset! *destroyed? true)
+                              (p/destroy result)
+                              (when generate
+                                (r.buf/stop-sync-loop!))
+                              (println (format "\n\n------- TLA+ process destroyed after %s seconds ------\n\n"
+                                               (Math/round (/ (- (System/nanoTime) t0) 1E9)))))))
+
+                        clojure.lang.IDeref
+                        (deref [_]
+                          @output-streaming
+                          ;; Wait until the process finishes.
+                          @result
+                          (reset! *destroyed? true)
+                          (when generate
+                            (r.buf/stop-sync-loop!))
+                          ;; Throw exception or return EDN result.
+                          (if (.exists (io/as-file exception-filename))
+                            (throw (deserialize-obj exception-filename))
+                            (-> @output last edn/read-string)))))]
          ;; Read line by line so we can stream the output to the user.
          (if async
            process
