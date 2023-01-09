@@ -174,5 +174,5 @@
 (defn get-level
   "Get current TLC level (depth in a trace)."
   []
-  (when Tool/currentState
+  #_(when Tool/currentState
     (.getLevel Tool/currentState)))

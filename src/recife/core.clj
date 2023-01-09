@@ -20,14 +20,17 @@
    [recife.util :as u :refer [p*]]
    [taoensso.tufte :as tufte :refer [defnp p defnp-]]
    [tla-edn.core :as tla-edn]
-   [tla-edn.spec :as spec])
+   [tla-edn.spec :as spec]
+   [recife.class.recife-edn-value]
+   recife.class)
   (:import
    (java.io File)
    (lambdaisland.deep_diff2.diff_impl Mismatch Deletion Insertion)
    (tlc2.output IMessagePrinterRecorder MP EC)
    (tlc2.value.impl Value StringValue ModelValue RecordValue FcnRcdValue IntValue IntervalValue
                     TupleValue SetEnumValue)
-   (util UniqueString)))
+   (util UniqueString)
+   (recife RecifeEdnValue)))
 
 (set! *warn-on-reflection* false)
 #_(set! *warn-on-reflection* true)
@@ -247,18 +250,18 @@
 
 (extend-protocol tla-edn/TLAPlusEdn
   tlc2.value.impl.RecordValue
-  (-to-edn [v]
-    (build-record-map v))
   #_(-to-edn [v]
-      (p* ::tla-edn--record
-          (let [name->value (p* ::tla-edn--zipmap
-                                (zipmap (p* ::tla-edn--zipmap-keys
-                                            (record-keys v))
-                                        (p* ::tla-edn--zipmap-values
-                                            (record-values v))))]
-            (if (= name->value {:tla-edn.record/empty? true})
-              {}
-              name->value))))
+    (build-record-map v))
+  (-to-edn [v]
+    (p* ::tla-edn--record
+        (let [name->value (p* ::tla-edn--zipmap
+                              (zipmap (p* ::tla-edn--zipmap-keys
+                                          (record-keys v))
+                                      (p* ::tla-edn--zipmap-values
+                                          (record-values v))))]
+          (if (= name->value {:tla-edn.record/empty? true})
+            {}
+            name->value))))
 
   StringValue
   (-to-edn [v']
@@ -293,7 +296,11 @@
   (-to-edn [v]
     (p* ::fcn
         (zipmap (mapv tla-edn/-to-edn (.-domain v))
-                (mapv tla-edn/-to-edn (.-values v))))))
+                (mapv tla-edn/-to-edn (.-values v)))))
+
+  RecifeEdnValue
+  (-to-edn [v]
+    (.-state v)))
 
 (extend-protocol tla-edn/EdnToTla
   clojure.lang.Keyword
@@ -330,21 +337,22 @@
   clojure.lang.APersistentMap
   (-to-tla-value [coll]
     (p* ::to-tla--map
-        (cond
-          (empty? coll)
-          (tla-edn/-to-tla-value {:tla-edn.record/empty? true})
+        (RecifeEdnValue. coll)
+        #_(cond
+            (empty? coll)
+            (tla-edn/-to-tla-value {:tla-edn.record/empty? true})
 
-          (every? keyword? (keys coll))
-          (RecordValue.
-           (tla-edn/typed-array UniqueString (mapv #(-> % key ^StringValue tla-edn/to-tla-value .getVal) coll))
-           (tla-edn/typed-array Value (mapv #(-> % val tla-edn/to-tla-value) coll))
-           false)
+            (every? keyword? (keys coll))
+            (RecordValue.
+             (tla-edn/typed-array UniqueString (mapv #(-> % key ^StringValue tla-edn/to-tla-value .getVal) coll))
+             (tla-edn/typed-array Value (mapv #(-> % val tla-edn/to-tla-value) coll))
+             false)
 
-          :else
-          (FcnRcdValue.
-           (tla-edn/typed-array Value (mapv #(-> % key tla-edn/to-tla-value) coll))
-           (tla-edn/typed-array Value (mapv #(-> % val tla-edn/to-tla-value) coll))
-           false))))
+            :else
+            (FcnRcdValue.
+             (tla-edn/typed-array Value (mapv #(-> % key tla-edn/to-tla-value) coll))
+             (tla-edn/typed-array Value (mapv #(-> % val tla-edn/to-tla-value) coll))
+             false))))
 
   clojure.lang.PersistentVector
   (-to-tla-value [coll]
@@ -1669,7 +1677,13 @@ VIEW
                           ;; Throw exception or return EDN result.
                           (if (.exists (io/as-file exception-filename))
                             (throw (deserialize-obj exception-filename))
-                            (-> @output last edn/read-string)))))
+                            (try
+                              (let [edn (-> @output last edn/read-string)]
+                                (if (map? edn)
+                                  edn
+                                  (println (-> @output last))))
+                              (catch Exception _
+                                (println (-> @output last))))))))
              _output-streaming (future
                                  (with-open [rdr (io/reader (:out result))]
                                    (binding [*in* rdr]

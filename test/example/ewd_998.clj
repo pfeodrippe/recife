@@ -129,6 +129,7 @@
   ;; - [-] Check perf
   ;;   - It's not that easy, we need more profiling
   ;;   - Merge in `::r/result--merge` is slow
+  ;; - [ ] Try to create KeywordValue
   ;; - [ ] Add statistics
   ;; - [ ] It seems that adding `currentState` slow things down
   ;;   - [ ] Maybe the field could be non-static?
