@@ -423,6 +423,7 @@
           :fp 0}
          (r/run-model {} #{ch6-threads-1/thread ch6-threads-1/at-most-one-critical} default-options))))
 
+;; FIXME
 (deftest ch6-threads-2-test
   (let [result (r/run-model {}
                             #{ch6-threads-2/thread

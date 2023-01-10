@@ -306,7 +306,8 @@
   clojure.lang.Keyword
   (tla-edn/-to-tla-value
     [v]
-    (StringValue. ^String (custom-munge (symbol v))))
+    (RecifeEdnValue. v)
+    #_(StringValue. ^String (custom-munge (symbol v))))
 
   nil
   (tla-edn/-to-tla-value [_]
@@ -321,7 +322,7 @@
   (tla-edn/-to-tla-value [v]
     (ModelValue/make (str v)))
 
-  TlaRecordMap
+  #_ #_TlaRecordMap
   (tla-edn/-to-tla-value [v]
     (p* ::to-tla--tla-record-map
         (.record v)))
