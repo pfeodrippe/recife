@@ -48,6 +48,7 @@
 
 (defonce ^:private string-cache (atom {}))
 (defonce ^:private keyword-cache (atom {}))
+(defonce ^:private cache (atom {}))
 (defonce ^:private values-cache (atom {}))
 
 (defn- record-info-from-record
@@ -248,11 +249,19 @@
         tla-edn/-to-edn
         (.-values ^RecordValue v)))
 
+(defmacro use-cache
+  [v op]
+  `(let [v# ~v]
+     (or (get @cache v#)
+         (let [result# ~op]
+           (swap! cache assoc v# result#)
+           result#))))
+
 (extend-protocol tla-edn/TLAPlusEdn
   tlc2.value.impl.RecordValue
-  #_(-to-edn [v]
-    (build-record-map v))
   (-to-edn [v]
+    (build-record-map v))
+  #_(-to-edn [v]
     (p* ::tla-edn--record
         (let [name->value (p* ::tla-edn--zipmap
                               (zipmap (p* ::tla-edn--zipmap-keys
@@ -300,13 +309,19 @@
 
   RecifeEdnValue
   (-to-edn [v]
-    (.-state v)))
+    (p* ::tla-edn--recife-value
+        (.-state v))))
 
 (extend-protocol tla-edn/EdnToTla
   clojure.lang.Keyword
   (tla-edn/-to-tla-value
     [v]
-    (RecifeEdnValue. v)
+    (p* ::to-tla--keyword
+        (use-cache v (RecifeEdnValue. v))
+        #_(or (get @cache v)
+              (let [result (RecifeEdnValue. v)]
+                (swap! cache assoc v result)
+                result)))
     #_(StringValue. ^String (custom-munge (symbol v))))
 
   nil
@@ -322,10 +337,11 @@
   (tla-edn/-to-tla-value [v]
     (ModelValue/make (str v)))
 
-  #_ #_TlaRecordMap
+  TlaRecordMap
   (tla-edn/-to-tla-value [v]
     (p* ::to-tla--tla-record-map
-        (.record v)))
+        #_(.record v)
+        (RecifeEdnValue. v)))
 
   clojure.lang.Ratio
   (tla-edn/-to-tla-value [v]
