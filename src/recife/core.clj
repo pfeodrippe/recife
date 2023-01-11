@@ -386,9 +386,10 @@
   clojure.lang.PersistentHashSet
   (-to-tla-value [coll]
     (p* ::to-tla--hash-set
+        #_(RecifeEdnValue. coll)
         (SetEnumValue.
-         (tla-edn/typed-array Value (mapv #(-> % tla-edn/-to-tla-value) coll))
-         false))))
+           (tla-edn/typed-array Value (mapv #(-> % tla-edn/-to-tla-value) coll))
+           false))))
 
 ;; TODO: For serialized objecs, make it a custom random filename
 ;; so exceptions from concurrent executions do not mess with each other.
@@ -454,7 +455,8 @@
               main-var (p ::to-edn-main-var-tla
                           (tla-edn/to-edn main-var-tla {:string-to-keyword? true}))
               ;; `"_no"` is a indicator that the operator is not using extra args.
-              extra-args (if (contains? (set (mapv str (.-names ^RecordValue extra-args-tla))) "_no")
+              extra-args (if (contains? (.-state extra-args-tla) :-no)
+                           #_(contains? (set (mapv str (.-names ^RecordValue extra-args-tla))) "_no")
                            {}
                            (p ::to-edn-extra-args
                               (tla-edn/to-edn extra-args-tla)))
@@ -646,6 +648,12 @@
   (let [{:keys [:f]} (operator-local (tla-edn/to-edn params))]
     (process-operator-local f self main-var)))
 
+(spec/defop recife_check_extra_args {:module "spec"}
+  [^RecifeEdnValue main-var]
+  (tla-edn/to-tla-value
+   (contains? (set (keys (.-state main-var)))
+              ::extra-args)))
+
 (declare temporal-property)
 
 (defn reg
@@ -679,7 +687,8 @@
                                (-> opts meta :fair+)) :recife.fairness/strongly-fair)
         :recife/fairness-map (some->> (or (-> expr meta :fairness) (-> opts meta :fairness))
                                       (temporal-property (keyword (str (symbol identifier) "-fairness"))))
-        :form (parse [:if [:raw "\"recife___core_SLASH_extra_args\" \\in DOMAIN _main_var"]
+        :form (parse [:if [:raw "recife_check_extra_args(main_var)"]
+                      #_[:raw "\"recife___core_SLASH_extra_args\" \\in DOMAIN _main_var"]
                       [:and
                        [:raw (format "\nmain_var[%s][self][\"pc\"] = %s"
                                      (tla-edn/to-tla-value ::procs)
@@ -1042,6 +1051,8 @@ VARIABLES main_var #{helper-variables}
 vars == << main_var #{helper-variables} >>
 
 recife_operator_local(_self, _params, _main_var) == _self = _self /\\ _params = _params /\\ _main_var = _main_var
+
+recife_check_extra_args(_main_var) == _main_var = main_var
 
 #{other-identifiers}
 

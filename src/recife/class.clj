@@ -9,7 +9,20 @@
  :init init
  :state state
  :impl-ns recife.class.recife-edn-value
+ :methods [^:static [createMap
+                     ["[Ljava.lang.String;" "[Ltlc2.value.impl.Value;" tlc2.tool.coverage.CostModel]
+                     tlc2.value.impl.Value]]
  :prefix "edn-")
+
+#_(gen-class
+   :name recife.RecifeEdnSetValue
+   :constructors {[Object] []}
+   :implements [tlc2.value.impl.Enumerable tlc2.value.impl.Reducible]
+   :extends tlc2.value.impl.SetEnumValue
+   :init init
+   :state state
+   :impl-ns recife.class.recife-edn-set-value
+   :prefix "edn-")
 
 #_(compile 'recife.class)
 #_(cp/add-classpath "classes")

@@ -43,6 +43,10 @@
 (comment
 
   ;; Should deadlock (~ 6 states).
-  (r/run-model global #{writer reader bounded-queue})
+  (r/run-model global #{writer reader bounded-queue}
+               {:debug? true
+                :no-deadlock true
+                :fp 0
+                :seed 1})
 
   ())

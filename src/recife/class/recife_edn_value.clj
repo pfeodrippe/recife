@@ -5,7 +5,8 @@
    [kaocha.classpath :as cp]
    [tla-edn.core :as tla-edn]
    [recife.util :refer [p*]]
-   [clojure.string :as str])
+   [clojure.string :as str]
+   [clojure.repl :as repl])
   (:import
    (tlc2.value IValueOutputStream IValueInputStream ValueInputStream)
    (tlc2.value.impl Value StringValue RecordValue FcnRcdValue)
@@ -67,6 +68,19 @@
 (defn edn-getUniqueString
   [^RecifeEdnValue this]
   (UniqueString/of (custom-munge (symbol (.-state this)))))
+
+(defn- tlc-string->keyword
+  [v]
+  (let [s (str/replace v #"___" ".")]
+    (keyword (repl/demunge s))))
+
+(defn edn-createMap
+  [^{:tag "[Ljava.lang.String;"} names
+   ^{:tag "[Ltlc2.value.impl.Value;"} values
+   ^tlc2.tool.coverage.CostModel _cm]
+  (p* ::createMap
+      (RecifeEdnValue. (zipmap (mapv tlc-string->keyword names)
+                               (mapv tla-edn/to-edn values)))))
 
 (defn edn-getDomain
   [^RecifeEdnValue this]
@@ -210,3 +224,8 @@
 
 ;; TODO:
 ;; - [x] Add support for other types at `ValueInputStream.java`
+;; - [ ] See if we can change TLC to accept our Edn class directly
+
+(comment
+
+  ())

@@ -87,7 +87,7 @@
                               ch1-wire-2/invariant
                               ch1-wire-2/eventually-consistent}
                             (merge default-options
-                                   {:tlc-args ["-lncheck" "final"]})) ]
+                                   {:tlc-args ["-lncheck" "final"]}))]
     (is (= {:trace
             [[0
               {:recife.core/procs
