@@ -260,7 +260,8 @@
 (extend-protocol tla-edn/TLAPlusEdn
   tlc2.value.impl.RecordValue
   (-to-edn [v]
-    (build-record-map v))
+    (p* ::tla-edn--record
+        (build-record-map v)))
   #_(-to-edn [v]
     (p* ::tla-edn--record
         (let [name->value (p* ::tla-edn--zipmap
@@ -296,8 +297,9 @@
   ;; We use interval value to encode clojure ratios.
   IntervalValue
   (-to-edn [v]
-    (clojure.lang.Ratio. (BigInteger/valueOf (.-low v))
-                         (BigInteger/valueOf (.-high v))))
+    (p* ::tla-edn--interval
+        (clojure.lang.Ratio. (BigInteger/valueOf (.-low v))
+                             (BigInteger/valueOf (.-high v)))))
 
   ;; TODO: Maybe optimize it later by creating something analogous to
   ;; TlaRecordMap.
@@ -317,7 +319,8 @@
   (tla-edn/-to-tla-value
     [v]
     (p* ::to-tla--keyword
-        (use-cache v (RecifeEdnValue. v))
+        (RecifeEdnValue. v)
+        #_(use-cache v (RecifeEdnValue. v))
         #_(or (get @cache v)
               (let [result (RecifeEdnValue. v)]
                 (swap! cache assoc v result)
@@ -326,7 +329,8 @@
 
   nil
   (tla-edn/-to-tla-value [_]
-    (tla-edn/to-tla-value :recife/null))
+    (p* ::tla-edn--null
+        (tla-edn/to-tla-value :recife/null)))
 
   clojure.lang.Seqable
   (tla-edn/-to-tla-value [v]
@@ -335,7 +339,8 @@
 
   clojure.lang.Symbol
   (tla-edn/-to-tla-value [v]
-    (ModelValue/make (str v)))
+    (p* ::to-tla--symbol
+        (ModelValue/make (str v))))
 
   TlaRecordMap
   (tla-edn/-to-tla-value [v]
@@ -345,11 +350,13 @@
 
   clojure.lang.Ratio
   (tla-edn/-to-tla-value [v]
-    (IntervalValue. (int (numerator v)) (int (denominator v))))
+    (p* ::to-tla--ratio
+        (IntervalValue. (int (numerator v)) (int (denominator v)))))
 
   BigInteger
   (tla-edn/-to-tla-value [v]
-    (IntValue/gen v))
+    (p* ::to-tla--big-int
+        (IntValue/gen v)))
 
   clojure.lang.APersistentMap
   (-to-tla-value [coll]
@@ -402,14 +409,16 @@
 (def ^:private Lock (Object.))
 
 (defn- serialize-obj [object ^String filename]
-  (locking Lock
-    (when-not (.exists (io/as-file filename))
-      (with-open [outp (-> (java.io.File. filename) java.io.FileOutputStream. java.io.ObjectOutputStream.)]
-        (.writeObject outp object)))))
+  (p* ::serialize-obj
+      (locking Lock
+        (when-not (.exists (io/as-file filename))
+          (with-open [outp (-> (java.io.File. filename) java.io.FileOutputStream. java.io.ObjectOutputStream.)]
+            (.writeObject outp object))))))
 
 (defn- deserialize-obj [^String filename]
-  (with-open [inp (-> (java.io.File. filename) java.io.FileInputStream. java.io.ObjectInputStream.)]
-    (.readObject inp)))
+  (p* ::deserialize-obj
+      (with-open [inp (-> (java.io.File. filename) java.io.FileInputStream. java.io.ObjectInputStream.)]
+        (.readObject inp))))
 
 (defn- process-operator*
   "Created so we can use the same \"meat\" when invoking the function
@@ -447,7 +456,7 @@
             :recife/metadata metadata})))))
 
 (defn process-operator
-  [identifier f self-tla extra-args-tla ^Value main-var-tla]
+  [identifier f self-tla ^RecifeEdnValue extra-args-tla ^Value main-var-tla]
   (p* ::process-operator
       (try
         (let [self (p ::to-edn-self-tla
@@ -469,9 +478,10 @@
 
 (defn- process-operator-local*
   [f self main-var]
-  (let [global main-var
-        local (get-in main-var [::procs self])]
-    (f (merge {:self self} global local))))
+  (p* ::deserialize-obj
+      (let [global main-var
+            local (get-in main-var [::procs self])]
+        (f (merge {:self self} global local)))))
 
 (defn- process-operator-local
   [f self-tla ^Value main-var-tla]
@@ -486,21 +496,22 @@
 
 (defn process-config-operator
   [f ^Value main-var-tla]
-  (try
-    (let [main-var (tla-edn/to-edn main-var-tla {:string-to-keyword? true})
-          result (f main-var)]
-      (if (vector? result)
-        ;; If we have a vector, the first element is a boolean  and the
-        ;; second one is data which will be appended to the result if
-        ;; the boolean was falsy.
-        (do (when-not (first result)
-              ;; Serialize data to be used later when building the result.
-              (serialize-obj (second result) invariant-data-filename))
-            (tla-edn/to-tla-value (boolean (first result))))
-        (tla-edn/to-tla-value (boolean result))))
-    (catch Exception e
-      (serialize-obj e exception-filename)
-      (throw e))))
+  (p* ::process-config-operator
+      (try
+        (let [main-var (tla-edn/to-edn main-var-tla {:string-to-keyword? true})
+              result (f main-var)]
+          (if (vector? result)
+            ;; If we have a vector, the first element is a boolean  and the
+            ;; second one is data which will be appended to the result if
+            ;; the boolean was falsy.
+            (do (when-not (first result)
+                  ;; Serialize data to be used later when building the result.
+                  (serialize-obj (second result) invariant-data-filename))
+                (tla-edn/to-tla-value (boolean (first result))))
+            (tla-edn/to-tla-value (boolean result))))
+        (catch Exception e
+          (serialize-obj e exception-filename)
+          (throw e)))))
 
 (defn process-local-operator
   [f ^Value main-var-tla]
@@ -645,24 +656,44 @@
 
 (spec/defop recife_operator_local {:module "spec"}
   [self ^Value params main-var]
-  (let [{:keys [:f]} (operator-local (tla-edn/to-edn params))]
-    (process-operator-local f self main-var)))
+  (p* ::recife_operator_local
+      (let [{:keys [:f]} (operator-local (tla-edn/to-edn params))]
+        (process-operator-local f self main-var))))
 
 (spec/defop recife_check_extra_args {:module "spec"}
   [^RecifeEdnValue main-var]
-  (tla-edn/to-tla-value
-   (contains? (set (keys (.-state main-var)))
-              ::extra-args)))
+  (p* ::recife_check_extra_args
+      (tla-edn/to-tla-value
+       (contains? (set (keys (.-state main-var)))
+                  ::extra-args))))
 
 (spec/defop recife_check_inequality {:module "spec"}
   [^RecifeEdnValue main-var ^RecifeEdnValue main-var']
-  (tla-edn/to-tla-value
-   (not= (dissoc (.-state main-var) :recife/metadata)
-         (dissoc (.-state main-var') :recife/metadata))))
+  (p* ::recife_check_inequality
+      (tla-edn/to-tla-value
+       (not= (dissoc (.-state main-var) :recife/metadata)
+             (dissoc (.-state main-var') :recife/metadata)))))
 
 (spec/defop recife_my_view {:module "spec"}
   [^RecifeEdnValue main-var]
-  (tla-edn/to-tla-value (dissoc (.-state main-var) :recife/metadata)))
+  (p* ::recife_my_view
+      (tla-edn/to-tla-value (dissoc (.-state main-var) :recife/metadata))))
+
+;; \\A self \\in DOMAIN main_var[procs]: main_var[procs][self][\"pc\"] = done
+(spec/defop recife_check_done {:module "spec"}
+  [^RecifeEdnValue main-var]
+  (p* ::recife_check_done
+      (tla-edn/to-tla-value
+       (->> (::procs (.-state main-var))
+            vals
+            (every? #(= (:pc %) ::done))))))
+
+(spec/defop recife_check_pc {:module "spec"}
+  [^RecifeEdnValue main-var ^StringValue self ^StringValue identifier]
+  (p* ::recife_check_pc
+      (tla-edn/to-tla-value
+       (= (get-in (.-state main-var) [::procs (tla-edn/to-edn self) :pc])
+          (keyword (str (.getVal identifier)))))))
 
 (declare temporal-property)
 
@@ -672,6 +703,7 @@
   (let [tmp (java.nio.file.Files/createTempDirectory "repltest"
                                                      (into-array java.nio.file.attribute.FileAttribute []))]
     (-> (tlc2.REPL. tmp)
+        #_(.processInput2 "[trash_SLASH_capacity |-> {1, 2}, trash_SLASH_bin |-> <<>>, recycle_SLASH_capacity |-> {3, 4}, recycle_SLASH_bin |-> <<>>, hillel___ch2_recycler_2_SLASH_items |-> <<[type |-> {5, 6}, size |-> {7}], [type |-> {10, 20}, size |-> {30}]>>, recife___core_SLASH_procs |-> [x |-> [pc |-> \"hillel___ch2_recycler_2_SLASH_main\"]]]")
         (.processInput2 "[x \\in DOMAIN [a |-> 3, b |-> 4, recife_SLASH_metadata |-> 5] \\ {\"recife_SLASH_metadata\"} |-> [a |-> 3, b |-> 4][x]]")
         tla-edn/to-edn))
 
@@ -711,7 +743,9 @@
         :form (parse [:if [:raw "recife_check_extra_args(main_var)"]
                       #_[:raw "\"recife___core_SLASH_extra_args\" \\in DOMAIN _main_var"]
                       [:and
-                       [:raw (format "\nmain_var[%s][self][\"pc\"] = %s"
+                       [:raw (format "recife_check_pc(main_var, self, \"%s\")"
+                                     (str (symbol identifier)))]
+                       #_[:raw (format "\nmain_var[%s][self][\"pc\"] = %s"
                                      (tla-edn/to-tla-value ::procs)
                                      (tla-edn/to-tla-value identifier))]
                        [:raw (str "main_var' = "
@@ -720,9 +754,11 @@
                        #_[:raw "[x \\in DOMAIN main_var' \\ {\"recife_SLASH_metadata\"} |-> main_var'[x]] /= [x \\in DOMAIN main_var \\ {\"recife_SLASH_metadata\"} |-> main_var[x]]"]
                        [:raw "recife_check_inequality(main_var, main_var')"]]
                       [:and
-                       [:raw (format "\nmain_var[%s][self][\"pc\"] = %s"
-                                     (tla-edn/to-tla-value ::procs)
-                                     (tla-edn/to-tla-value identifier))]
+                       [:raw (format "recife_check_pc(main_var, self, \"%s\")"
+                                     (str (symbol identifier)))]
+                       #_[:raw (format "\nmain_var[%s][self][\"pc\"] = %s"
+                                       (tla-edn/to-tla-value ::procs)
+                                       (tla-edn/to-tla-value identifier))]
                        (if (seq opts)
                          [:raw (parse [:exists (->> opts
                                                     (mapv (fn [[k v]]
@@ -1020,7 +1056,7 @@
                                                              (:form %)))))
                                  (str/join "\n\n"))
         ;; `terminating` prevents deadlock
-        terminating (format "(\\A self \\in DOMAIN main_var[%s]: main_var[%s][self][\"pc\"] = %s /\\ UNCHANGED vars)"
+        terminating (format "(recife_check_done(main_var) /\\ UNCHANGED vars)"
                             (tla-edn/to-tla-value ::procs)
                             (tla-edn/to-tla-value ::procs)
                             (tla-edn/to-tla-value ::done))
@@ -1080,6 +1116,10 @@ recife_check_extra_args(_main_var) == _main_var = main_var
 recife_check_inequality(_main_var, _main_var_2) == _main_var = main_var /\\ _main_var_2 = _main_var_2
 
 recife_my_view(_main_var) == _main_var = main_var
+
+recife_check_done(_main_var) == _main_var = main_var
+
+recife_check_pc(_main_var, self, identifier) == _main_var = main_var /\\ self = self /\\ identifier = identifier
 
 #{other-identifiers}
 
@@ -1396,37 +1436,38 @@ VIEW
         record #(swap! recorder-atom merge %)
         recorder (reify IMessagePrinterRecorder
                    (record [_ code objects]
-                     (condp = code
-                       EC/TLC_INVARIANT_VIOLATED_BEHAVIOR
-                       (record {:violation (merge
-                                            {:type :invariant
-                                             :name (to-edn-string (str/replace (first objects) #"_COLON_" ""))}
-                                            (when (.exists (io/as-file invariant-data-filename))
-                                              {:data (deserialize-obj invariant-data-filename)}))})
+                     (p* ::tlc-result--recorder
+                         (condp = code
+                           EC/TLC_INVARIANT_VIOLATED_BEHAVIOR
+                           (record {:violation (merge
+                                                {:type :invariant
+                                                 :name (to-edn-string (str/replace (first objects) #"_COLON_" ""))}
+                                                (when (.exists (io/as-file invariant-data-filename))
+                                                  {:data (deserialize-obj invariant-data-filename)}))})
 
-                       EC/TLC_MODULE_VALUE_JAVA_METHOD_OVERRIDE
-                       (record {:error-messages (str/split (last objects) #"\n")})
+                           EC/TLC_MODULE_VALUE_JAVA_METHOD_OVERRIDE
+                           (record {:error-messages (str/split (last objects) #"\n")})
 
-                       EC/TLC_INVARIANT_VIOLATED_INITIAL
-                       (record {:violation (merge
-                                            {:type :invariant
-                                             :name (to-edn-string (str/replace (first objects) #"_COLON_" ""))
-                                             :initial-state? true}
-                                            (when (.exists (io/as-file invariant-data-filename))
-                                              {:data (deserialize-obj invariant-data-filename)}))})
+                           EC/TLC_INVARIANT_VIOLATED_INITIAL
+                           (record {:violation (merge
+                                                {:type :invariant
+                                                 :name (to-edn-string (str/replace (first objects) #"_COLON_" ""))
+                                                 :initial-state? true}
+                                                (when (.exists (io/as-file invariant-data-filename))
+                                                  {:data (deserialize-obj invariant-data-filename)}))})
 
-                       EC/TLC_DEADLOCK_REACHED
-                       (record {:violation {:type :deadlock}})
+                           EC/TLC_DEADLOCK_REACHED
+                           (record {:violation {:type :deadlock}})
 
-                       EC/TLC_PARSING_FAILED
-                       (record {:error :parsing-failure})
+                           EC/TLC_PARSING_FAILED
+                           (record {:error :parsing-failure})
 
-                       EC/GENERAL
-                       (record {:error :general
-                                :error-messages (str/split (first objects) #"\n")})
+                           EC/GENERAL
+                           (record {:error :general
+                                    :error-messages (str/split (first objects) #"\n")})
 
-                       (swap! recorder-atom update :others conj
-                              [code objects]))))]
+                           (swap! recorder-atom update :others conj
+                                  [code objects])))))]
     (try
       (let [tlc (do (MP/setRecorder recorder)
                     (tlc-runner))
@@ -1456,8 +1497,9 @@ VIEW
                                                          (when (:stats pstats)
                                                            (println (str "\n\n" (tufte/format-pstats pstats)))))
                                                        (println {:unfinished? true})))))
-            _ (do (doto ^tlc2.TLC tlc
-                    .process)
+            _ (do (p* ::process
+                      (doto ^tlc2.TLC tlc
+                        .process))
                   (reset! *finished-properly? true)
                   (let [pstats @@u/pd]
                     (when (:stats pstats)

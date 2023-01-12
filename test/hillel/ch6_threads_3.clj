@@ -115,6 +115,7 @@
   ;;   - [x] Read trace
   ;;   - [x] Get number of states checked and the number of traces
   ;;   - [x] For multiple workers, get first trace
+  ;; - 19s achieved after removing TLA checks
   ;; - [ ] Check statistics http://conf.tlapl.us/2022/JackMarkusTLA+Statistics.pdf
   ;; - [ ] Create macro that sends data from chilren processes  to the current
   ;;       JVM

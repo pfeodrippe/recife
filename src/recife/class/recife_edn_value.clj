@@ -185,7 +185,7 @@
 
 (defn edn-createFrom-IValueInputStream
   [^RecifeEdnValue _this ^IValueInputStream vis]
-  (p* ::createFrom-simple
+  (p* ::createFrom-arity-2
       (let [idx (.getIndex vis)
             dis (.getInputStream vis)
             len (.readInt dis)
@@ -196,7 +196,7 @@
 
 (defn edn-createFrom-ValueInputStream-Map
   [^RecifeEdnValue _this ^IValueInputStream _vis ^java.util.Map _tbl]
-  (p* ::createFrom-tbl
+  (p* ::createFrom-arity-3
       (println :>>BEGK_TBL)))
 
 (defn edn-fingerPrint
@@ -225,6 +225,7 @@
 ;; TODO:
 ;; - [x] Add support for other types at `ValueInputStream.java`
 ;; - [x] See if we can change TLC to accept our Edn class directly
+;; - [ ] Try to add some defrecord to the main var
 
 (comment
 
