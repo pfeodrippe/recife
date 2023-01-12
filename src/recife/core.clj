@@ -660,6 +660,10 @@
    (not= (dissoc (.-state main-var) :recife/metadata)
          (dissoc (.-state main-var') :recife/metadata))))
 
+(spec/defop recife_my_view {:module "spec"}
+  [^RecifeEdnValue main-var]
+  (tla-edn/to-tla-value (dissoc (.-state main-var) :recife/metadata)))
+
 (declare temporal-property)
 
 (comment
@@ -1075,6 +1079,8 @@ recife_check_extra_args(_main_var) == _main_var = main_var
 
 recife_check_inequality(_main_var, _main_var_2) == _main_var = main_var /\\ _main_var_2 = _main_var_2
 
+recife_my_view(_main_var) == _main_var = main_var
+
 #{other-identifiers}
 
 __init ==
@@ -1102,7 +1108,7 @@ Spec == /\\ Init
         /\\ [][Next]_vars
         /\\ Fairness
 
-MyView == << [x \\in DOMAIN main_var \\ {\"recife_SLASH_metadata\"} |-> main_var[x]] >>
+MyView == << recife_my_view(main_var) >>
 
 =============================================================================
 

@@ -81,6 +81,7 @@
            result))
     (simulate-assert result)))
 
+;; FIXME
 (deftest ch1-wire-2-test
   (let [result (r/run-model ch1-wire-2/global
                             #{ch1-wire-2/wire
@@ -241,7 +242,7 @@
                 :name :hillel.ch5-cache-3/invariant
                 :data {:well [:this :is :it]}}}
               :distinct-states 77
-              :generated-states 94
+              :generated-states 93
               :seed 1
               :fp 0}
              result))
@@ -333,7 +334,7 @@
                 :name :hillel.ch5-cache-3/invariant,
                 :data {:well [:this :is :it]}}},
               :distinct-states 77,
-              :generated-states 94,
+              :generated-states 93,
               :seed 1,
               :fp 0}
              (->> (r/timeline-diff result)
@@ -423,7 +424,6 @@
           :fp 0}
          (r/run-model {} #{ch6-threads-1/thread ch6-threads-1/at-most-one-critical} default-options))))
 
-;; FIXME
 (deftest ch6-threads-2-test
   (let [result (r/run-model {}
                             #{ch6-threads-2/thread
@@ -442,6 +442,7 @@
                 result))
     (simulate-assert result)))
 
+;; FIXME
 (deftest ch6-threads-3-test
   (let [result (r/run-model ch6-threads-3/global
                             #{ch6-threads-3/thread
