@@ -654,7 +654,24 @@
    (contains? (set (keys (.-state main-var)))
               ::extra-args)))
 
+(spec/defop recife_check_inequality {:module "spec"}
+  [^RecifeEdnValue main-var ^RecifeEdnValue main-var']
+  (tla-edn/to-tla-value
+   (not= (dissoc (.-state main-var) :recife/metadata)
+         (dissoc (.-state main-var') :recife/metadata))))
+
 (declare temporal-property)
+
+(comment
+
+  ;; TLA+ Repl.
+  (let [tmp (java.nio.file.Files/createTempDirectory "repltest"
+                                                     (into-array java.nio.file.attribute.FileAttribute []))]
+    (-> (tlc2.REPL. tmp)
+        (.processInput2 "[x \\in DOMAIN [a |-> 3, b |-> 4, recife_SLASH_metadata |-> 5] \\ {\"recife_SLASH_metadata\"} |-> [a |-> 3, b |-> 4][x]]")
+        tla-edn/to-edn))
+
+  ())
 
 (defn reg
   ([identifier expr]
@@ -696,7 +713,8 @@
                        [:raw (str "main_var' = "
                                   (symbol (str (custom-munge identifier) "2"))
                                   "(self, _main_var[\"recife___core_SLASH_extra_args\"], main_var)")]
-                       [:raw "[x \\in DOMAIN main_var' \\ {\"recife_SLASH_metadata\"} |-> main_var'[x]] /= [x \\in DOMAIN main_var \\ {\"recife_SLASH_metadata\"} |-> main_var[x]]"]]
+                       #_[:raw "[x \\in DOMAIN main_var' \\ {\"recife_SLASH_metadata\"} |-> main_var'[x]] /= [x \\in DOMAIN main_var \\ {\"recife_SLASH_metadata\"} |-> main_var[x]]"]
+                       [:raw "recife_check_inequality(main_var, main_var')"]]
                       [:and
                        [:raw (format "\nmain_var[%s][self][\"pc\"] = %s"
                                      (tla-edn/to-tla-value ::procs)
@@ -769,7 +787,8 @@
                                     (symbol (str (custom-munge identifier) "2"))
                                     "(self, [_no |-> 0], main_var)")])
                        ;; With it we can test deadlock.
-                       [:raw "[x \\in DOMAIN main_var' \\ {\"recife_SLASH_metadata\"} |-> main_var'[x]] /= [x \\in DOMAIN main_var \\ {\"recife_SLASH_metadata\"} |-> main_var[x]]"]]])
+                       #_[:raw "[x \\in DOMAIN main_var' \\ {\"recife_SLASH_metadata\"} |-> main_var'[x]] /= [x \\in DOMAIN main_var \\ {\"recife_SLASH_metadata\"} |-> main_var[x]]"]
+                       [:raw "recife_check_inequality(main_var, main_var')"]]])
         :recife.operator/type :operator}
        (merge (meta expr) (meta opts))))))
 
@@ -1053,6 +1072,8 @@ vars == << main_var #{helper-variables} >>
 recife_operator_local(_self, _params, _main_var) == _self = _self /\\ _params = _params /\\ _main_var = _main_var
 
 recife_check_extra_args(_main_var) == _main_var = main_var
+
+recife_check_inequality(_main_var, _main_var_2) == _main_var = main_var /\\ _main_var_2 = _main_var_2
 
 #{other-identifiers}
 

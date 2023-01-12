@@ -224,7 +224,7 @@
 
 ;; TODO:
 ;; - [x] Add support for other types at `ValueInputStream.java`
-;; - [ ] See if we can change TLC to accept our Edn class directly
+;; - [x] See if we can change TLC to accept our Edn class directly
 
 (comment
 
