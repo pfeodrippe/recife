@@ -150,7 +150,8 @@
           :fp 0}
          (r/run-model ch2-recycler-2/global
                       #{ch2-recycler-2/main ch2-recycler-2/invariant}
-                      default-options))))
+                      (merge default-options
+                             {#_ #_:debug? true})))))
 
 (deftest ch5-cache-3-test
   (let [result (r/run-model ch5-cache-3/global

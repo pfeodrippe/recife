@@ -6,7 +6,8 @@
    [tla-edn.core :as tla-edn]
    [recife.util :refer [p*]]
    [clojure.string :as str]
-   [clojure.repl :as repl])
+   [clojure.repl :as repl]
+   [taoensso.nippy :as nippy])
   (:import
    (tlc2.value IValueOutputStream IValueInputStream ValueInputStream)
    (tlc2.value.impl Value StringValue RecordValue FcnRcdValue)
@@ -24,6 +25,12 @@
 
 (def ^:private edn-value-byte
   (+ tlc2.value.ValueConstants/DUMMYVALUE 1))
+
+(defmacro ^:private debug
+  [identifier & body]
+  `(do
+     (println ~identifier (do ~@body))
+     (throw (ex-info "Boom from DEBUG" {}))))
 
 #_(compile 'recife.class)
 
@@ -175,11 +182,11 @@
   (p* ::write
       (let [idx (.put vos this)]
         (if (= idx -1)
-          (let [os (.getOutputStream vos)
-                s (pr-str (.-state this))]
+          (let [os ^util.BufferedDataOutputStream (.getOutputStream vos)
+                freezed ^{:tag "[B"} (nippy/fast-freeze (.-state this))]
             (.writeByte vos edn-value-byte)
-            (.writeInt os (count s))
-            (.writeString os s))
+            (.writeInt os (count freezed))
+            (.write os freezed))
           (do (.writeByte vos tlc2.value.ValueConstants/DUMMYVALUE)
               (.writeNat vos idx))))))
 
@@ -187,10 +194,11 @@
   [^RecifeEdnValue _this ^IValueInputStream vis]
   (p* ::createFrom-arity-2
       (let [idx (.getIndex vis)
-            dis (.getInputStream vis)
+            dis ^util.BufferedDataInputStream (.getInputStream vis)
             len (.readInt dis)
-            edn-str (.readString dis len)
-            res (RecifeEdnValue. (edn/read-string edn-str))]
+            data-bytes (byte-array len)
+            _ (.read dis data-bytes 0 len)
+            res (RecifeEdnValue. (nippy/fast-thaw data-bytes))]
         (.assign vis res idx)
         res)))
 
@@ -225,7 +233,10 @@
 ;; TODO:
 ;; - [x] Add support for other types at `ValueInputStream.java`
 ;; - [x] See if we can change TLC to accept our Edn class directly
+;; - [ ] Try to improve perf even more
+;;   - [x] Check if we can use nippy for faster (de)serialization
 ;; - [ ] Try to add some defrecord to the main var
+;; - [ ] See how things are going when using the library
 
 (comment
 
