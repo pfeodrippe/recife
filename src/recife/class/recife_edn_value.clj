@@ -76,18 +76,26 @@
   [^RecifeEdnValue this]
   (UniqueString/of (custom-munge (symbol (.-state this)))))
 
+(def *cache (atom {}))
+
 (defn- tlc-string->keyword
   [v]
-  (let [s (str/replace v #"___" ".")]
-    (keyword (repl/demunge s))))
+  (or (get @*cache v)
+      (let [s (str/replace v #"___" ".")
+            res (keyword (repl/demunge s))]
+        (swap! *cache assoc v res)
+        res)))
 
 (defn edn-createMap
   [^{:tag "[Ljava.lang.String;"} names
    ^{:tag "[Ltlc2.value.impl.Value;"} values
    ^tlc2.tool.coverage.CostModel _cm]
   (p* ::createMap
-      (RecifeEdnValue. (zipmap (mapv tlc-string->keyword names)
-                               (mapv tla-edn/to-edn values)))))
+      (RecifeEdnValue. (p* ::createMap--zipmap
+                           (zipmap (p* ::createMap--keys
+                                       (mapv tlc-string->keyword names))
+                                   (p* ::createMap--values
+                                       (mapv tla-edn/to-edn values)))))))
 
 (defn edn-getDomain
   [^RecifeEdnValue this]
@@ -180,12 +188,12 @@
 (defn edn-write
   [^RecifeEdnValue this ^IValueOutputStream vos]
   (p* ::write
-      (let [idx (.put vos this)]
+      (let [idx ^int (.put vos this)]
         (if (= idx -1)
           (let [os ^util.BufferedDataOutputStream (.getOutputStream vos)
                 freezed ^{:tag "[B"} (nippy/fast-freeze (.-state this))]
             (.writeByte vos edn-value-byte)
-            (.writeInt os (count freezed))
+            (.writeInt os (alength freezed))
             (.write os freezed))
           (do (.writeByte vos tlc2.value.ValueConstants/DUMMYVALUE)
               (.writeNat vos idx))))))
@@ -237,6 +245,7 @@
 ;;   - [x] Check if we can use nippy for faster (de)serialization
 ;; - [ ] Try to add some defrecord to the main var
 ;; - [ ] See how things are going when using the library
+;; - [ ] How to use `cm`?
 
 (comment
 
