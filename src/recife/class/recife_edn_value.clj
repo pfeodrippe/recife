@@ -10,7 +10,7 @@
    [taoensso.nippy :as nippy])
   (:import
    (tlc2.value IValueOutputStream IValueInputStream ValueInputStream)
-   (tlc2.value.impl Value StringValue RecordValue FcnRcdValue)
+   (tlc2.value.impl Value StringValue RecordValue FcnRcdValue BoolValue IntValue)
    (util UniqueString)
    (tlc2.util FP64)))
 
@@ -47,26 +47,36 @@
   (str/replace (munge v) #"\." "___"))
 
 (defn ->tla
-  [coll]
+  [v]
   (p* ::->tla
-      (if (keyword? coll)
-        (StringValue. ^String (custom-munge (symbol coll)))
-        (cond
-          (empty? coll)
-          (tla-edn/-to-tla-value {:tla-edn.record/empty? true})
+      (cond
+        (keyword? v)
+        (StringValue. ^String (custom-munge (symbol v)))
 
-          (every? keyword? (keys coll))
-          (RecordValue.
-           (tla-edn/typed-array UniqueString (mapv #(-> % key ^RecifeEdnValue tla-edn/to-tla-value .getUniqueString)
-                                                   coll))
-           (tla-edn/typed-array Value (mapv #(-> % val tla-edn/to-tla-value) coll))
-           false)
+        (boolean? v)
+        (BoolValue. v)
 
-          :else
-          (FcnRcdValue.
-           (tla-edn/typed-array Value (mapv #(-> % key tla-edn/to-tla-value) coll))
-           (tla-edn/typed-array Value (mapv #(-> % val tla-edn/to-tla-value) coll))
-           false)))))
+        (int? v)
+        (IntValue/gen v)
+
+        :else
+        (let [coll v]
+          (cond
+            (empty? coll)
+            (tla-edn/-to-tla-value {:tla-edn.record/empty? true})
+
+            (every? keyword? (keys coll))
+            (RecordValue.
+             (tla-edn/typed-array UniqueString (mapv #(-> % key ^RecifeEdnValue tla-edn/to-tla-value .getUniqueString)
+                                                     coll))
+             (tla-edn/typed-array Value (mapv #(-> % val tla-edn/to-tla-value) coll))
+             false)
+
+            :else
+            (FcnRcdValue.
+             (tla-edn/typed-array Value (mapv #(-> % key tla-edn/to-tla-value) coll))
+             (tla-edn/typed-array Value (mapv #(-> % val tla-edn/to-tla-value) coll))
+             false))))))
 
 (defn edn-getKindString
   [^RecifeEdnValue _]
@@ -87,15 +97,38 @@
         res)))
 
 (defn edn-createMap
-  [^{:tag "[Ljava.lang.String;"} names
+  [^{:tag "[Ltlc2.value.impl.Value;"} names
    ^{:tag "[Ltlc2.value.impl.Value;"} values
    ^tlc2.tool.coverage.CostModel _cm]
+  #_(when (= (rand-int 100) 89)
+      (debug :>>ccc (mapv identity values)))
   (p* ::createMap
       (RecifeEdnValue. (p* ::createMap--zipmap
                            (zipmap (p* ::createMap--keys
-                                       (mapv tlc-string->keyword names))
+                                       (mapv #(tla-edn/to-edn ^RecifeEdnValue %) names))
                                    (p* ::createMap--values
-                                       (mapv tla-edn/to-edn values)))))))
+                                       (mapv #(tla-edn/to-edn ^Value %) values)))))
+      #_(RecifeEdnValue. (p* ::createMap--zipmap
+                             (zipmap (p* ::createMap--keys
+                                         (mapv tlc-string->keyword names))
+                                     (p* ::createMap--values
+                                         (mapv tla-edn/to-edn values)))))))
+
+(defn edn-createTuple
+  [^{:tag "[Ltlc2.value.impl.Value;"} values
+   ^tlc2.tool.coverage.CostModel _cm]
+  (p* ::createTuple
+      (RecifeEdnValue. (mapv tla-edn/to-edn values))))
+
+(defn edn-createInt
+  [i]
+  (p* ::createInt
+      (RecifeEdnValue. i)))
+
+(defn edn-createString
+  [^String str]
+  (p* ::createString
+      (RecifeEdnValue. (tlc-string->keyword str))))
 
 (defn edn-getDomain
   [^RecifeEdnValue this]

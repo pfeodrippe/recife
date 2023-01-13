@@ -10,7 +10,22 @@
  :state state
  :impl-ns recife.class.recife-edn-value
  :methods [^:static [createMap
-                     ["[Ljava.lang.String;" "[Ltlc2.value.impl.Value;" tlc2.tool.coverage.CostModel]
+                     ["[Ltlc2.value.impl.Value;"
+                      "[Ltlc2.value.impl.Value;"
+                      tlc2.tool.coverage.CostModel]
+                     tlc2.value.impl.Value]
+
+           ^:static [createInt
+                     [int]
+                     tlc2.value.impl.Value]
+
+           ^:static [createString
+                     [String]
+                     tlc2.value.impl.Value]
+
+           ^:static [createTuple
+                     ["[Ltlc2.value.impl.Value;"
+                      tlc2.tool.coverage.CostModel]
                      tlc2.value.impl.Value]]
  :prefix "edn-")
 

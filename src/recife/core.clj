@@ -28,7 +28,7 @@
    (lambdaisland.deep_diff2.diff_impl Mismatch Deletion Insertion)
    (tlc2.output IMessagePrinterRecorder MP EC)
    (tlc2.value.impl Value StringValue ModelValue RecordValue FcnRcdValue IntValue IntervalValue
-                    TupleValue SetEnumValue)
+                    TupleValue SetEnumValue BoolValue)
    (util UniqueString)
    (recife RecifeEdnValue)))
 
@@ -395,8 +395,14 @@
     (p* ::to-tla--hash-set
         #_(RecifeEdnValue. coll)
         (SetEnumValue.
-           (tla-edn/typed-array Value (mapv #(-> % tla-edn/-to-tla-value) coll))
-           false))))
+         (tla-edn/typed-array Value (mapv #(-> % tla-edn/-to-tla-value) coll))
+         false)))
+
+  Boolean
+  (-to-tla-value [v]
+    (p* ::to-tla--boolean
+        #_(RecifeEdnValue. v)
+        (BoolValue. v))))
 
 ;; TODO: For serialized objecs, make it a custom random filename
 ;; so exceptions from concurrent executions do not mess with each other.
@@ -689,11 +695,12 @@
             (every? #(= (:pc %) ::done))))))
 
 (spec/defop recife_check_pc {:module "spec"}
-  [^RecifeEdnValue main-var ^StringValue self ^StringValue identifier]
+  [^RecifeEdnValue main-var ^RecifeEdnValue self ^RecifeEdnValue identifier]
+  #_[^RecifeEdnValue main-var ^StringValue self ^StringValue identifier]
   (p* ::recife_check_pc
       (tla-edn/to-tla-value
-       (= (get-in (.-state main-var) [::procs (tla-edn/to-edn self) :pc])
-          (keyword (str (.getVal identifier)))))))
+       (= (get-in (.-state main-var) [::procs (.-state self) :pc])
+          (.-state identifier)))))
 
 (declare temporal-property)
 
