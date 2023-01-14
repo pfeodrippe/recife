@@ -80,13 +80,13 @@
 (rh/defconstraint state-constraint
   [{::keys [counter pending token]}]
   #_(and (every? #(and (<= (get counter %) 1)
-                     (<= (get pending %) 1))
-               nodes)
-       (<= (:q token) 9))
-  (and (every? #(and (<= (get counter %) 3)
-                       (<= (get pending %) 3))
+                       (<= (get pending %) 1))
                  nodes)
-         (<= (:q token) 9)))
+         (<= (:q token) 9))
+  (and (every? #(and (<= (get counter %) 3)
+                     (<= (get pending %) 3))
+               nodes)
+       (<= (:q token) 9)))
 
 (defn terminated?
   [{::keys [token counter color active pending]}]
@@ -100,7 +100,7 @@
 (comment
 
   ;; It takes ~23s|6s for 3 nodes, 1 worker, counter/pending <= 1.
-  ;; 1m38s for 3 nodes, :auto and counter/pending <= 3.
+  ;; 1m38s|1m05s for 3 nodes, :auto and counter/pending <= 3.
   (def result
     (r/run-model global #{initiate-probe pass-token
                           send-msg recv-msg deactivate

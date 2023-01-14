@@ -497,8 +497,10 @@
   [f ^Value main-var-tla]
   (p* ::process-config-operator
       (try
-        (let [main-var (tla-edn/to-edn main-var-tla {:string-to-keyword? true})
-              result (f main-var)]
+        (let [main-var (p* ::process-config-operator--main-var
+                           (tla-edn/to-edn main-var-tla {:string-to-keyword? true}))
+              result (p* ::process-config-operator--result
+                         (f main-var))]
           (if (vector? result)
             ;; If we have a vector, the first element is a boolean  and the
             ;; second one is data which will be appended to the result if
