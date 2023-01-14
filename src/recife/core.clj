@@ -27,7 +27,7 @@
    (java.io File)
    (lambdaisland.deep_diff2.diff_impl Mismatch Deletion Insertion)
    (tlc2.output IMessagePrinterRecorder MP EC)
-   (tlc2.value.impl Value StringValue ModelValue RecordValue FcnRcdValue IntValue IntervalValue
+   (tlc2.value.impl Value StringValue ModelValue RecordValue FcnRcdValue IntValue
                     TupleValue SetEnumValue BoolValue)
    (util UniqueString)
    (recife RecifeEdnValue)))
@@ -294,13 +294,6 @@
               (swap! string-cache assoc v result)
               result))))
 
-  ;; We use interval value to encode clojure ratios.
-  IntervalValue
-  (-to-edn [v]
-    (p* ::tla-edn--interval
-        (clojure.lang.Ratio. (BigInteger/valueOf (.-low v))
-                             (BigInteger/valueOf (.-high v)))))
-
   ;; TODO: Maybe optimize it later by creating something analogous to
   ;; TlaRecordMap.
   tlc2.value.impl.FcnRcdValue
@@ -351,7 +344,7 @@
   clojure.lang.Ratio
   (tla-edn/-to-tla-value [v]
     (p* ::to-tla--ratio
-        (IntervalValue. (int (numerator v)) (int (denominator v)))))
+        (RecifeEdnValue. v)))
 
   BigInteger
   (tla-edn/-to-tla-value [v]
@@ -1495,12 +1488,11 @@ VIEW
                                  state-writer (->FileStateWriter (t/writer os :msgpack) os (atom {}) file-path)]
                              (.setStateWriter ^tlc2.TLC tlc state-writer)
                              state-writer))
-            *finished-properly? (atom false)
-            ;; TODO: We have to do more work to finish the process properly with
-            ;; a SIGTERM.
+            *closed-properly? (atom false)
             _ (.addShutdownHook (Runtime/getRuntime)
                                 (Thread. ^Runnable (fn []
-                                                     (when-not *finished-properly?
+                                                     (when-not @*closed-properly?
+                                                       (println "\n---- Closing child Recife process ----\n")
                                                        (let [pstats @@u/pd]
                                                          (when (:stats pstats)
                                                            (println (str "\n\n" (tufte/format-pstats pstats)))))
@@ -1508,7 +1500,7 @@ VIEW
             _ (do (p* ::process
                       (doto ^tlc2.TLC tlc
                         .process))
-                  (reset! *finished-properly? true)
+                  (reset! *closed-properly? true)
                   (let [pstats @@u/pd]
                     (when (:stats pstats)
                       (println (str "\n\n" (tufte/format-pstats pstats))))))
@@ -1766,7 +1758,8 @@ VIEW
                             (println "\n\n------- TLA+ process already destroyed ------\n\n")
                             (do
                               (reset! *destroyed? true)
-                              (p/destroy result)
+                              #_(p/destroy result)
+                              (p/sh (format "kill -15 %s" (.pid (:proc result))))
                               (when generate
                                 (r.buf/stop-sync-loop!))
                               (println (format "\n\n------- TLA+ process destroyed after %s seconds ------\n\n"

@@ -20,7 +20,7 @@
    :s6 {:h :6 :t :s2}})
 
 ;; Flag which control crookness.
-(def crooked? true)
+(def crooked? false)
 
 (def global
   {::state (if crooked? :crooked :s0)
@@ -66,8 +66,7 @@
 
   (def result
     (r/run-model global #{next* eita}
-                 {:workers 1
-                  :generate true
+                 {:generate true
                   :depth 15}))
 
   (.close result)
