@@ -53,8 +53,8 @@
 
 (defn- record-info-from-record
   [record]
-  {:names (delay (p* ::record-info-from-record--to-edn
-                     (mapv tla-edn/to-edn (.-names ^RecordValue record))))})
+  {:names (p* ::record-info-from-record--to-edn
+              (mapv tla-edn/to-edn (.-names ^RecordValue record)))})
 
 (declare build-record-map)
 
@@ -162,7 +162,7 @@
 
   (keys [_]
         (p* ::tla-record-map--keys
-            @(:names @record-info)))
+            (:names record-info)))
 
   (empty [_]
          (p* ::tla-record-map--empty
@@ -221,13 +221,13 @@
 
 (defn- build-record-map
   ([record]
-   (TlaRecordMap. record (delay (record-info-from-record record))))
+   (TlaRecordMap. record (record-info-from-record record)))
   ([names values]
    (let [record (RecordValue.
                  (tla-edn/typed-array UniqueString names)
                  (tla-edn/typed-array Value values)
                  false)]
-     (TlaRecordMap. record (delay (record-info-from-record record))))))
+     (TlaRecordMap. record (record-info-from-record record)))))
 
 (defn- record-keys
   [v]
@@ -259,10 +259,10 @@
 
 (extend-protocol tla-edn/TLAPlusEdn
   tlc2.value.impl.RecordValue
-  (-to-edn [v]
+  #_(-to-edn [v]
     (p* ::tla-edn--record
         (build-record-map v)))
-  #_(-to-edn [v]
+  (-to-edn [v]
     (p* ::tla-edn--record
         (let [name->value (p* ::tla-edn--zipmap
                               (zipmap (p* ::tla-edn--zipmap-keys
@@ -462,7 +462,7 @@
             :recife/metadata metadata})))))
 
 (defn process-operator
-  [identifier f self-tla ^RecifeEdnValue extra-args-tla ^Value main-var-tla]
+  [identifier f self-tla ^RecordValue extra-args-tla ^RecordValue main-var-tla]
   (p* ::process-operator
       (try
         (let [self (p ::to-edn-self-tla
@@ -470,8 +470,8 @@
               main-var (p ::to-edn-main-var-tla
                           (tla-edn/to-edn main-var-tla {:string-to-keyword? true}))
               ;; `"_no"` is a indicator that the operator is not using extra args.
-              extra-args (if (contains? (.-state extra-args-tla) :-no)
-                           #_(contains? (set (mapv str (.-names ^RecordValue extra-args-tla))) "_no")
+              extra-args (if #_(contains? (.-state extra-args-tla) :-no)
+                           (contains? (set (mapv str (.-names ^RecordValue extra-args-tla))) "_no")
                            {}
                            (p ::to-edn-extra-args
                               (tla-edn/to-edn extra-args-tla)))
@@ -667,40 +667,41 @@
         (process-operator-local f self main-var))))
 
 (spec/defop recife_check_extra_args {:module "spec"}
-  [^RecifeEdnValue main-var]
+  [^Value main-var]
   (p* ::recife_check_extra_args
       (tla-edn/to-tla-value
-       (contains? (set (keys (.-state main-var)))
+       (contains? (set (keys (tla-edn/to-edn main-var)))
                   ::extra-args))))
 
 (spec/defop recife_check_inequality {:module "spec"}
-  [^RecifeEdnValue main-var ^RecifeEdnValue main-var']
+  [^Value main-var ^Value main-var']
   (p* ::recife_check_inequality
       (tla-edn/to-tla-value
-       (not= (dissoc (.-state main-var) :recife/metadata)
-             (dissoc (.-state main-var') :recife/metadata)))))
+       (not= (dissoc (tla-edn/to-edn main-var) :recife/metadata)
+             (dissoc (tla-edn/to-edn main-var') :recife/metadata)))))
 
 (spec/defop recife_my_view {:module "spec"}
-  [^RecifeEdnValue main-var]
+  [^Value main-var]
   (p* ::recife_my_view
-      (tla-edn/to-tla-value (dissoc (.-state main-var) :recife/metadata))))
+      (tla-edn/to-tla-value (dissoc (tla-edn/to-edn main-var) :recife/metadata))))
 
 ;; \\A self \\in DOMAIN main_var[procs]: main_var[procs][self][\"pc\"] = done
 (spec/defop recife_check_done {:module "spec"}
-  [^RecifeEdnValue main-var]
+  [^Value main-var]
   (p* ::recife_check_done
       (tla-edn/to-tla-value
-       (->> (::procs (.-state main-var))
+       (->> (::procs (tla-edn/to-edn main-var))
             vals
             (every? #(= (:pc %) ::done))))))
 
 (spec/defop recife_check_pc {:module "spec"}
-  [^RecifeEdnValue main-var ^RecifeEdnValue self ^RecifeEdnValue identifier]
-  #_[^RecifeEdnValue main-var ^StringValue self ^StringValue identifier]
+  [^Value main-var ^Value self ^Value identifier]
+  #_[^Value main-var ^StringValue self ^StringValue identifier]
   (p* ::recife_check_pc
       (tla-edn/to-tla-value
-       (= (get-in (.-state main-var) [::procs (.-state self) :pc])
-          (.-state identifier)))))
+       (= (get-in (tla-edn/to-edn main-var)
+                  [::procs (tla-edn/to-edn self) :pc])
+          (tla-edn/to-edn identifier)))))
 
 (declare temporal-property)
 

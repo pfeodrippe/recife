@@ -224,7 +224,7 @@
       (let [idx ^int (.put vos this)]
         (if (= idx -1)
           (let [os ^util.BufferedDataOutputStream (.getOutputStream vos)
-                freezed ^{:tag "[B"} (nippy/fast-freeze (.-state this))]
+                ^{:tag "[B"} freezed (nippy/fast-freeze (.-state this))]
             (.writeByte vos edn-value-byte)
             (.writeInt os (alength freezed))
             (.write os freezed))
