@@ -1642,16 +1642,15 @@ VIEW
   return to destroy the process or getting the value out of it, respectively."
   ([init-state next-operator operators]
    (run-model* init-state next-operator operators {}))
-  ([init-state next-operator operators {:keys [:seed :fp :workers :tlc-args
-                                               :raw-output? :run-local? :debug?
-                                               :complete-response?
+  ([init-state next-operator operators {:keys [seed fp workers tlc-args
+                                               raw-output? run-local? debug?
+                                               complete-response?
                                                no-deadlock
                                                depth async simulate generate
+                                               use-buffer
                                                ;; Below opts are used in the child
                                                ;; process.
                                                trace-example? dump-states?]
-                                        :or {workers (if (or generate simulate)
-                                                       1 :auto)}
                                         :as opts}]
    ;; Do some validation.
    (some->> (m/explain schema/Operator next-operator)
@@ -1668,9 +1667,16 @@ VIEW
      (throw (ex-info "For the initial state, all the keywords should be namespaced. Recife uses the convention in which namespaced keywords are global ones, while other keywords are process-local."
                      {:keywords-without-namespace simple-keywords})))
    ;; Run model.
-   (let [async (if (contains? opts :async)
+   (let [workers (cond
+                   (contains? opts :workers) workers
+                   (or generate simulate) 1
+                   :else :auto)
+         async (if (contains? opts :async)
                  async
                  (or simulate generate))
+         use-buffer (if (contains? opts :use-buffer)
+                      use-buffer
+                      generate)
 
          file (doto (File/createTempFile "eita" ".tla") .delete) ; we are interested in the random name of the folder
          abs-path (-> file .getAbsolutePath (str/split #"\.") first (str "/spec.tla"))
@@ -1684,7 +1690,7 @@ VIEW
                            :operators all-operators
                            :spec-name file-name})
          _ (spit abs-path module-contents)
-         _ (when generate
+         _ (when use-buffer
              (r.buf/sync!) ; sync so we can make sure that the writer can write
              (reset! r.buf/*contents [])
              (r.buf/reset-buf!)
@@ -1762,7 +1768,7 @@ VIEW
                               (reset! *destroyed? true)
                               #_(p/destroy result)
                               (p/sh (format "kill -15 %s" (.pid (:proc result))))
-                              (when generate
+                              (when use-buffer
                                 (r.buf/stop-sync-loop!))
                               (println (format "\n\n------- TLA+ process destroyed after %s seconds ------\n\n"
                                                (Math/round (/ (- (System/nanoTime) t0) 1E9)))))))
@@ -1772,7 +1778,7 @@ VIEW
                           ;; Wait until the process finishes.
                           @result
                           (reset! *destroyed? true)
-                          (when generate
+                          (when use-buffer
                             (r.buf/stop-sync-loop!))
                           ;; Throw exception or return EDN result.
                           (if (.exists (io/as-file exception-filename))

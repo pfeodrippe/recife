@@ -73,6 +73,8 @@
 
   (count (r.buf/read-contents))
 
+  ;; 100000 in 30s
+
   (frequencies (r.buf/read-contents))
   (frequencies (mapv :face (r.buf/read-contents)))
   (frequencies (mapv :state (r.buf/read-contents)))
