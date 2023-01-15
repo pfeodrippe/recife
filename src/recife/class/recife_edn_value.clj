@@ -274,11 +274,16 @@
 ;; TODO:
 ;; - [x] Add support for other types at `ValueInputStream.java`
 ;; - [x] See if we can change TLC to accept our Edn class directly
-;; - [ ] Try to improve perf even more
+;; - [x] Try to improve perf even more
 ;;   - [x] Check if we can use nippy for faster (de)serialization
 ;; - [ ] Try to add some defrecord to the main var
 ;; - [ ] See how things are going when using the library
 ;; - [ ] How to use `cm`?
+;; - [ ] Can we make something for TLC?
+;;   - [ ] Parsing is an issue for new IDEs
+;;   - [ ] Visualization
+;;   - [ ] Override for saving data for statistics
+;;   - [ ] Deal with Jepsen (Maelstrom?)
 
 (comment
 

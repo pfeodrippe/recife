@@ -9,6 +9,8 @@
    (java.nio.file StandardOpenOption OpenOption)
    (java.io File)))
 
+(set! *warn-on-reflection* true)
+
 (defonce *channel-file
   (atom (File/createTempFile "my-file" ".txt")))
 
@@ -23,7 +25,7 @@
    (buf-create {}))
   ([{:keys [file truncate]
      :or {file @*channel-file}}]
-   (let [channel (FileChannel/open (.toPath file)
+   (let [channel (FileChannel/open (.toPath ^File file)
                                    (into-array OpenOption
                                                (concat [StandardOpenOption/READ
                                                         StandardOpenOption/WRITE
@@ -58,7 +60,7 @@
 (defn- buf-read-next-line
   ([]
    (buf-read-next-line @*buf))
-  ([buf]
+  ([^java.nio.DirectCharBufferS buf]
    (locking lock-read
      (loop [c (.get buf)
             line ""]
@@ -79,7 +81,7 @@
 (defn- can-write?
   []
   (try
-    (not= (str (.get @*buf 0)) "1")
+    (not= (str (.get ^java.nio.DirectCharBufferS @*buf 0)) "1")
     (catch Exception ex
       (println "Exception in `can-write?`" ex)
       false)))
@@ -91,7 +93,7 @@
 (defn- buf-rewind
   ([]
    (buf-rewind @*buf))
-  ([buf]
+  ([^java.nio.DirectCharBufferS buf]
    (.rewind buf)
    nil))
 
@@ -100,11 +102,12 @@
    (buf-write @*buf edn))
   ([buf edn]
    (buf-write buf edn {}))
-  ([buf edn {:keys [offset]}]
+  ([^java.nio.DirectCharBufferS buf edn {:keys [_offset]}]
    (let [arr (.toCharArray (if edn
                              (str (pr-str edn) "\n")
                              (str (char 0))))]
-     (if offset
+     (.put buf arr)
+     #_(if offset
        (.put buf arr offset (alength arr))
        (.put buf arr)))
    true))
@@ -117,7 +120,7 @@
     (try
       (while (not (can-write?)))
 
-      (when (zero? (.position @*buf))
+      (when (zero? (.position ^java.nio.DirectCharBufferS @*buf))
         (buf-write 0))
 
       (buf-write v)
@@ -180,11 +183,13 @@
                     (println e))))
               (println "STOPPING the future...")))))
 
+#_(bean (type (clay/future pool (println "ss"))))
+
 (defn stop-sync-loop!
   []
   (when-let [fut @*sync-loop]
     (println "Stopping sync loop...")
-    (.cancel fut true)
+    (.cancel ^java.util.concurrent.Future fut true)
     (reset! *sync-loop nil)
     (sync!)))
 

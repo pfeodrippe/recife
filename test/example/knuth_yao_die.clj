@@ -72,8 +72,6 @@
 
   (count (r/read-saved-data))
 
-  ;; 100000 in 30s
-
   (frequencies (r/read-saved-data))
   (frequencies (mapv :face (r/read-saved-data)))
   (frequencies (mapv :state (r/read-saved-data)))

@@ -395,7 +395,17 @@
   (-to-tla-value [v]
     (p* ::to-tla--boolean
         #_(RecifeEdnValue. v)
-        (BoolValue. v))))
+        (BoolValue. v)))
+
+  Integer
+  (-to-tla-value [v]
+    (p* ::to-tla--integer
+        (IntValue/gen v)))
+
+  Long
+  (-to-tla-value [v]
+    (p* ::to-tla--long
+        (IntValue/gen v))))
 
 ;; TODO: For serialized objecs, make it a custom random filename
 ;; so exceptions from concurrent executions do not mess with each other.
