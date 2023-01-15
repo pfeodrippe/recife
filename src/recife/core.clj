@@ -1478,6 +1478,7 @@ VIEW
             opts (some-> (System/getProperty "RECIFE_OPTS_FILE_PATH") slurp edn/read-string)
             _ (when-let [channel-path (::channel-file-path opts)]
                 (println "Creating channel path at" channel-path)
+                (r.buf/start-client-loop!)
                 (r.buf/set-buf (r.buf/buf-create {:file (io/file channel-path)
                                                   :truncate true})))
             state-writer (when (or (:dump-states? opts)
@@ -2001,6 +2002,21 @@ VIEW
        {:name name#
         :constraint f#
         :operator (state-constraint name# f#)})))
+
+(def save!
+  "Save data that can be fetched in real time, it can be used for statistics."
+  r.buf/save!)
+
+(def read-saved-data
+  "Read saved data, see `save!`."
+  r.buf/read-contents)
+
+(defn read-saved-data-if-new-content
+  "Read saved data if there is new content, otherwise, return `nil`.
+  See `save!`."
+  []
+  (when (r.buf/has-new-contents?)
+    (r.buf/read-contents)))
 
 (comment
 

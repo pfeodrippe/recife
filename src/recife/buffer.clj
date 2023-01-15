@@ -1,7 +1,9 @@
 (ns recife.buffer
   (:require
    [clojure.edn :as edn]
-   [com.climate.claypoole :as clay])
+   [com.climate.claypoole :as clay]
+   [clojure.core.async :as async :refer [go thread <! >! <!! >!! chan]]
+   [recife.util :refer [p*]])
   (:import
    (java.nio.channels FileChannel FileChannel$MapMode)
    (java.nio.file StandardOpenOption OpenOption)
@@ -34,6 +36,9 @@
 
 (defonce ^:private *buf
   (atom (buf-create)))
+
+(defonce *client-channel
+  (atom nil))
 
 (defn reset-buf!
   []
@@ -106,7 +111,7 @@
 
 (def ^:private *saved (atom []))
 
-(defn save!
+(defn- -save!
   [v]
   (locking lock
     (try
@@ -127,7 +132,12 @@
 
       (catch Exception ex
         (println ex)
-        (throw ex))))
+        (throw ex)))))
+
+(defn save!
+  [v]
+  (p* ::save!
+      (>!! @*client-channel v))
   true)
 
 (defonce ^:private lock-sync
@@ -177,6 +187,16 @@
     (.cancel fut true)
     (reset! *sync-loop nil)
     (sync!)))
+
+(defn start-client-loop!
+  []
+  (let [ch (chan 1000000)]
+    (reset! *client-channel ch)
+    (go
+      (while true
+        (let [v (<! ch)]
+          (p* ::-save!
+              (-save! v)))))))
 
 (defn read-contents
   []

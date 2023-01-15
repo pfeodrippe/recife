@@ -6,8 +6,7 @@
   See `example.knuth-yao-die.clerk` to see some charts."
   (:require
    [recife.core :as r]
-   [recife.helpers :as rh]
-   [recife.buffer :as r.buf]))
+   [recife.helpers :as rh]))
 
 (def nodes (set (range 3)))
 (def colors #{:white :black})
@@ -118,14 +117,6 @@
   @result
 
   ;; For statistics, see `EWD998_opts`.
-
-  (count (r.buf/read-contents))
-
-  (frequencies (r.buf/read-contents))
-  (frequencies (mapv :face (r.buf/read-contents)))
-  (frequencies (mapv :state (r.buf/read-contents)))
-  (into (sorted-map) (frequencies (mapv :prob (r.buf/read-contents))))
-  (take 500 (r.buf/read-contents))
 
   ;; TODO:
   ;; - [x] Sets of functions

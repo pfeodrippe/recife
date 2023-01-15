@@ -1,7 +1,7 @@
 (ns example.knuth-yao-die.clerk
   {:nextjournal.clerk/visibility {:code :hide :result :hide}}
   (:require
-   [recife.buffer :as r.buf]
+   [recife.core :as r]
    [nextjournal.clerk :as-alias clerk]
    com.pfeodrippe.tooling.clerk))
 
@@ -33,12 +33,11 @@
   (future
     (while (not (Thread/interrupted))
       (Thread/sleep 100)
-      (when (r.buf/has-new-contents?)
-        (let [contents (r.buf/read-contents)]
-          (reset! *fe-data {:faces (frequencies (mapv :face contents))
-                            :states (->> (frequencies (mapv :state contents))
-                                         sort
-                                         (mapv second))}))))))
+      (when-let [contents (r/read-saved-data-if-new-content)]
+        (reset! *fe-data {:faces (frequencies (mapv :face contents))
+                          :states (->> (frequencies (mapv :state contents))
+                                       sort
+                                       (mapv second))})))))
 
 (comment
 
