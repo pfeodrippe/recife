@@ -2,8 +2,15 @@
   (:refer-clojure :exclude [and])
   (:require
    [clojure.math.combinatorics :as comb]
-   [recife.core :as r])
-  (:import (tlc2.tool.impl Tool)))
+   [recife.core :as r]
+   [tla-edn.core :as tla-edn])
+  (:import
+   (tlc2 TLCGlobals)
+   (tlc2.tool.impl Tool)
+   (tlc2.util IdThread)
+   (recife RecifeEdnValue)))
+
+(set! *warn-on-reflection* true)
 
 (def ^:dynamic *env* {:global-vars [] :local-vars []})
 
@@ -174,5 +181,52 @@
 (defn get-level
   "Get current TLC level (depth in a trace)."
   []
-  #_(when Tool/currentState
-    (.getLevel Tool/currentState)))
+  (or (some-> (IdThread/getCurrentState) .getLevel)
+      ;; Initial state.
+      0))
+
+(defonce ^:private *trace-state
+  (atom {:keyword->id {}
+         :counter 1}))
+
+(defn set-trace-value!
+  "Set data for a trace (a hash map). You may use it to set data that you want
+  to use for external purposes (e.g. statistics)."
+  [k v]
+  (let [thread (Thread/currentThread)
+        value (RecifeEdnValue. v)
+        {:keys [keyword->id]} (swap! *trace-state
+                                     (fn [{:keys [keyword->id counter]
+                                           :as v}]
+                                       (if (contains? keyword->id k)
+                                         v
+                                         (-> v
+                                             (update :counter inc)
+                                             (update :keyword->id assoc k counter)))))
+        id (get keyword->id k)]
+    (cond
+      (instance? IdThread thread)
+      (.setLocalValue ^IdThread thread id value)
+
+      (some? TLCGlobals/mainChecker)
+      (.setAllValues TLCGlobals/mainChecker id value)
+
+      :else
+      (.setAllValues TLCGlobals/simulator id value))
+    true))
+
+(defn get-trace-value
+  "Get data from a trace."
+  [k]
+  (when-let [id (get-in @*trace-state [:keyword->id k])]
+    (let [thread (Thread/currentThread)]
+      (tla-edn/to-edn
+       (cond
+         (instance? IdThread thread)
+         (.getLocalValue ^IdThread thread id)
+
+         (some? TLCGlobals/mainChecker)
+         (.getValue TLCGlobals/mainChecker 0 id)
+
+         :else
+         (.getLocalValue TLCGlobals/simulator id))))))

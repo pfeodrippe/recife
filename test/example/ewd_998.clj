@@ -77,7 +77,7 @@
            (assoc-in [::active i] false))))})
 
 (rh/defconstraint state-constraint
-  [{::keys [counter pending token]}]
+  [{::keys [counter pending token] :as db}]
   #_(and (every? #(and (<= (get counter %) 1)
                        (<= (get pending %) 1))
                  nodes)
@@ -125,8 +125,9 @@
   ;; - [-] Check perf
   ;;   - It's not that easy, we need more profiling
   ;;   - Merge in `::r/result--merge` is slow
-  ;; - [ ] Try to create KeywordValue
   ;; - [ ] Add statistics
+  ;;   - [x] Get current level
+  ;;   - [x] Attach arbitrary data to a trace (like TLCSet)
   ;; - [ ] It seems that adding `currentState` slow things down
   ;;   - [ ] Maybe the field could be non-static?
   ;; - [ ] If you are starting a new Recife run, destroy any previous async runs
