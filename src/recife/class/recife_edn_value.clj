@@ -284,6 +284,9 @@
 ;;   - [ ] Visualization
 ;;   - [ ] Override for saving data for statistics
 ;;   - [ ] Deal with Jepsen (Maelstrom?)
+;;   - [ ] Search TLA+ libraries
+;;     - [ ] Including tladeps?
+;;   - [ ] Call external commands in parallel (e.o. IOEnvExec)
 
 (comment
 

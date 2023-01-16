@@ -52,12 +52,15 @@
 
 (defn- parse-decl
   [decl]
-  (if (= (count decl) 2)
+  (if (or (= (count decl) 2)
+          (clojure.core/and
+           (> (count decl) 2)
+           (not (string? (first decl)))))
     [nil (first decl) (drop 1 decl)]
     [(first decl) (second decl) (drop 2 decl)]))
 
 (defmacro defproperty
-  {:arglists '([name doc-string? db])}
+  {:arglists '([name doc-string? [db]])}
   [name & decl]
   (let [[_doc-string params body] (parse-decl decl)]
     `(r/defproperty ~name
@@ -67,7 +70,7 @@
          (eval '~@body)))))
 
 (defmacro deffairness
-  {:arglists '([name doc-string? db])}
+  {:arglists '([name doc-string? [db]])}
   [name & decl]
   (let [[doc-string params body] (parse-decl decl)]
     `(def ~(with-meta name
@@ -78,7 +81,7 @@
          (eval '~@body)))))
 
 (defmacro definvariant
-  {:arglists '([name doc-string? db])}
+  {:arglists '([name doc-string? [db]])}
   [name & decl]
   (let [[doc-string params body] (parse-decl decl)]
     `(r/definvariant ~name
@@ -87,10 +90,22 @@
          ~@body))))
 
 (defmacro defconstraint
-  {:arglists '([name doc-string? db])}
+  {:arglists '([name doc-string? [db]])}
   [name & decl]
   (let [[_doc-string params body] (parse-decl decl)]
     `(r/defconstraint ~name
+       (fn ~params
+         ~@body))))
+
+(defmacro defaction-constraint
+  {:arglists '([name doc-string? [db db']])}
+  [name & decl]
+  (let [[_doc-string params body] (parse-decl decl)]
+    (when-not (= (count params) 2)
+      (throw (ex-info "Action constraints requires two arguments"
+                      {:params params
+                       :expected '[db db']})))
+    `(r/defaction-constraint ~name
        (fn ~params
          ~@body))))
 

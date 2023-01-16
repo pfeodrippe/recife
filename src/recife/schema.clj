@@ -6,7 +6,14 @@
 
 (def Operator
   [:map
-   [:recife.operator/type [:enum :tla-only :operator :invariant :state-constraint :temporal-property]]])
+   [:recife.operator/type
+    [:enum
+     :tla-only
+     :operator
+     :invariant
+     :state-constraint
+     :action-constraint
+     :temporal-property]]])
 
 (def DefProc
   [:and [:cat

@@ -524,6 +524,29 @@
           (serialize-obj e exception-filename)
           (throw e)))))
 
+(defn process-config-operator--primed
+  [f ^Value main-var-tla ^Value main-var-tla']
+  (p* ::process-config-operator--primed
+      (try
+        (let [main-var (p* ::process-config-operator--main-var
+                           (tla-edn/to-edn main-var-tla {:string-to-keyword? true}))
+              main-var' (p* ::process-config-operator--main-var-primed
+                            (tla-edn/to-edn main-var-tla' {:string-to-keyword? true}))
+              result (p* ::process-config-operator--result
+                         (f main-var main-var'))]
+          (if (vector? result)
+            ;; If we have a vector, the first element is a boolean  and the
+            ;; second one is data which will be appended to the result if
+            ;; the boolean was falsy.
+            (do (when-not (first result)
+                  ;; Serialize data to be used later when building the result.
+                  (serialize-obj (second result) invariant-data-filename))
+                (tla-edn/to-tla-value (boolean (first result))))
+            (tla-edn/to-tla-value (boolean result))))
+        (catch Exception e
+          (serialize-obj e exception-filename)
+          (throw e)))))
+
 (defn process-local-operator
   [f ^Value main-var-tla]
   (p* ::process-local-operator
@@ -887,6 +910,21 @@
                 "(main_var)")
      :recife.operator/type :state-constraint}))
 
+(defn action-constraint
+  "`expr` is a function of two arguments, the first one is the main var and the
+  next one is the main var in the next state (primed)."
+  [identifier expr]
+  (let [op (eval
+            `(spec/defop ~(symbol (str (custom-munge identifier) "2")) {:module "spec"}
+               [^Value ~'main-var ^Value ~'main-var']
+               (process-config-operator--primed ~expr ~'main-var ~'main-var')))]
+    {:identifier (symbol (custom-munge identifier))
+     :op-ns (-> op meta :op-ns)
+     :identifier-2 (str (symbol (str (custom-munge identifier) "2")) "(_main_var, _main_var_2) == _main_var = _main_var /\\ _main_var_2 = _main_var_2")
+     :form (str (symbol (str (custom-munge identifier) "2"))
+                "(main_var, main_var')")
+     :recife.operator/type :action-constraint}))
+
 (defn- compile-temporal-property
   [collector identifier]
   (let [
@@ -1019,6 +1057,10 @@
                                    (filter (comp #{:state-constraint} :recife.operator/type))
                                    (mapv #(format "%s\n\n%s ==\n  %s" (:identifier-2 %) (:identifier %) (:form %)))
                                    (str/join "\n\n"))
+        formatted-action-constraints (->> operators
+                                          (filter (comp #{:action-constraint} :recife.operator/type))
+                                          (mapv #(format "%s\n\n%s ==\n  %s" (:identifier-2 %) (:identifier %) (:form %)))
+                                          (str/join "\n\n"))
         config-invariants (or (some->> operators
                                        (filter (comp #{:invariant} :recife.operator/type))
                                        seq
@@ -1033,6 +1075,13 @@
                                         (str/join "\n")
                                         (str "CONSTRAINT\n"))
                                "")
+        config-action-constraints (or (some->> operators
+                                               (filter (comp #{:action-constraint} :recife.operator/type))
+                                               seq
+                                               (mapv #(format "  %s" (:identifier %)))
+                                               (str/join "\n")
+                                               (str "ACTION_CONSTRAINT\n"))
+                                      "")
         formatted-temporal-properties (->> operators
                                            (filter (comp #{:temporal-property} :recife.operator/type))
                                            (mapv #(format "%s\n\n%s ==\n  %s"
@@ -1152,6 +1201,8 @@ Next == (#{(:identifier next)}) \\/ #{terminating}
 
 #{formatted-constraints}
 
+#{formatted-action-constraints}
+
 #{formatted-temporal-properties}
 
 Fairness ==
@@ -1174,6 +1225,8 @@ VIEW
    MyView
 
 #{config-constraints}
+
+#{config-action-constraints}
 
 #{config-invariants}
 
@@ -1708,10 +1761,14 @@ VIEW
              (r.buf/start-sync-loop!))
          ;; Also put a file with opts in the same folder so we can read configuration
          ;; in the tlc-handler function.
-         _ (spit opts-file-path (merge opts {::channel-file-path (str @r.buf/*channel-file)}))
-         tlc-opts (->> (cond-> []
+         _ (spit opts-file-path (merge opts
+                                       (when use-buffer
+                                         {::channel-file-path (str @r.buf/*channel-file)})))
+         tlc-opts (->> (cond-> ["-noTE"]
                          simulate (conj "-simulate")
-                         generate (conj "-generate")
+                         generate (cond->
+                                      true (conj "-generate")
+                                      (:num generate) (conj (str "num=" (:num generate))))
                          depth (conj "-depth" depth)
                          seed (conj "-seed" seed)
                          fp (conj "-fp" fp)
@@ -1866,6 +1923,7 @@ VIEW
    (let [processes (filter #(= (type %) ::Proc) components)
          invariants (filter #(= (type %) ::Invariant) components)
          constraints (filter #(= (type %) ::Constraint) components)
+         action-constraints (filter #(= (type %) ::ActionConstraint) components)
          properties (filter #(= (type %) ::Property) components)
          db-init (merge init-global-state
                         {::procs (->> processes
@@ -1884,6 +1942,7 @@ VIEW
          operators (set (concat (mapcat :operators processes)
                                 (map :operator invariants)
                                 (map :operator constraints)
+                                (map :operator action-constraints)
                                 (map :operator properties)))]
      (run-model* db-init next' operators opts))))
 
@@ -2012,6 +2071,16 @@ VIEW
        {:name name#
         :constraint f#
         :operator (state-constraint name# f#)})))
+
+(defmacro defaction-constraint
+  [name f]
+  `(def ~name
+     (let [name# (keyword (str *ns*) ~(str name))
+           f# ~f]
+       ^{:type ::ActionConstraint}
+       {:name name#
+        :constraint f#
+        :operator (action-constraint name# f#)})))
 
 (def save!
   "Save data that can be fetched in real time, it can be used for statistics."

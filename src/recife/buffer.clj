@@ -139,8 +139,19 @@
 
 (defn save!
   [v]
-  (p* ::save!
-      (>!! @*client-channel v))
+  (try
+    (p* ::save!
+        (>!! @*client-channel v))
+    (catch Exception ex
+      (if (nil? @*client-channel)
+        (throw (ex-info "
+
+Error when trying to save data, you need to set `:use-buffer` or
+run Recife using `:generate`.
+
+"
+                        {}))
+        (throw ex))))
   true)
 
 (defonce ^:private lock-sync
