@@ -176,22 +176,33 @@
   "Get all the possible combinations of the domain with the values.
 
   See https://www.learntla.com/core/functions.html#function-sets and
-  `-maps` at https://github.com/Viasat/salt#maps."
+  `-maps` at https://github.com/Viasat/salt#maps.
+
+  Returns a lazy value so things don't get stuck when the combination
+  has many elements, values are randomized."
   [domain values]
-  (let [domain->pairs (->> (for [a (set domain)
-                                 b (set values)]
+  #_(def domain domain)
+  #_(def values values)
+  (let [domain->pairs (->> (for [a (shuffle (set domain))
+                                 b (shuffle (set values))]
                              [a b])
-                           (group-by first))
+                           (group-by first)
+                           (into [])
+                           shuffle)
+        #_ #__ (def domain->pairs domain->pairs)
         domain-seq? (when (every? number? domain)
                       (let [domain-max (apply max domain)
                             domain-range (range (inc domain-max))]
                         (= (set domain-range)
                            (set domain))))]
+    #_(def aaa (apply comb/cartesian-product (vals domain->pairs)))
     (->> (apply comb/cartesian-product (vals domain->pairs))
-         (mapv #(if domain-seq?
-                  (mapv last (sort-by first %))
-                  (into {} %)))
-         set)))
+         (map #(if domain-seq?
+                 (mapv last (sort-by first %))
+                 (into {} %))))))
+
+#_(take 10 (combine #{:a :b :c :d :e}
+                    #{10 20 }))
 
 (defn get-level
   "Get current TLC level (depth in a trace)."
@@ -235,13 +246,13 @@
   [k]
   (when-let [id (get-in @*trace-state [:keyword->id k])]
     (let [thread (Thread/currentThread)]
-      (tla-edn/to-edn
-       (cond
-         (instance? IdThread thread)
-         (.getLocalValue ^IdThread thread id)
+      (some-> (cond
+                (instance? IdThread thread)
+                (.getLocalValue ^IdThread thread id)
 
-         (some? TLCGlobals/mainChecker)
-         (.getValue TLCGlobals/mainChecker 0 id)
+                (some? TLCGlobals/mainChecker)
+                (.getValue TLCGlobals/mainChecker 0 id)
 
-         :else
-         (.getLocalValue TLCGlobals/simulator id))))))
+                :else
+                (.getLocalValue TLCGlobals/simulator id))
+              tla-edn/to-edn))))

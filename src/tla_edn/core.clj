@@ -20,8 +20,10 @@
    (to-edn this {}))
   ([this {:keys [:string-to-keyword?]
           :or   {string-to-keyword? false}}]
-   (binding [*string-to-keyword?* string-to-keyword?]
-     (-to-edn this))))
+   (p* ::to-edn
+       (binding [*string-to-keyword?* string-to-keyword?]
+         (p* ::to-edn--after-binding
+             (-to-edn this))))))
 
 (extend-protocol TLAPlusEdn
   tlc2.value.impl.RecordValue

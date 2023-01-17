@@ -17,6 +17,8 @@
              (try
                ~@body
                (catch Exception ex#
+                 (spit ".recife-str-exception.ser"
+                       (with-out-str (println ex#)))
                  (println ex#)
                  (throw ex#))
                (finally

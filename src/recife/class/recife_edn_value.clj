@@ -10,7 +10,8 @@
    [taoensso.nippy :as nippy])
   (:import
    (tlc2.value IValueOutputStream IValueInputStream ValueInputStream)
-   (tlc2.value.impl Value StringValue RecordValue FcnRcdValue BoolValue IntValue)
+   (tlc2.value.impl Value StringValue RecordValue FcnRcdValue BoolValue IntValue
+                    TupleValue)
    (util UniqueString)
    (tlc2.util FP64)))
 
@@ -58,6 +59,10 @@
 
         (int? v)
         (IntValue/gen v)
+
+        (vector? v)
+        (TupleValue.
+         (tla-edn/typed-array Value (mapv ->tla v)))
 
         :else
         (let [coll v]

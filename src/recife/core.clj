@@ -28,7 +28,7 @@
    (lambdaisland.deep_diff2.diff_impl Mismatch Deletion Insertion)
    (tlc2.output IMessagePrinterRecorder MP EC)
    (tlc2.value.impl Value StringValue ModelValue RecordValue FcnRcdValue IntValue
-                    TupleValue SetEnumValue BoolValue)
+                    TupleValue SetEnumValue BoolValue IntervalValue)
    (util UniqueString)
    (recife RecifeEdnValue)))
 
@@ -168,57 +168,6 @@
          (p* ::tla-record-map--empty
              (build-record-map [] []))))
 
-(comment
-
-  (set! *warn-on-reflection* true)
-
-
-  (set! *warn-on-reflection* false)
-
-  (tla-edn/to-edn (tla-edn/to-tla-value 1/4))
-
-
-  (let [{:keys [g] :as xx} (assoc (build-record-map (tla-edn/to-tla-value {:a 4}))
-                                  :g 10
-                                  :g 30)]
-    g)
-
-  (:a (build-record-map (tla-edn/to-tla-value {:a 4})))
-
-  (.record (assoc (build-record-map (tla-edn/to-tla-value {:a 4})) :g 10))
-
-  (.record (-> (assoc (build-record-map (tla-edn/to-tla-value {:a 4})) :g 10)
-               (dissoc :a)))
-
-  (keys (assoc (build-record-map (tla-edn/to-tla-value {:a 4})) :g 10))
-
-  ())
-
-(comment
-
-  (assoc (tla-edn/to-edn (tla-edn/to-tla-value {:a/b 10}))
-         :flag 10)
-
-  (merge (tla-edn/to-edn (tla-edn/to-tla-value {:a/b 10}))
-         {:g 10})
-
-  (build-record-map (tla-edn/to-tla-value {:a/b 10}))
-
-  (-> (tla-edn/to-edn (tla-edn/to-tla-value {:a/b 10}))
-      (assoc :flag true)
-      #_tla-edn/to-tla-value)
-
-  (-> (tla-edn/to-edn (tla-edn/to-tla-value {:a/b 10}))
-      (assoc :flag {:a 4})
-      tla-edn/to-tla-value)
-
-  (-> (tla-edn/to-edn (tla-edn/to-tla-value {:a/b 10}))
-      (assoc :flag {:a 4})
-      :flag
-      vals)
-
-  ())
-
 (defn- build-record-map
   ([record]
    (TlaRecordMap. record (record-info-from-record record)))
@@ -241,12 +190,12 @@
 
 (defn- record-values
   [v]
-  (mapv #_#(or (get @values-cache (str %))
+  (mapv #(or (get @values-cache (str %))
              (p* ::v-no-cache
                  (let [result (tla-edn/-to-edn %)]
                    (swap! values-cache assoc (str %) result)
                    result)))
-        tla-edn/-to-edn
+        #_tla-edn/-to-edn
         (.-values ^RecordValue v)))
 
 (defmacro use-cache
@@ -257,11 +206,36 @@
            (swap! cache assoc v# result#)
            result#))))
 
+(defn- class-method
+  [^Class klass ^String method-name]
+  (let [m (.. klass (getDeclaredMethod method-name nil))]
+    (.. m (setAccessible true))
+    m))
+
+(def ^:private fcn-rcd-is-tuple-method
+  (class-method FcnRcdValue "isTuple"))
+
+(defn ^:private fcn-rcd-is-tuple?
+  [v]
+  (.invoke ^java.lang.reflect.Method fcn-rcd-is-tuple-method v nil))
+
+(defn- private-field
+  ([^Object obj ^String fn-name-string]
+   (let [m (.. obj getClass (getDeclaredField fn-name-string))]
+     (.. m (setAccessible true))
+     (.. m (get obj))))
+  ([^Object obj ^Class super-klass ^String fn-name-string]
+   (let [m (.. super-klass (getDeclaredField fn-name-string))]
+     (.. m (setAccessible true))
+     (.. m (get obj)))))
+
+(defrecord RecifeIntervalValue [low high])
+
 (extend-protocol tla-edn/TLAPlusEdn
   tlc2.value.impl.RecordValue
   #_(-to-edn [v]
-    (p* ::tla-edn--record
-        (build-record-map v)))
+      (p* ::tla-edn--record
+          (build-record-map v)))
   (-to-edn [v]
     (p* ::tla-edn--record
         (let [name->value (p* ::tla-edn--zipmap
@@ -294,20 +268,31 @@
               (swap! string-cache assoc v result)
               result))))
 
-  ;; TODO: Maybe optimize it later by creating something analogous to
-  ;; TlaRecordMap.
   tlc2.value.impl.FcnRcdValue
   (-to-edn [v]
     (p* ::fcn
-        (zipmap (mapv tla-edn/-to-edn (.-domain v))
-                (mapv tla-edn/-to-edn (.-values v)))))
+        (if (fcn-rcd-is-tuple? v)
+          (mapv tla-edn/-to-edn (.-values v))
+          (zipmap (mapv tla-edn/-to-edn (.-domain v))
+                  (mapv tla-edn/-to-edn (.-values v))))))
 
   RecifeEdnValue
   (-to-edn [v]
     (p* ::tla-edn--recife-value
-        (.-state v))))
+        (.-state v)))
+
+  IntervalValue
+  (-to-edn [v]
+    (p* ::tla-edn--interval-value
+        (RecifeIntervalValue. (.-low v) (.-high v)))))
 
 (extend-protocol tla-edn/EdnToTla
+  RecifeIntervalValue
+  (tla-edn/-to-tla-value
+    [v]
+    (p* ::to-tla--interval-value
+        (IntervalValue. (:low v) (:high v))))
+
   clojure.lang.Keyword
   (tla-edn/-to-tla-value
     [v]
@@ -410,10 +395,10 @@
 ;; TODO: For serialized objecs, make it a custom random filename
 ;; so exceptions from concurrent executions do not mess with each other.
 (def ^:private exception-filename
-  "recife-exception.ser")
+  ".recife-exception.ser")
 
 (def ^:private invariant-data-filename
-  "invariant-data.ser")
+  ".recife-invariant-data.ser")
 
 (def ^:private Lock (Object.))
 
@@ -468,18 +453,19 @@
   [identifier f self-tla ^RecordValue extra-args-tla ^RecordValue main-var-tla]
   (p* ::process-operator
       (try
-        (let [self (p ::to-edn-self-tla
+        (let [self (p ::process-operator--self
                       (tla-edn/to-edn self-tla {:string-to-keyword? true}))
-              main-var (p ::to-edn-main-var-tla
+              main-var (p ::process-operator--main-var
                           (tla-edn/to-edn main-var-tla {:string-to-keyword? true}))
               ;; `"_no"` is a indicator that the operator is not using extra args.
               extra-args (if #_(contains? (.-state extra-args-tla) :-no)
                            (contains? (set (mapv str (.-names ^RecordValue extra-args-tla))) "_no")
                            {}
-                           (p ::to-edn-extra-args
+                           (p ::process-operator--extra-args
                               (tla-edn/to-edn extra-args-tla)))
-              result (process-operator* identifier f self extra-args main-var)]
-          (p ::to-tla-value
+              result (p ::process-operator--result
+                        (process-operator* identifier f self extra-args main-var))]
+          (p ::process-operator--to-tla-value
              (tla-edn/to-tla-value result)))
         (catch Exception e
           (serialize-obj e exception-filename)
@@ -670,6 +656,19 @@
      :form form
      :recife.operator/type :tla-only}))
 
+(defn tla-repl
+  [tla-expr]
+  (let [tmp (java.nio.file.Files/createTempDirectory "repltest"
+                                                     (into-array java.nio.file.attribute.FileAttribute []))]
+    (-> (tlc2.REPL. tmp)
+        (.processValue tla-expr)
+        tla-edn/to-edn)))
+
+#_(tla-repl "RandomSubset(2, [1..43 -> {TRUE, FALSE}])")
+#_(tla-repl "RandomSubset(2, [2..5 -> {TRUE, FALSE}])")
+#_(count (tla-repl "[1..43 -> {TRUE, FALSE}]"))
+#_(tla-repl "CHOOSE x \\in RandomSubset(2, [2..43 -> {TRUE, FALSE}]): TRUE")
+
 (defn context-from-state
   [state]
   (if (vector? state)
@@ -732,18 +731,6 @@
           (tla-edn/to-edn identifier)))))
 
 (declare temporal-property)
-
-(comment
-
-  ;; TLA+ Repl.
-  (let [tmp (java.nio.file.Files/createTempDirectory "repltest"
-                                                     (into-array java.nio.file.attribute.FileAttribute []))]
-    (-> (tlc2.REPL. tmp)
-        #_(.processInput2 "[trash_SLASH_capacity |-> {1, 2}, trash_SLASH_bin |-> <<>>, recycle_SLASH_capacity |-> {3, 4}, recycle_SLASH_bin |-> <<>>, hillel___ch2_recycler_2_SLASH_items |-> <<[type |-> {5, 6}, size |-> {7}], [type |-> {10, 20}, size |-> {30}]>>, recife___core_SLASH_procs |-> [x |-> [pc |-> \"hillel___ch2_recycler_2_SLASH_main\"]]]")
-        (.processInput2 "[x \\in DOMAIN [a |-> 3, b |-> 4, recife_SLASH_metadata |-> 5] \\ {\"recife_SLASH_metadata\"} |-> [a |-> 3, b |-> 4][x]]")
-        tla-edn/to-edn))
-
-  ())
 
 (defn reg
   ([identifier expr]
@@ -1235,16 +1222,6 @@ VIEW
 =============================================================================
 ")))
 
-(defn- private-field
-  ([^Object obj ^String fn-name-string]
-   (let [m (.. obj getClass (getDeclaredField fn-name-string))]
-     (. m (setAccessible true))
-     (. m (get obj))))
-  ([^Object obj ^Class super-klass ^String fn-name-string]
-   (let [m (.. super-klass (getDeclaredField fn-name-string))]
-     (. m (setAccessible true))
-     (. m (get obj)))))
-
 ;; EdnStateWriter
 (def ^:private edn-states-atom (atom {}))
 
@@ -1557,6 +1534,8 @@ VIEW
             *closed-properly? (atom false)
             _ (.addShutdownHook (Runtime/getRuntime)
                                 (Thread. ^Runnable (fn []
+                                                     #_(when-let [ch-buf (some-> @r.buf/*client-channel .buf)]
+                                                         (println "Remaining data size in buffer:" (count ch-buf)))
                                                      (when-not @*closed-properly?
                                                        (println "\n---- Closing child Recife process ----\n")
                                                        (let [pstats @@u/pd]
@@ -1731,10 +1710,9 @@ VIEW
      (throw (ex-info "For the initial state, all the keywords should be namespaced. Recife uses the convention in which namespaced keywords are global ones, while other keywords are process-local."
                      {:keywords-without-namespace simple-keywords})))
    ;; Run model.
-   (let [workers (cond
-                   (contains? opts :workers) workers
-                   (or generate simulate) 1
-                   :else :auto)
+   (let [workers (if (contains? opts :workers)
+                   workers
+                   :auto)
          async (if (contains? opts :async)
                  async
                  (or simulate generate))
@@ -1764,7 +1742,7 @@ VIEW
          _ (spit opts-file-path (merge opts
                                        (when use-buffer
                                          {::channel-file-path (str @r.buf/*channel-file)})))
-         tlc-opts (->> (cond-> ["-noTE"]
+         tlc-opts (->> (cond-> ["-noTE" "-nowarning"]
                          simulate (conj "-simulate")
                          generate (cond->
                                       true (conj "-generate")

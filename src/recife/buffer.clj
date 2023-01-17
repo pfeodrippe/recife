@@ -185,21 +185,21 @@ run Recife using `:generate`.
     (reset! *sync-loop
             (clay/future
               pool
-              (println "Starting sync loop...")
+              #_(println "Starting sync loop...")
               (while (not (Thread/interrupted))
                 (Thread/sleep 1)
                 (try
                   (sync!)
                   (catch Exception e
                     (println e))))
-              (println "STOPPING the future...")))))
+              #_(println "STOPPING the future...")))))
 
 #_(bean (type (clay/future pool (println "ss"))))
 
 (defn stop-sync-loop!
   []
   (when-let [fut @*sync-loop]
-    (println "Stopping sync loop...")
+    #_(println "Stopping sync loop...")
     (.cancel ^java.util.concurrent.Future fut true)
     (reset! *sync-loop nil)
     (sync!)))

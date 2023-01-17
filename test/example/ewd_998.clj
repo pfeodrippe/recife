@@ -1,19 +1,19 @@
 (ns example.ewd-998
-  "Based on https://github.com/tlaplus/Examples/blob/master/specifications/KnuthYao/KnuthYao.tla.
-
-  Also see https://www.youtube.com/watch?v=cYenTPD7740.
-
-  See `example.knuth-yao-die.clerk` to see some charts."
+  "See https://www.youtube.com/watch?v=cYenTPD7740."
   (:require
    [recife.core :as r]
    [recife.helpers :as rh]))
 
-(def nodes (set (range 5)))
+(def feature-flags #{#_:pt3})
+
+(def pt3? (contains? feature-flags :pt3))
+
+(def nodes (set (range 43)))
 (def colors #{:white :black})
 
 (def global
-  {::active (r/one-of (rh/combine nodes #{true false}))
-   ::color (r/one-of (rh/combine nodes colors))
+  {::active (r/one-of (take 1000 (rh/combine nodes #{true false})))
+   ::color (r/one-of (take 1000 (rh/combine nodes colors)))
    ::counter (repeat (count nodes) 0)
    ::pending (repeat (count nodes) 0)
    ::token {:pos 0 :q 0 :color :black}})
@@ -39,7 +39,11 @@
                 (= (:pos token) i))
        (-> db
            (assoc ::token (-> token
-                              (update :pos dec)
+                              (update :pos (if pt3?
+                                             #(if (= (get color i) :black)
+                                                0
+                                                (dec %))
+                                             dec))
                               (update :q + (get counter i))
                               (assoc :color (if (= (get color i) :black)
                                               :black
@@ -51,8 +55,16 @@
     {:i nodes
      :receiver nodes}]
    (fn [{::keys [active] :keys [i receiver] :as db}]
-     (when (and (get active i)
-                (not= i receiver))
+     (when (and
+            ;; Just like it's done in EWD998.tla, we decrease the probability
+            ;; of an active node send message over time. From what I see, this
+            ;; is done so we don't have more well behaved T2TD.
+            ;; This seems to be essential so we have well behaved traces.
+            ;; For GENERATE
+            (= (rand-int (+ 1 (rh/get-level)))
+               1)
+            (get active i)
+            (not= i receiver))
        (-> db
            (update-in [::counter i] inc)
            (update-in [::pending receiver] inc))))})
@@ -77,7 +89,7 @@
            (assoc-in [::active i] false))))})
 
 (rh/defconstraint state-constraint
-  [{::keys [counter pending token] :as db}]
+  [{::keys [counter pending token]}]
   #_(and (every? #(and (<= (get counter %) 1)
                        (<= (get pending %) 1))
                  nodes)
@@ -105,15 +117,16 @@
 ;; can also retrieve information about the successor state (db').
 (rh/defaction-constraint at-termination
   [db db']
-  (when (= (terminated? db)
-           (terminated? db'))
+  (when (not= (terminated? db)
+              (terminated? db'))
     (rh/set-trace-value! :level (rh/get-level)))
   true)
 
 (rh/defconstraint at-termination-detected
   [db]
   (when (termination-detected? db)
-    (let [t2td (- (rh/get-level) (rh/get-trace-value :level))]
+    (let [level (or (rh/get-trace-value :level) 0)
+          t2td (- (rh/get-level) level)]
       (when (neg? t2td)
         (throw (ex-info "T2TD was negative"
                         {:t2td t2td
@@ -130,26 +143,28 @@
   (def result
     (r/run-model global #{initiate-probe pass-token
                           send-msg recv-msg deactivate
-                          #_state-constraint at-termination
-                          at-termination-detected}
+                          #_state-constraint
+                          ;; For GENERATE
+                          at-termination at-termination-detected}
                  {:no-deadlock true
                   :async true
                   #_ #_:workers 1
-                  #_ #_ #_ #_:seed 1
-                  :fp 0
-                  #_ #_     :trace-example? true
+                  #_ #_:trace-example? true
                   :generate {:num 10}
                   :depth -1
                   ;; If you are using :generate, :use-buffer is
                   ;; set automatically.
-                  #_ #_:use-buffer true
-                  #_ #_:depth 15}))
-
-  (count (r/read-saved-data))
-  (frequencies (mapv :time-to-termination-detection (r/read-saved-data)))
+                  #_ #_:use-buffer true}))
 
   (.close result)
   @result
+
+  (count (r/read-saved-data))
+  (into (sorted-map)
+        (frequencies (mapv :time-to-termination-detection (r/read-saved-data))))
+
+  (/ (double (apply + (mapv :time-to-termination-detection (r/read-saved-data))))
+     (count (r/read-saved-data)))
 
   ;; For statistics, see `EWD998_opts`.
 
@@ -169,30 +184,43 @@
   ;;     - [x] We will want to receive the next state
   ;;       - If required by the user, but the user may pass a function that,
   ;;         for example, accepts 2 args, the second one could be the next state
-  ;;   - [ ] Check why we are unable to generate meaningful lenghts
-  ;;   - [ ] Generate combinations in TLC instead of in Clojure
-  ;;     - [ ] Add elisions?
-  ;;   - [ ] Generate T2TD
-  ;;   - [ ] PT1
-  ;;   - [ ] PT3
-  ;;   - [ ] Clerk
-  ;;   - [ ] Organize options for the different scenarions better, they are just
+  ;;   - [x] Check why we are unable to generate meaningful lengths
+  ;;     - I was using = instead of not= for `at-termination`
+  ;;   - [-] It seems that we need to work on the perf to make this work properly :(
+  ;;     - We are ~10x slower
+  ;;     - [x] See the operations that are taking most of the time
+  ;;       - Just computing the initial states take some time
+  ;;   - [x] Check if adding support for RecifeEdnValue directly in TLC can help
+  ;;     - No, it doesn't help much
+  ;;   - [-] Generate combinations in TLC instead of in Clojure so it's more performant
+  ;;     - [-] Add elisions when printing?
+  ;;     - [-] Get random subset
+  ;;     - Decided to just shuffle part of `rh/combine`
+  ;;   - [x] Generate T2TD
+  ;;   - [x] PT3
+  ;;   - [ ] Just profile again a little bit
+  ;;   - [-] Clerk
+  ;;     - We don't really need it, we know that it works based on the die example
+  ;;   - [-] Organize options for the different scenarions better, they are just
   ;;         data. E.g. pt0 vs pt1 etc
+  ;;     - Nah, let's not invest our time here, let's move on
+  ;; - [x] Maybe add -noTE when running simulate/generate?
   ;; - [ ] If you are starting a new Recife run, destroy any previous async runs
-  ;; - [ ] See if exceptions are being thrown
   ;; - [ ] Add a way to for users plugins
   ;;   - [ ] Function that's run before and after the call
   ;;   - [ ] Function that's run wrapping the call
-  ;; - [ ] Add implicit `do` to helper macros
+  ;; - [x] Add implicit `do` to helper macros
   ;;   - [ ] Improve args description
-  ;; - [ ] Maybe add -noTE when running simulate/generate?
   ;; - [ ] How to improve simulation of a step?
-  ;; - [ ] Visualize trace with Clerk
   ;; - [ ] Export clj-kondo config
   ;; - [ ] As things are just functions, you can create tests for them
   ;;   - [ ] `terminated?`
   ;; - [ ] Add Recife Hooks?
   ;;   - [ ] Start
   ;;   - [ ] Each call
+  ;; - [ ] Fix trace-example
+  ;;   - [ ] Add a test for it
+  ;;   - [ ] We may also want to generate a trace example even when we close a
+  ;;         run
 
   ())
