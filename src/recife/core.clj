@@ -50,6 +50,7 @@
 (defonce ^:private keyword-cache (atom {}))
 (defonce ^:private cache (atom {}))
 (defonce ^:private values-cache (atom {}))
+(defonce ^:private keys-cache (atom {}))
 
 (defn- record-info-from-record
   [record]
@@ -180,11 +181,11 @@
 
 (defn- record-keys
   [v]
-  (mapv #_#(or (get @keys-cache %)
-             (p* ::k-no-cache
-                 (let [result (tla-edn/-to-edn %)]
-                   (swap! keys-cache assoc % result)
-                   result)))
+  (mapv #_#(or (get @keys-cache (str %))
+               (p* ::k-no-cache
+                   (let [result (tla-edn/-to-edn %)]
+                     (swap! keys-cache assoc (str %) result)
+                     result)))
         tla-edn/-to-edn
         (.-names ^RecordValue v)))
 

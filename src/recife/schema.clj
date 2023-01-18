@@ -38,7 +38,9 @@
                  (:pc local)))]])
 
 (def RunModelComponents
-  [:and [:set any?]
+  [:and [:or
+         [:set any?]
+         [:sequential any?]]
 
    [:fn {:error/fn (fn [{:keys [value]} _]
                      (format "proc names should be unique: %s"

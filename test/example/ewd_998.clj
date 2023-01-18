@@ -4,11 +4,12 @@
    [recife.core :as r]
    [recife.helpers :as rh]))
 
-(def feature-flags #{#_:pt3})
+(def feature-flags #{:generate #_:pt3})
 
-(def pt3? (contains? feature-flags :pt3))
-
-(def nodes (set (range 43)))
+;; `rh/with-features` is used to make conditionals at compilation time.
+(def nodes (set (range (rh/with-features feature-flags
+                         :generate 43
+                         3))))
 (def colors #{:white :black})
 
 (def global
@@ -39,10 +40,10 @@
                 (= (:pos token) i))
        (-> db
            (assoc ::token (-> token
-                              (update :pos (if pt3?
-                                             #(if (= (get color i) :black)
-                                                0
-                                                (dec %))
+                              (update :pos (rh/with-features feature-flags
+                                             :pt3 #(if (= (get color i) :black)
+                                                     0
+                                                     (dec %))
                                              dec))
                               (update :q + (get counter i))
                               (assoc :color (if (= (get color i) :black)
@@ -60,9 +61,10 @@
             ;; of an active node send message over time. From what I see, this
             ;; is done so we don't have more well behaved T2TD.
             ;; This seems to be essential so we have well behaved traces.
-            ;; For GENERATE
-            (= (rand-int (+ 1 (rh/get-level)))
-               1)
+            (rh/with-features feature-flags
+              :generate (= (rand-int (+ 1 (rh/get-level)))
+                           1)
+              true)
             (get active i)
             (not= i receiver))
        (-> db
@@ -90,10 +92,6 @@
 
 (rh/defconstraint state-constraint
   [{::keys [counter pending token]}]
-  #_(and (every? #(and (<= (get counter %) 1)
-                       (<= (get pending %) 1))
-                 nodes)
-         (<= (:q token) 9))
   (and (every? #(and (<= (get counter %) 3)
                      (<= (get pending %) 3))
                nodes)
@@ -134,22 +132,26 @@
 (comment
 
   ;; It takes ~23s|6s for 3 nodes, 1 worker, counter/pending <= 1.
-  ;; 1m38s|1m05s for 3 nodes, :auto and counter/pending <= 3.
+  ;; 1m38s|1m05s (56s after removing tla-edn.core binding) for 3 nodes, :auto and counter/pending <= 3.
   (def result
-    (r/run-model global #{initiate-probe pass-token
-                          send-msg recv-msg deactivate
-                          #_state-constraint
-                          ;; For GENERATE
-                          at-termination at-termination-detected}
-                 {:no-deadlock true
-                  :async true
-                  #_ #_:workers 1
-                  #_ #_:trace-example? true
-                  :generate {:num 10}
-                  :depth -1
-                  ;; If you are using :generate, :use-buffer is
-                  ;; set automatically.
-                  #_ #_:use-buffer true}))
+    (r/run-model global (concat
+                         #{initiate-probe pass-token
+                           send-msg recv-msg deactivate}
+                         (rh/with-features feature-flags
+                           :generate #{at-termination at-termination-detected}
+                           #{state-constraint}))
+                 (merge
+                  {:no-deadlock true
+                   :async true
+                   #_ #_:workers 1
+                   #_ #_:trace-example? true
+                   :depth -1
+                   ;; If you are using :generate, :use-buffer is
+                   ;; set automatically.
+                   #_ #_:use-buffer true}
+                  (rh/with-features feature-flags
+                    :generate {:generate {:num 10}}
+                    {}))))
 
   (.close result)
   @result

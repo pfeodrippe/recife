@@ -256,3 +256,33 @@
                 :else
                 (.getLocalValue TLCGlobals/simulator id))
               tla-edn/to-edn))))
+
+(defmacro with-features
+  "Just some helper so feature flags are applied in compilation time.
+
+  `features` is a set, only the first match is applied. The non-matching case
+  is required (last element just like in a `case`)."
+  [features & body]
+  (when-not (odd? (count body))
+    (throw (ex-info "Body count for `with-features` should always be odd (matches + default)"
+                    {:body body})))
+
+  (let [pairs (->> (drop-last body)
+                   (partition-all 2 2))
+        default (last body)]
+    (loop [[[k v] & others] pairs]
+      (cond
+        (nil? k) default
+        (contains? (set (eval features)) k) v
+        :else (recur others)))))
+
+(defmacro with-features-m
+  "It's like `with-features`, but it does not evaluates the arguments, it just
+  macroexpands it.
+
+  Helpful for debugging."
+  [features & body]
+  `(macroexpand-1
+    (quote
+     (with-features ~features
+       ~@body))))
