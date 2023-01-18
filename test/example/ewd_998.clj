@@ -127,11 +127,6 @@
   (when (termination-detected? db)
     (let [level (or (rh/get-trace-value :level) 0)
           t2td (- (rh/get-level) level)]
-      (when (neg? t2td)
-        (throw (ex-info "T2TD was negative"
-                        {:t2td t2td
-                         :current-level (rh/get-level)
-                         :trace-level (rh/get-trace-value :level)})))
       (r/save! {:time-to-termination-detection t2td})
       (rh/set-trace-value! :level 0)))
   true)

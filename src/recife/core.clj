@@ -217,7 +217,7 @@
 
 (defn ^:private fcn-rcd-is-tuple?
   [v]
-  (.invoke ^java.lang.reflect.Method fcn-rcd-is-tuple-method v nil))
+  (boolean (.invoke ^java.lang.reflect.Method fcn-rcd-is-tuple-method v nil)))
 
 (defn- private-field
   ([^Object obj ^String fn-name-string]
@@ -232,7 +232,7 @@
 (defrecord RecifeIntervalValue [low high])
 
 (extend-protocol tla-edn/TLAPlusEdn
-  tlc2.value.impl.RecordValue
+  RecordValue
   #_(-to-edn [v]
       (p* ::tla-edn--record
           (build-record-map v)))
@@ -246,6 +246,11 @@
           (if (= name->value {:tla-edn.record/empty? true})
             {}
             name->value))))
+
+  IntValue
+  (-to-edn [v]
+    (p* ::tla-edn--int
+        (.val v)))
 
   StringValue
   (-to-edn [v']
@@ -268,7 +273,12 @@
               (swap! string-cache assoc v result)
               result))))
 
-  tlc2.value.impl.FcnRcdValue
+  BoolValue
+  (-to-edn [v]
+    (p* ::tla-edn--bool
+        (.getVal v)))
+
+  FcnRcdValue
   (-to-edn [v]
     (p* ::fcn
         (if (fcn-rcd-is-tuple? v)
@@ -284,7 +294,17 @@
   IntervalValue
   (-to-edn [v]
     (p* ::tla-edn--interval-value
-        (RecifeIntervalValue. (.-low v) (.-high v)))))
+        (RecifeIntervalValue. (.-low v) (.-high v))))
+
+  SetEnumValue
+  (-to-edn [v]
+    (p* ::tla-edn--set
+        (set (mapv tla-edn/-to-edn (.toArray (.-elems v))))))
+
+  TupleValue
+  (-to-edn [v]
+    (p* ::tuple
+        (mapv tla-edn/-to-edn (.getElems v)))))
 
 (extend-protocol tla-edn/EdnToTla
   RecifeIntervalValue
@@ -376,6 +396,11 @@
          (tla-edn/typed-array Value (mapv #(-> % tla-edn/-to-tla-value) coll))
          false)))
 
+  String
+  (-to-tla-value [v]
+    (p* ::to-tla--string
+        (StringValue. v)))
+
   Boolean
   (-to-tla-value [v]
     (p* ::to-tla--boolean
@@ -454,9 +479,9 @@
   (p* ::process-operator
       (try
         (let [self (p ::process-operator--self
-                      (tla-edn/to-edn self-tla {:string-to-keyword? true}))
+                      (tla-edn/to-edn self-tla))
               main-var (p ::process-operator--main-var
-                          (tla-edn/to-edn main-var-tla {:string-to-keyword? true}))
+                          (tla-edn/to-edn main-var-tla))
               ;; `"_no"` is a indicator that the operator is not using extra args.
               extra-args (if #_(contains? (.-state extra-args-tla) :-no)
                            (contains? (set (mapv str (.-names ^RecordValue extra-args-tla))) "_no")
@@ -481,8 +506,8 @@
 (defn- process-operator-local
   [f self-tla ^Value main-var-tla]
   (try
-    (let [self (tla-edn/to-edn self-tla {:string-to-keyword? true})
-          main-var (tla-edn/to-edn main-var-tla {:string-to-keyword? true})
+    (let [self (tla-edn/to-edn self-tla)
+          main-var (tla-edn/to-edn main-var-tla)
           result (process-operator-local* f self main-var)]
       (tla-edn/to-tla-value result))
     (catch Exception e
@@ -494,7 +519,7 @@
   (p* ::process-config-operator
       (try
         (let [main-var (p* ::process-config-operator--main-var
-                           (tla-edn/to-edn main-var-tla {:string-to-keyword? true}))
+                           (tla-edn/to-edn main-var-tla))
               result (p* ::process-config-operator--result
                          (f main-var))]
           (if (vector? result)
@@ -514,11 +539,11 @@
   [f ^Value main-var-tla ^Value main-var-tla']
   (p* ::process-config-operator--primed
       (try
-        (let [main-var (p* ::process-config-operator--main-var
-                           (tla-edn/to-edn main-var-tla {:string-to-keyword? true}))
-              main-var' (p* ::process-config-operator--main-var-primed
-                            (tla-edn/to-edn main-var-tla' {:string-to-keyword? true}))
-              result (p* ::process-config-operator--result
+        (let [main-var (p* ::process-config-operator--primed-main-var
+                           (tla-edn/to-edn main-var-tla))
+              main-var' (p* ::process-config-operator--primed-main-var
+                            (tla-edn/to-edn main-var-tla'))
+              result (p* ::process-config-operator--primed-result
                          (f main-var main-var'))]
           (if (vector? result)
             ;; If we have a vector, the first element is a boolean  and the
@@ -537,7 +562,7 @@
   [f ^Value main-var-tla]
   (p* ::process-local-operator
       (try
-        (let [main-var (p ::local-op-to-edn-main-var-tla (tla-edn/to-edn main-var-tla {:string-to-keyword? true}))
+        (let [main-var (p ::local-op-to-edn-main-var-tla (tla-edn/to-edn main-var-tla))
               result (p ::local-op-result (f main-var))]
           (p ::local-op-to-tla (tla-edn/to-tla-value result)))
         (catch Exception e
