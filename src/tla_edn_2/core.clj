@@ -1,4 +1,4 @@
-(ns tla-edn.core
+(ns tla-edn-2.core
   (:require
    [clojure.string :as str]
    [recife.util :refer [p*]])

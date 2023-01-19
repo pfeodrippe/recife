@@ -3,7 +3,7 @@
   (:require
    [clojure.math.combinatorics :as comb]
    [recife.core :as r]
-   [tla-edn.core :as tla-edn])
+   [tla-edn-2.core :as tla-edn])
   (:import
    (tlc2 TLCGlobals)
    (tlc2.tool.impl Tool)

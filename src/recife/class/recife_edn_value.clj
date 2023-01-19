@@ -3,7 +3,7 @@
   (:require
    [clojure.edn :as edn]
    [kaocha.classpath :as cp]
-   [tla-edn.core :as tla-edn]
+   [tla-edn-2.core :as tla-edn]
    [recife.util :refer [p*]]
    [clojure.string :as str]
    [clojure.repl :as repl]

@@ -19,7 +19,7 @@
    [recife.schema :as schema]
    [recife.util :as u :refer [p*]]
    [taoensso.tufte :as tufte :refer [defnp p defnp-]]
-   [tla-edn.core :as tla-edn]
+   [tla-edn-2.core :as tla-edn]
    [tla-edn.spec :as spec]
    [recife.class.recife-edn-value]
    recife.class)
