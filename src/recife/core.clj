@@ -329,7 +329,8 @@
   nil
   (tla-edn/-to-tla-value [_]
     (p* ::tla-edn--null
-        (tla-edn/to-tla-value :recife/null)))
+        (RecifeEdnValue. nil)
+        #_(tla-edn/to-tla-value :recife/null)))
 
   clojure.lang.Seqable
   (tla-edn/-to-tla-value [v]
@@ -830,18 +831,19 @@
                                                                ;; TODO: Maybe if the user passes a
                                                                ;; unamespaced keyword we can use a
                                                                ;; local variable?
-                                                               (keyword? v)
-                                                               [:raw
-                                                                (let [mv (str " main_var[" (parse v) "] ")]
-                                                                  (format " IF %s = {} THEN %s ELSE %s"
-                                                                          mv
-                                                                          (parse #{nil})
-                                                                          mv))]
+                                                               #_(keyword? v)
+                                                               #_[:raw
+                                                                  (let [mv (str " main_var[" (parse v) "] ")]
+                                                                    (format " IF %s = {} THEN %s ELSE %s"
+                                                                            mv
+                                                                            (parse #{nil})
+                                                                            mv))]
 
                                                                ;; For functions, instead of creating a
                                                                ;; new operator, we use a defmethod used
                                                                ;; by a hardcoded operator (`recife-operator-local`).
-                                                               (fn? v)
+                                                               (or (keyword? v)
+                                                                   (fn? v))
                                                                (do (defmethod operator-local {:step identifier
                                                                                               :key k}
                                                                      [_]
@@ -982,7 +984,9 @@
                                (try
                                  (str (symbol (str (custom-munge identifier)
                                                    @counter))
-                                      (format "(main_var @@ %s)" (tla-edn/to-tla-value env)))
+                                      (if (seq env)
+                                        (format "(main_var @@ %s)" (tla-edn/to-tla-value env))
+                                        "(main_var)"))
                                  (finally
                                    (swap! counter inc))))
 
@@ -1131,10 +1135,7 @@
                                                              (:form %)))))
                                  (str/join "\n\n"))
         ;; `terminating` prevents deadlock
-        terminating (format "(recife_check_done(main_var) /\\ UNCHANGED vars)"
-                            (tla-edn/to-tla-value ::procs)
-                            (tla-edn/to-tla-value ::procs)
-                            (tla-edn/to-tla-value ::done))
+        terminating  "(recife_check_done(main_var) /\\ UNCHANGED vars)"
         helper-variables (or (some->> @collected-ranges
                                       seq
                                       (mapv (fn [{::keys [identifier]}] (format "%s" identifier)))

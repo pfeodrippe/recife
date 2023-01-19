@@ -173,7 +173,7 @@
   ;; - [-] Check perf
   ;;   - It's not that easy, we need more profiling
   ;;   - Merge in `::r/result--merge` is slow
-  ;; - [ ] Add statistics
+  ;; - [x] Add statistics
   ;;   - [x] Get current level
   ;;   - [x] Attach arbitrary data to a trace (like TLCSet)
   ;;   - [x] Add action constraint helper
@@ -195,7 +195,7 @@
   ;;     - Decided to just shuffle part of `rh/combine`
   ;;   - [x] Generate T2TD
   ;;   - [x] PT3
-  ;;   - [ ] Just profile again a little bit
+  ;;   - [x] Just profile again a little bit
   ;;   - [-] Clerk
   ;;     - We don't really need it, we know that it works based on the die example
   ;;   - [-] Organize options for the different scenarions better, they are just
@@ -219,5 +219,6 @@
   ;;   - [ ] Add a test for it
   ;;   - [ ] We may also want to generate a trace example even when we close a
   ;;         run
+  ;; - [ ] Mix Recife with Datalog (Soufflé)?
 
   ())

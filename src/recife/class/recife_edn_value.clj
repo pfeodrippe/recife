@@ -51,6 +51,9 @@
   [v]
   (p* ::->tla
       (cond
+        (nil? v)
+        nil
+
         (keyword? v)
         (StringValue. ^String (custom-munge (symbol v)))
 
