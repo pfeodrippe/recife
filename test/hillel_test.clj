@@ -44,40 +44,51 @@
                             #{ch1-wire-1/wire
                               ch1-wire-1/invariant}
                             default-options)]
-    (is (= {:distinct-states 319
-            :generated-states 417
-            :fp 0
-            :trace [[0
-                      {:account/alice 5
-                       :account/bob 5
-                       :recife.core/procs {:x {:amount 4 :pc :hillel.ch1-wire-1/check-funds}
-                                           :y {:amount 2 :pc :hillel.ch1-wire-1/check-funds}}}]
-                     [1
-                      {:account/alice 5
-                       :account/bob 5
-                       :recife/metadata {:context [:hillel.ch1-wire-1/check-funds {:self :y}]}
-                       :recife.core/procs {:x {:amount 4 :pc :hillel.ch1-wire-1/check-funds}
-                                           :y {:amount 2 :pc :hillel.ch1-wire-1/withdraw}}}]
-                     [2
-                      {:account/alice 5
-                       :account/bob 5
-                       :recife/metadata {:context [:hillel.ch1-wire-1/check-funds {:self :x}]}
-                       :recife.core/procs {:x {:amount 4 :pc :hillel.ch1-wire-1/withdraw}
-                                           :y {:amount 2 :pc :hillel.ch1-wire-1/withdraw}}}]
-                     [3
-                      {:account/alice 3
-                       :account/bob 5
-                       :recife/metadata {:context [:hillel.ch1-wire-1/withdraw {:self :y}]}
-                       :recife.core/procs {:x {:amount 4 :pc :hillel.ch1-wire-1/withdraw}
-                                           :y {:amount 2 :pc :hillel.ch1-wire-1/deposit}}}]
-                     [4
-                      {:account/alice -1
-                       :account/bob 5
-                       :recife/metadata {:context [:hillel.ch1-wire-1/withdraw {:self :x}]}
-                       :recife.core/procs {:x {:amount 4 :pc :hillel.ch1-wire-1/deposit}
-                                           :y {:amount 2 :pc :hillel.ch1-wire-1/deposit}}}]]
-            :trace-info {:violation {:name :hillel.ch1-wire-1/invariant :type :invariant}}
-            :seed 1}
+    (is (= {:trace
+            [[0
+              {:account/alice 5
+               :account/bob 5
+               :recife.core/procs
+               {:y {:amount 1 :pc :hillel.ch1-wire-1/check-funds}
+                :x {:amount 5 :pc :hillel.ch1-wire-1/check-funds}}}]
+             [1
+              {:account/alice 5
+               :account/bob 5
+               :recife.core/procs
+               {:y {:amount 1 :pc :hillel.ch1-wire-1/withdraw}
+                :x {:amount 5 :pc :hillel.ch1-wire-1/check-funds}}
+               :recife/metadata
+               {:context [:hillel.ch1-wire-1/check-funds {:self :y}]}}]
+             [2
+              {:account/alice 5
+               :account/bob 5
+               :recife.core/procs
+               {:y {:amount 1 :pc :hillel.ch1-wire-1/withdraw}
+                :x {:amount 5 :pc :hillel.ch1-wire-1/withdraw}}
+               :recife/metadata
+               {:context [:hillel.ch1-wire-1/check-funds {:self :x}]}}]
+             [3
+              {:account/alice 4
+               :account/bob 5
+               :recife.core/procs
+               {:y {:amount 1 :pc :hillel.ch1-wire-1/deposit}
+                :x {:amount 5 :pc :hillel.ch1-wire-1/withdraw}}
+               :recife/metadata
+               {:context [:hillel.ch1-wire-1/withdraw {:self :y}]}}]
+             [4
+              {:account/alice -1
+               :account/bob 5
+               :recife.core/procs
+               {:y {:amount 1 :pc :hillel.ch1-wire-1/deposit}
+                :x {:amount 5 :pc :hillel.ch1-wire-1/deposit}}
+               :recife/metadata
+               {:context [:hillel.ch1-wire-1/withdraw {:self :x}]}}]]
+            :trace-info
+            {:violation {:type :invariant :name :hillel.ch1-wire-1/invariant}}
+            :distinct-states 295
+            :generated-states 353
+            :seed 1
+            :fp 0}
            result))
     (simulate-assert result)))
 
@@ -87,41 +98,41 @@
                               ch1-wire-2/invariant
                               ch1-wire-2/eventually-consistent}
                             (merge default-options
-                                   {:tlc-args ["-lncheck" "final"]})) ]
+                                   {:tlc-args ["-lncheck" "final"]}))]
     (is (= {:trace
             [[0
-              {:recife.core/procs
-               {:y {:amount 0 :pc :hillel.ch1-wire-2/check-and-withdraw}
-                :x {:amount 1 :pc :hillel.ch1-wire-2/check-and-withdraw}}
+              {:account/alice 5
                :account/bob 5
-               :account/alice 5}]
+               :recife.core/procs
+               {:y {:amount 1 :pc :hillel.ch1-wire-2/check-and-withdraw}
+                :x {:amount 1 :pc :hillel.ch1-wire-2/check-and-withdraw}}}]
              [1
-              {:recife.core/procs
-               {:y {:amount 0 :pc :hillel.ch1-wire-2/check-and-withdraw}
-                :x {:amount 1 :pc :hillel.ch1-wire-2/deposit}}
+              {:account/alice 4
                :account/bob 5
-               :account/alice 4
-               :recife/metadata
-               {:context [:hillel.ch1-wire-2/check-and-withdraw {:self :x}]}}]
-             [2
-              {:recife.core/procs
-               {:y {:amount 0 :pc :hillel.ch1-wire-2/deposit}
-                :x {:amount 1 :pc :hillel.ch1-wire-2/deposit}}
-               :account/bob 5
-               :account/alice 4
+               :recife.core/procs
+               {:y {:amount 1 :pc :hillel.ch1-wire-2/deposit}
+                :x {:amount 1 :pc :hillel.ch1-wire-2/check-and-withdraw}}
                :recife/metadata
                {:context [:hillel.ch1-wire-2/check-and-withdraw {:self :y}]}}]
-             [3
-              {:recife.core/procs
-               {:y {:amount 0 :pc :recife.core/done}
-                :x {:amount 1 :pc :hillel.ch1-wire-2/deposit}}
+             [2
+              {:account/alice 3
                :account/bob 5
-               :account/alice 4
+               :recife.core/procs
+               {:y {:amount 1 :pc :hillel.ch1-wire-2/deposit}
+                :x {:amount 1 :pc :hillel.ch1-wire-2/deposit}}
                :recife/metadata
-               {:context [:hillel.ch1-wire-2/deposit {:self :y}]}}]]
+               {:context [:hillel.ch1-wire-2/check-and-withdraw {:self :x}]}}]
+             [3
+              {:account/alice 3
+               :account/bob 6
+               :recife.core/procs
+               {:y {:amount 1 :pc :hillel.ch1-wire-2/deposit}
+                :x {:amount 1 :pc :recife.core/done}}
+               :recife/metadata
+               {:context [:hillel.ch1-wire-2/deposit {:self :x}]}}]]
             :trace-info {:violation {:type :stuttering :state-number 4}}
-            :distinct-states 223
-            :generated-states 338
+            :distinct-states 222
+            :generated-states 332
             :seed 1
             :fp 0}
            result))
@@ -149,7 +160,8 @@
           :fp 0}
          (r/run-model ch2-recycler-2/global
                       #{ch2-recycler-2/main ch2-recycler-2/invariant}
-                      default-options))))
+                      (merge default-options
+                             {#_ #_:debug? true})))))
 
 (deftest ch5-cache-3-test
   (let [result (r/run-model ch5-cache-3/global
@@ -241,7 +253,7 @@
                 :name :hillel.ch5-cache-3/invariant
                 :data {:well [:this :is :it]}}}
               :distinct-states 77
-              :generated-states 94
+              :generated-states 93
               :seed 1
               :fp 0}
              result))
@@ -333,7 +345,7 @@
                 :name :hillel.ch5-cache-3/invariant,
                 :data {:well [:this :is :it]}}},
               :distinct-states 77,
-              :generated-states 94,
+              :generated-states 93,
               :seed 1,
               :fp 0}
              (->> (r/timeline-diff result)
@@ -449,465 +461,469 @@
                             (merge default-options
                                    {#_ #_:tlc-args ["-lncheck" "final"]
                                     :simulate true}))]
-    (is (match? {:trace [[0
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p1 :flag false}
-                            :t2 {:pc :hillel.ch6-threads-3/p1 :flag false}
-                            :t3 {:pc :hillel.ch6-threads-3/p1 :flag false}
-                            :t1 {:pc :hillel.ch6-threads-3/p1 :flag false}}
-                           :thread/next-thread :t4}]
-                         [1
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p1 :flag false}
-                            :t2 {:pc :hillel.ch6-threads-3/p2 :flag true}
-                            :t3 {:pc :hillel.ch6-threads-3/p1 :flag false}
-                            :t1 {:pc :hillel.ch6-threads-3/p1 :flag false}}
-                           :thread/next-thread :t4
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p1 {:self :t2}]}}]
-                         [2
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p2 :flag true}
-                            :t2 {:pc :hillel.ch6-threads-3/p2 :flag true}
-                            :t3 {:pc :hillel.ch6-threads-3/p1 :flag false}
-                            :t1 {:pc :hillel.ch6-threads-3/p1 :flag false}}
-                           :thread/next-thread :t4
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p1 {:self :t4}]}}]
-                         [3
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
-                            :t2 {:pc :hillel.ch6-threads-3/p2 :flag true}
-                            :t3 {:pc :hillel.ch6-threads-3/p1 :flag false}
-                            :t1 {:pc :hillel.ch6-threads-3/p1 :flag false}}
-                           :thread/next-thread :t4
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p2 {:self :t4}]}}]
-                         [4
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
-                            :t2 {:pc :hillel.ch6-threads-3/p2 :flag true}
-                            :t3 {:pc :hillel.ch6-threads-3/p2 :flag true}
-                            :t1 {:pc :hillel.ch6-threads-3/p1 :flag false}}
-                           :thread/next-thread :t4
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p1 {:self :t3}]}}]
-                         [5
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
-                            :t2 {:pc :hillel.ch6-threads-3/p2 :flag true}
-                            :t3 {:pc :hillel.ch6-threads-3/p2 :flag true}
-                            :t1 {:pc :hillel.ch6-threads-3/p2 :flag true}}
-                           :thread/next-thread :t4
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p1 {:self :t1}]}}]
-                         [6
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
-                            :t2 {:pc :hillel.ch6-threads-3/p2 :flag true}
-                            :t3 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
-                            :t1 {:pc :hillel.ch6-threads-3/p2 :flag true}}
-                           :thread/next-thread :t4
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p2 {:self :t3}]}}]
-                         [7
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p2 :flag true}
-                            :t2 {:pc :hillel.ch6-threads-3/p2 :flag true}
-                            :t3 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
-                            :t1 {:pc :hillel.ch6-threads-3/p2 :flag true}}
-                           :thread/next-thread :t4
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p2-1 {:self :t4}]}}]
-                         [8
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p2 :flag true}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
-                            :t3 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
-                            :t1 {:pc :hillel.ch6-threads-3/p2 :flag true}}
-                           :thread/next-thread :t4
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p2 {:self :t2}]}}]
-                         [9
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p2 :flag true}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
-                            :t3 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1 :flag true}}
-                           :thread/next-thread :t4
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p2 {:self :t1}]}}]
-                         [10
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p2 :flag true}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
-                            :t3 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1-1 :flag false}}
-                           :thread/next-thread :t4
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p2-1 {:self :t1}]}}]
-                         [11
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p2 :flag true}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1-1 :flag false}
-                            :t3 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1-1 :flag false}}
-                           :thread/next-thread :t4
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p2-1 {:self :t2}]}}]
-                         [12
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1-1 :flag false}
-                            :t3 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1-1 :flag false}}
-                           :thread/next-thread :t4
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p2 {:self :t4}]}}]
-                         [13
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1-1 :flag false}
-                            :t3 {:pc :hillel.ch6-threads-3/p2-1-1 :flag false}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1-1 :flag false}}
-                           :thread/next-thread :t4
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p2-1 {:self :t3}]}}]
-                         [14
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t3 {:pc :hillel.ch6-threads-3/p2-1-1 :flag false}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1-1 :flag false}}
-                           :thread/next-thread :t4
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p2-1-1 {:self :t2}]}}]
-                         [15
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p2 :flag true}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t3 {:pc :hillel.ch6-threads-3/p2-1-1 :flag false}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1-1 :flag false}}
-                           :thread/next-thread :t4
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p2-1 {:self :t4}]}}]
-                         [16
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/cs :flag true}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t3 {:pc :hillel.ch6-threads-3/p2-1-1 :flag false}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1-1 :flag false}}
-                           :thread/next-thread :t4
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p2 {:self :t4}]}}]
-                         [17
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/cs :flag true}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t3 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1-1 :flag false}}
-                           :thread/next-thread :t4
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p2-1-1 {:self :t3}]}}]
-                         [18
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p3 :flag true}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t3 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1-1 :flag false}}
-                           :thread/next-thread :t4
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/cs {:self :t4}]}}]
-                         [19
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p3 :flag true}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t3 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
-                           :thread/next-thread :t4
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p2-1-1 {:self :t1}]}}]
-                         [20
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p4 :flag true}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t3 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
-                           :thread/next-thread :t3
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p3 {:t :t3 :self :t4}]}}]
-                         [21
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p4 :flag true}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t3 {:pc :hillel.ch6-threads-3/p2-1-3 :flag false}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
-                           :thread/next-thread :t3
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p2-1-2 {:self :t3}]}}]
-                         [22
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p4 :flag true}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t3 {:pc :hillel.ch6-threads-3/p2 :flag true}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
-                           :thread/next-thread :t3
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p2-1-3 {:self :t3}]}}]
-                         [23
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p5 :flag false}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t3 {:pc :hillel.ch6-threads-3/p2 :flag true}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
-                           :thread/next-thread :t3
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p4 {:self :t4}]}}]
-                         [24
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p1 :flag false}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t3 {:pc :hillel.ch6-threads-3/p2 :flag true}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
-                           :thread/next-thread :t3
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p5 {:self :t4}]}}]
-                         [25
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p2 :flag true}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t3 {:pc :hillel.ch6-threads-3/p2 :flag true}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
-                           :thread/next-thread :t3
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p1 {:self :t4}]}}]
-                         [26
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p2 :flag true}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t3 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
-                           :thread/next-thread :t3
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p2 {:self :t3}]}}]
-                         [27
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t3 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
-                           :thread/next-thread :t3
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p2 {:self :t4}]}}]
-                         [28
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p2-1-1 :flag false}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t3 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
-                           :thread/next-thread :t3
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p2-1 {:self :t4}]}}]
-                         [29
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t3 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
-                           :thread/next-thread :t3
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p2-1-1 {:self :t4}]}}]
-                         [30
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t3 {:pc :hillel.ch6-threads-3/p2 :flag true}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
-                           :thread/next-thread :t3
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p2-1 {:self :t3}]}}]
-                         [31
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t3 {:pc :hillel.ch6-threads-3/cs :flag true}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
-                           :thread/next-thread :t3
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p2 {:self :t3}]}}]
-                         [32
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t3 {:pc :hillel.ch6-threads-3/p3 :flag true}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
-                           :thread/next-thread :t3
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/cs {:self :t3}]}}]
-                         [33
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t3 {:pc :hillel.ch6-threads-3/p4 :flag true}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
-                           :thread/next-thread :t4
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p3 {:t :t4 :self :t3}]}}]
-                         [34
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t3 {:pc :hillel.ch6-threads-3/p5 :flag false}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
-                           :thread/next-thread :t4
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p4 {:self :t3}]}}]
-                         [35
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t3 {:pc :hillel.ch6-threads-3/p1 :flag false}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
-                           :thread/next-thread :t4
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p5 {:self :t3}]}}]
-                         [36
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t3 {:pc :hillel.ch6-threads-3/p2 :flag true}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
-                           :thread/next-thread :t4
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p1 {:self :t3}]}}]
-                         [37
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t3 {:pc :hillel.ch6-threads-3/cs :flag true}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
-                           :thread/next-thread :t4
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p2 {:self :t3}]}}]
-                         [38
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p2-1-3 :flag false}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t3 {:pc :hillel.ch6-threads-3/cs :flag true}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
-                           :thread/next-thread :t4
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p2-1-2 {:self :t4}]}}]
-                         [39
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p2-1-3 :flag false}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t3 {:pc :hillel.ch6-threads-3/p3 :flag true}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
-                           :thread/next-thread :t4
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/cs {:self :t3}]}}]
-                         [40
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p2-1-3 :flag false}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t3 {:pc :hillel.ch6-threads-3/p4 :flag true}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
-                           :thread/next-thread :t4
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p3 {:t :t4 :self :t3}]}}]
-                         [41
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p2 :flag true}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t3 {:pc :hillel.ch6-threads-3/p4 :flag true}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
-                           :thread/next-thread :t4
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p2-1-3 {:self :t4}]}}]
-                         [42
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p2 :flag true}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t3 {:pc :hillel.ch6-threads-3/p5 :flag false}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
-                           :thread/next-thread :t4
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p4 {:self :t3}]}}]
-                         [43
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p2 :flag true}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t3 {:pc :hillel.ch6-threads-3/p1 :flag false}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
-                           :thread/next-thread :t4
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p5 {:self :t3}]}}]
-                         [44
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p2 :flag true}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t3 {:pc :hillel.ch6-threads-3/p2 :flag true}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
-                           :thread/next-thread :t4
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p1 {:self :t3}]}}]
-                         [45
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p2 :flag true}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t3 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
-                           :thread/next-thread :t4
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p2 {:self :t3}]}}]
-                         [46
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t3 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
-                           :thread/next-thread :t4
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p2 {:self :t4}]}}]
-                         [47
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t3 {:pc :hillel.ch6-threads-3/p2-1-1 :flag false}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
-                           :thread/next-thread :t4
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p2-1 {:self :t3}]}}]
-                         [48
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t3 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
-                           :thread/next-thread :t4
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p2-1-1 {:self :t3}]}}]
-                         [49
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/p2 :flag true}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t3 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
-                           :thread/next-thread :t4
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p2-1 {:self :t4}]}}]
-                         [50
-                          {:recife.core/procs
-                           {:t4 {:pc :hillel.ch6-threads-3/cs :flag true}
-                            :t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t3 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
-                            :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
-                           :thread/next-thread :t4
-                           :recife/metadata
-                           {:context [:hillel.ch6-threads-3/p2 {:self :t4}]}}]]
-                 :trace-info {:violation {:type :back-to-state}}
-                 :simulation {:states-count 580
-                              :traces-count 5}}
-                result))
+    (is (= {:trace
+            [[0
+              {:thread/next-thread :t2
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p1 :flag false}
+                :t1 {:pc :hillel.ch6-threads-3/p1 :flag false}
+                :t4 {:pc :hillel.ch6-threads-3/p1 :flag false}
+                :t3 {:pc :hillel.ch6-threads-3/p1 :flag false}}}]
+             [1
+              {:thread/next-thread :t2
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p1 :flag false}
+                :t1 {:pc :hillel.ch6-threads-3/p2 :flag true}
+                :t4 {:pc :hillel.ch6-threads-3/p1 :flag false}
+                :t3 {:pc :hillel.ch6-threads-3/p1 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p1 {:self :t1}]}}]
+             [2
+              {:thread/next-thread :t2
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p2 :flag true}
+                :t1 {:pc :hillel.ch6-threads-3/p2 :flag true}
+                :t4 {:pc :hillel.ch6-threads-3/p1 :flag false}
+                :t3 {:pc :hillel.ch6-threads-3/p1 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p1 {:self :t2}]}}]
+             [3
+              {:thread/next-thread :t2
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
+                :t1 {:pc :hillel.ch6-threads-3/p2 :flag true}
+                :t4 {:pc :hillel.ch6-threads-3/p1 :flag false}
+                :t3 {:pc :hillel.ch6-threads-3/p1 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p2 {:self :t2}]}}]
+             [4
+              {:thread/next-thread :t2
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
+                :t1 {:pc :hillel.ch6-threads-3/p2 :flag true}
+                :t4 {:pc :hillel.ch6-threads-3/p2 :flag true}
+                :t3 {:pc :hillel.ch6-threads-3/p1 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p1 {:self :t4}]}}]
+             [5
+              {:thread/next-thread :t2
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
+                :t1 {:pc :hillel.ch6-threads-3/p2 :flag true}
+                :t4 {:pc :hillel.ch6-threads-3/p2 :flag true}
+                :t3 {:pc :hillel.ch6-threads-3/p2 :flag true}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p1 {:self :t3}]}}]
+             [6
+              {:thread/next-thread :t2
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
+                :t1 {:pc :hillel.ch6-threads-3/p2 :flag true}
+                :t4 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
+                :t3 {:pc :hillel.ch6-threads-3/p2 :flag true}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p2 {:self :t4}]}}]
+             [7
+              {:thread/next-thread :t2
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p2 :flag true}
+                :t1 {:pc :hillel.ch6-threads-3/p2 :flag true}
+                :t4 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
+                :t3 {:pc :hillel.ch6-threads-3/p2 :flag true}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p2-1 {:self :t2}]}}]
+             [8
+              {:thread/next-thread :t2
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p2 :flag true}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
+                :t4 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
+                :t3 {:pc :hillel.ch6-threads-3/p2 :flag true}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p2 {:self :t1}]}}]
+             [9
+              {:thread/next-thread :t2
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p2 :flag true}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
+                :t4 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1 :flag true}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p2 {:self :t3}]}}]
+             [10
+              {:thread/next-thread :t2
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p2 :flag true}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
+                :t4 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1-1 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p2-1 {:self :t3}]}}]
+             [11
+              {:thread/next-thread :t2
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p2 :flag true}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1-1 :flag false}
+                :t4 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1-1 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p2-1 {:self :t1}]}}]
+             [12
+              {:thread/next-thread :t2
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1-1 :flag false}
+                :t4 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1-1 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p2 {:self :t2}]}}]
+             [13
+              {:thread/next-thread :t2
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1-1 :flag false}
+                :t4 {:pc :hillel.ch6-threads-3/p2-1-1 :flag false}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1-1 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p2-1 {:self :t4}]}}]
+             [14
+              {:thread/next-thread :t2
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t4 {:pc :hillel.ch6-threads-3/p2-1-1 :flag false}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1-1 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p2-1-1 {:self :t1}]}}]
+             [15
+              {:thread/next-thread :t2
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p2 :flag true}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t4 {:pc :hillel.ch6-threads-3/p2-1-1 :flag false}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1-1 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p2-1 {:self :t2}]}}]
+             [16
+              {:thread/next-thread :t2
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/cs :flag true}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t4 {:pc :hillel.ch6-threads-3/p2-1-1 :flag false}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1-1 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p2 {:self :t2}]}}]
+             [17
+              {:thread/next-thread :t2
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/cs :flag true}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t4 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1-1 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p2-1-1 {:self :t4}]}}]
+             [18
+              {:thread/next-thread :t2
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p3 :flag true}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t4 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1-1 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/cs {:self :t2}]}}]
+             [19
+              {:thread/next-thread :t2
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p3 :flag true}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t4 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p2-1-1 {:self :t3}]}}]
+             [20
+              {:thread/next-thread :t4
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p4 :flag true}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t4 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p3 {:self :t2 :t :t4}]}}]
+             [21
+              {:thread/next-thread :t4
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p4 :flag true}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t4 {:pc :hillel.ch6-threads-3/p2-1-3 :flag false}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p2-1-2 {:self :t4}]}}]
+             [22
+              {:thread/next-thread :t4
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p4 :flag true}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t4 {:pc :hillel.ch6-threads-3/p2 :flag true}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p2-1-3 {:self :t4}]}}]
+             [23
+              {:thread/next-thread :t4
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p5 :flag false}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t4 {:pc :hillel.ch6-threads-3/p2 :flag true}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p4 {:self :t2}]}}]
+             [24
+              {:thread/next-thread :t4
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p1 :flag false}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t4 {:pc :hillel.ch6-threads-3/p2 :flag true}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p5 {:self :t2}]}}]
+             [25
+              {:thread/next-thread :t4
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p2 :flag true}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t4 {:pc :hillel.ch6-threads-3/p2 :flag true}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p1 {:self :t2}]}}]
+             [26
+              {:thread/next-thread :t4
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p2 :flag true}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t4 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p2 {:self :t4}]}}]
+             [27
+              {:thread/next-thread :t4
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t4 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p2 {:self :t2}]}}]
+             [28
+              {:thread/next-thread :t4
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p2-1-1 :flag false}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t4 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p2-1 {:self :t2}]}}]
+             [29
+              {:thread/next-thread :t4
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t4 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p2-1-1 {:self :t2}]}}]
+             [30
+              {:thread/next-thread :t4
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t4 {:pc :hillel.ch6-threads-3/p2 :flag true}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p2-1 {:self :t4}]}}]
+             [31
+              {:thread/next-thread :t4
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t4 {:pc :hillel.ch6-threads-3/cs :flag true}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p2 {:self :t4}]}}]
+             [32
+              {:thread/next-thread :t4
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t4 {:pc :hillel.ch6-threads-3/p3 :flag true}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/cs {:self :t4}]}}]
+             [33
+              {:thread/next-thread :t2
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t4 {:pc :hillel.ch6-threads-3/p4 :flag true}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p3 {:self :t4 :t :t2}]}}]
+             [34
+              {:thread/next-thread :t2
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t4 {:pc :hillel.ch6-threads-3/p5 :flag false}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p4 {:self :t4}]}}]
+             [35
+              {:thread/next-thread :t2
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t4 {:pc :hillel.ch6-threads-3/p1 :flag false}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p5 {:self :t4}]}}]
+             [36
+              {:thread/next-thread :t2
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t4 {:pc :hillel.ch6-threads-3/p2 :flag true}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p1 {:self :t4}]}}]
+             [37
+              {:thread/next-thread :t2
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t4 {:pc :hillel.ch6-threads-3/cs :flag true}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p2 {:self :t4}]}}]
+             [38
+              {:thread/next-thread :t2
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p2-1-3 :flag false}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t4 {:pc :hillel.ch6-threads-3/cs :flag true}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p2-1-2 {:self :t2}]}}]
+             [39
+              {:thread/next-thread :t2
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p2-1-3 :flag false}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t4 {:pc :hillel.ch6-threads-3/p3 :flag true}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/cs {:self :t4}]}}]
+             [40
+              {:thread/next-thread :t2
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p2-1-3 :flag false}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t4 {:pc :hillel.ch6-threads-3/p4 :flag true}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p3 {:self :t4 :t :t2}]}}]
+             [41
+              {:thread/next-thread :t2
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p2 :flag true}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t4 {:pc :hillel.ch6-threads-3/p4 :flag true}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p2-1-3 {:self :t2}]}}]
+             [42
+              {:thread/next-thread :t2
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p2 :flag true}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t4 {:pc :hillel.ch6-threads-3/p5 :flag false}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p4 {:self :t4}]}}]
+             [43
+              {:thread/next-thread :t2
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p2 :flag true}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t4 {:pc :hillel.ch6-threads-3/p1 :flag false}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p5 {:self :t4}]}}]
+             [44
+              {:thread/next-thread :t2
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p2 :flag true}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t4 {:pc :hillel.ch6-threads-3/p2 :flag true}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p1 {:self :t4}]}}]
+             [45
+              {:thread/next-thread :t2
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p2 :flag true}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t4 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p2 {:self :t4}]}}]
+             [46
+              {:thread/next-thread :t2
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t4 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p2 {:self :t2}]}}]
+             [47
+              {:thread/next-thread :t2
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t4 {:pc :hillel.ch6-threads-3/p2-1-1 :flag false}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p2-1 {:self :t4}]}}]
+             [48
+              {:thread/next-thread :t2
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p2-1 :flag true}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t4 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p2-1-1 {:self :t4}]}}]
+             [49
+              {:thread/next-thread :t2
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/p2 :flag true}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t4 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p2-1 {:self :t2}]}}]
+             [50
+              {:thread/next-thread :t2
+               :recife.core/procs
+               {:t2 {:pc :hillel.ch6-threads-3/cs :flag true}
+                :t1 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t4 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}
+                :t3 {:pc :hillel.ch6-threads-3/p2-1-2 :flag false}}
+               :recife/metadata
+               {:context [:hillel.ch6-threads-3/p2 {:self :t2}]}}]]
+            :trace-info {:violation {:type :back-to-state :state-number 19}}
+            :distinct-states nil
+            :generated-states nil
+            :seed 1
+            :fp 0
+            :simulation {:states-count 580 :traces-count 5}}
+           result))
     (simulate-assert result)))

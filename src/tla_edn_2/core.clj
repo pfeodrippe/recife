@@ -1,4 +1,4 @@
-(ns tla-edn.core
+(ns tla-edn-2.core
   (:require
    [clojure.string :as str]
    [recife.util :refer [p*]])
@@ -10,20 +10,15 @@
 #_(set! *warn-on-reflection* false)
 (set! *warn-on-reflection* true)
 
-(def ^:private ^:dynamic *string-to-keyword?* false)
-
 (defprotocol TLAPlusEdn
   (-to-edn [this]))
 
 (defn to-edn
-  ([this]
-   (to-edn this {}))
-  ([this {:keys [:string-to-keyword?]
-          :or   {string-to-keyword? false}}]
-   (binding [*string-to-keyword?* string-to-keyword?]
-     (-to-edn this))))
+  [this]
+  (p* ::to-edn
+      (-to-edn this)))
 
-(extend-protocol TLAPlusEdn
+#_(extend-protocol TLAPlusEdn
   tlc2.value.impl.RecordValue
   (-to-edn [v]
     (p* ::record
@@ -96,7 +91,7 @@
       (list 'into-array resolved vals)
       {:tag (str "[L" (.getName resolved) ";")})))
 
-(extend-protocol EdnToTla
+#_(extend-protocol EdnToTla
   clojure.lang.APersistentMap
   (-to-tla-value [coll]
     (if (empty? coll)

@@ -3,7 +3,8 @@
   :depstar {:replace-deps {com.github.seancorfield/depstar {:mvn/version "2.0.193"}}
             :ns-default hf.depstar
             :exec-args {}}
-  :dev {:extra-deps {nubank/matcher-combinators {:mvn/version "3.1.4"}
+  :dev {:jvm-opts ["-XX:-OmitStackTraceInFastThrow"]
+        :extra-deps {nubank/matcher-combinators {:mvn/version "3.1.4"}
                      lambdaisland/kaocha {:mvn/version "1.0-612"}
                      elle/elle {:mvn/version "0.1.2"}
                      ;; `unilog` is needed by `elle`.
@@ -23,7 +24,8 @@
                      metosin/muuntaja {:mvn/version "0.6.8"}
                      io.github.pfeodrippe/dev-tooling {:mvn/version "1.0.47"}}
         :extra-paths ["test"]}
-  :test {:extra-deps {nubank/matcher-combinators {:mvn/version "3.1.4"}
+  :test {:jvm-opts ["-XX:-OmitStackTraceInFastThrow"]
+         :extra-deps {nubank/matcher-combinators {:mvn/version "3.1.4"}
                       lambdaisland/kaocha {:mvn/version "1.0-612"}
                       elle/elle {:mvn/version "0.1.2"}
                       ;; `unilog` is needed by `elle`.
@@ -48,7 +50,7 @@
  :deps
  {medley/medley {:mvn/version "1.3.0"}
   lambdaisland/deep-diff2 {:mvn/version "2.0.108"}
-  pfeodrippe/tla-edn {:mvn/version "0.8.0-SNAPSHOT"}
+  pfeodrippe/tla-edn {:mvn/version "0.13.0-SNAPSHOT"}
   alandipert/interpol8 {:mvn/version "0.0.3"}
   metosin/malli {:mvn/version "0.5.1"}
   quil/quil {:mvn/version "3.1.0"}
@@ -56,6 +58,8 @@
   pfeodrippe/arrudeia {:mvn/version "0.11.0-SNAPSHOT"}
   com.taoensso/tufte {:mvn/version "2.4.5"}
   potemkin/potemkin {:mvn/version "0.4.6"}
-  org.clj-commons/claypoole {:mvn/version "1.2.2"}}
+  org.clj-commons/claypoole {:mvn/version "1.2.2"}
+  com.taoensso/nippy {:mvn/version "3.2.0"}
+  org.clojure/core.async {:mvn/version "1.6.673"}}
 
- :paths ["src"]}
+ :paths ["src" "classes"]}

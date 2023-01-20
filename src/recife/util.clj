@@ -16,6 +16,11 @@
            (tufte/with-profiling pd {:dynamic? true}
              (try
                ~@body
+               (catch Exception ex#
+                 (spit ".recife-str-exception.ser"
+                       (with-out-str (println ex#)))
+                 (println ex#)
+                 (throw ex#))
                (finally
                  (tufte/capture-time! pd ~id (- (System/nanoTime) t0#)))))))
     `(do ~@body)))

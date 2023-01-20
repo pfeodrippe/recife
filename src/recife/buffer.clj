@@ -1,11 +1,15 @@
 (ns recife.buffer
   (:require
    [clojure.edn :as edn]
-   [com.climate.claypoole :as clay])
+   [com.climate.claypoole :as clay]
+   [clojure.core.async :as async :refer [go thread <! >! <!! >!! chan]]
+   [recife.util :refer [p*]])
   (:import
    (java.nio.channels FileChannel FileChannel$MapMode)
    (java.nio.file StandardOpenOption OpenOption)
    (java.io File)))
+
+(set! *warn-on-reflection* true)
 
 (defonce *channel-file
   (atom (File/createTempFile "my-file" ".txt")))
@@ -21,7 +25,7 @@
    (buf-create {}))
   ([{:keys [file truncate]
      :or {file @*channel-file}}]
-   (let [channel (FileChannel/open (.toPath file)
+   (let [channel (FileChannel/open (.toPath ^File file)
                                    (into-array OpenOption
                                                (concat [StandardOpenOption/READ
                                                         StandardOpenOption/WRITE
@@ -34,6 +38,9 @@
 
 (defonce ^:private *buf
   (atom (buf-create)))
+
+(defonce *client-channel
+  (atom nil))
 
 (defn reset-buf!
   []
@@ -53,7 +60,7 @@
 (defn- buf-read-next-line
   ([]
    (buf-read-next-line @*buf))
-  ([buf]
+  ([^java.nio.DirectCharBufferS buf]
    (locking lock-read
      (loop [c (.get buf)
             line ""]
@@ -74,7 +81,7 @@
 (defn- can-write?
   []
   (try
-    (not= (str (.get @*buf 0)) "1")
+    (not= (str (.get ^java.nio.DirectCharBufferS @*buf 0)) "1")
     (catch Exception ex
       (println "Exception in `can-write?`" ex)
       false)))
@@ -86,7 +93,7 @@
 (defn- buf-rewind
   ([]
    (buf-rewind @*buf))
-  ([buf]
+  ([^java.nio.DirectCharBufferS buf]
    (.rewind buf)
    nil))
 
@@ -95,24 +102,25 @@
    (buf-write @*buf edn))
   ([buf edn]
    (buf-write buf edn {}))
-  ([buf edn {:keys [offset]}]
+  ([^java.nio.DirectCharBufferS buf edn {:keys [_offset]}]
    (let [arr (.toCharArray (if edn
                              (str (pr-str edn) "\n")
                              (str (char 0))))]
-     (if offset
+     (.put buf arr)
+     #_(if offset
        (.put buf arr offset (alength arr))
        (.put buf arr)))
    true))
 
 (def ^:private *saved (atom []))
 
-(defn save!
+(defn- -save!
   [v]
   (locking lock
     (try
       (while (not (can-write?)))
 
-      (when (zero? (.position @*buf))
+      (when (zero? (.position ^java.nio.DirectCharBufferS @*buf))
         (buf-write 0))
 
       (buf-write v)
@@ -127,6 +135,22 @@
 
       (catch Exception ex
         (println ex)
+        (throw ex)))))
+
+(defn save!
+  [v]
+  (try
+    (p* ::save!
+        (>!! @*client-channel v))
+    (catch Exception ex
+      (if (nil? @*client-channel)
+        (throw (ex-info "
+
+Error when trying to save data, you need to set `:use-buffer` or
+run Recife using `:generate`.
+
+"
+                        {}))
         (throw ex))))
   true)
 
@@ -161,22 +185,34 @@
     (reset! *sync-loop
             (clay/future
               pool
-              (println "Starting sync loop...")
+              #_(println "Starting sync loop...")
               (while (not (Thread/interrupted))
                 (Thread/sleep 1)
                 (try
                   (sync!)
                   (catch Exception e
                     (println e))))
-              (println "STOPPING the future...")))))
+              #_(println "STOPPING the future...")))))
+
+#_(bean (type (clay/future pool (println "ss"))))
 
 (defn stop-sync-loop!
   []
   (when-let [fut @*sync-loop]
-    (println "Stopping sync loop...")
-    (.cancel fut true)
+    #_(println "Stopping sync loop...")
+    (.cancel ^java.util.concurrent.Future fut true)
     (reset! *sync-loop nil)
     (sync!)))
+
+(defn start-client-loop!
+  []
+  (let [ch (chan 1000000)]
+    (reset! *client-channel ch)
+    (go
+      (while true
+        (let [v (<! ch)]
+          (p* ::-save!
+              (-save! v)))))))
 
 (defn read-contents
   []

@@ -6,8 +6,7 @@
   See `example.knuth-yao-die.clerk` to see some charts."
   (:require
    [recife.core :as r]
-   [recife.helpers :as rh]
-   [recife.buffer :as r.buf]))
+   [recife.helpers :as rh]))
 
 (def states-map
   {:crooked {:h :s0 :t :s0}
@@ -20,7 +19,7 @@
    :s6 {:h :6 :t :s2}})
 
 ;; Flag which control crookness.
-(def crooked? true)
+(def crooked? false)
 
 (def global
   {::state (if crooked? :crooked :s0)
@@ -58,27 +57,26 @@
   [{:keys [::face ::state ::prob]}]
   (r/implies
    (contains? done state)
-   (r.buf/save! {:face face
-                 :state state
-                 :prob prob})))
+   (r/save! {:face face
+             :state state
+             :prob prob})))
 
 (comment
 
   (def result
     (r/run-model global #{next* eita}
-                 {:workers 1
-                  :generate true
+                 {:generate true
                   :depth 15}))
 
   (.close result)
 
-  (count (r.buf/read-contents))
+  (count (r/read-saved-data))
 
-  (frequencies (r.buf/read-contents))
-  (frequencies (mapv :face (r.buf/read-contents)))
-  (frequencies (mapv :state (r.buf/read-contents)))
-  (into (sorted-map) (frequencies (mapv :prob (r.buf/read-contents))))
-  (take 500 (r.buf/read-contents))
+  (frequencies (r/read-saved-data))
+  (frequencies (mapv :face (r/read-saved-data)))
+  (frequencies (mapv :state (r/read-saved-data)))
+  (into (sorted-map) (frequencies (mapv :prob (r/read-saved-data))))
+  (take 500 (r/read-saved-data))
 
   ()
 
@@ -91,8 +89,5 @@
   ;; - [x] Open PR for TLC with typo fixes
   ;; - [x] See how to pull from atom instead of pushing
   ;; - [x] Test crooked die
-  ;; - [ ] Add spec for EWD998
-  ;; - [ ] Add implicit `do` to helper macros
-  ;; - [ ] Maybe add -noTE when running simulate/generate?
 
   ())
