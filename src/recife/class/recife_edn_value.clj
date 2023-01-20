@@ -7,7 +7,8 @@
    [recife.util :refer [p*]]
    [clojure.string :as str]
    [clojure.repl :as repl]
-   [taoensso.nippy :as nippy])
+   [taoensso.nippy :as nippy]
+   recife.class)
   (:import
    (tlc2.value IValueOutputStream IValueInputStream ValueInputStream)
    (tlc2.value.impl Value StringValue RecordValue FcnRcdValue BoolValue IntValue

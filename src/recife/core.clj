@@ -21,8 +21,7 @@
    [taoensso.tufte :as tufte :refer [defnp p defnp-]]
    [tla-edn-2.core :as tla-edn]
    [tla-edn.spec :as spec]
-   [recife.class.recife-edn-value]
-   recife.class)
+   recife.class.recife-edn-value)
   (:import
    (java.io File)
    (lambdaisland.deep_diff2.diff_impl Mismatch Deletion Insertion)

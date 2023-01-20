@@ -20,3 +20,5 @@ clj-kondo*.snap
 .planck_cache
 
 states/
+
+.recife*

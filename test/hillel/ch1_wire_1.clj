@@ -35,7 +35,9 @@
 
 (comment
 
-  (-> (r/run-model global #{wire invariant} #_{:raw-output? true :debug? true})
+  (-> (r/run-model global #{wire invariant} {#_ #_:raw-output? true
+                                             #_ #_:debug? true
+                                             #_ #_:run-local? true})
       r/timeline-diff)
 
   ())
