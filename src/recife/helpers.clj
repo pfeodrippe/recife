@@ -60,7 +60,7 @@
     [(first decl) (second decl) (drop 2 decl)]))
 
 (defmacro defproperty
-  {:arglists '([name doc-string? [db]])}
+  {:arglists '([name doc-string? [db] body])}
   [name & decl]
   (let [[_doc-string params body] (parse-decl decl)]
     `(r/defproperty ~name
@@ -70,18 +70,28 @@
          (eval '~@body)))))
 
 (defmacro deffairness
-  {:arglists '([name doc-string? [db]])}
+  {:arglists '([name doc-string? [db] body])}
   [name & decl]
-  (let [[doc-string params body] (parse-decl decl)]
-    `(def ~(with-meta name
-             {:doc doc-string})
+  (let [[_doc-string params body] (parse-decl decl)]
+    `(r/deffairness ~name
        (binding [*env* (quote ~(add-global-vars
                                 (mapv (fn [p#] `(quote ~p#))
                                       params)))]
          (eval '~@body)))))
 
+#_(defmacro deffairness
+    {:arglists '([name doc-string? [db] body])}
+    [name & decl]
+    (let [[doc-string params body] (parse-decl decl)]
+      `(def ~(with-meta name
+               {:doc doc-string})
+         (binding [*env* (quote ~(add-global-vars
+                                  (mapv (fn [p#] `(quote ~p#))
+                                        params)))]
+           (eval '~@body)))))
+
 (defmacro definvariant
-  {:arglists '([name doc-string? [db]])}
+  {:arglists '([name doc-string? [db] body])}
   [name & decl]
   (let [[doc-string params body] (parse-decl decl)]
     `(r/definvariant ~name
@@ -90,7 +100,7 @@
          ~@body))))
 
 (defmacro defconstraint
-  {:arglists '([name doc-string? [db]])}
+  {:arglists '([name doc-string? [db] body])}
   [name & decl]
   (let [[_doc-string params body] (parse-decl decl)]
     `(r/defconstraint ~name
@@ -98,7 +108,7 @@
          ~@body))))
 
 (defmacro defaction-constraint
-  {:arglists '([name doc-string? [db db']])}
+  {:arglists '([name doc-string? [db db'] body])}
   [name & decl]
   (let [[_doc-string params body] (parse-decl decl)]
     (when-not (= (count params) 2)
@@ -164,8 +174,9 @@
     ~(invoke body)])
 
 (defmacro call
-  [k body]
-  `[:call ~k
+  "Invoke process step."
+  [k step body]
+  `[:call ~k ~step
     ~(invoke body)])
 
 (defmacro and
@@ -286,3 +297,8 @@
     (quote
      (with-features ~features
        ~@body))))
+
+(defn get-trace
+  "Get trace (without index) from a result."
+  [result]
+  (mapv second (:trace result)))

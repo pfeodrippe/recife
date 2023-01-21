@@ -13,7 +13,8 @@
      :invariant
      :state-constraint
      :action-constraint
-     :temporal-property]]])
+     :temporal-property
+     :fairness]]])
 
 (def DefProc
   [:and [:cat

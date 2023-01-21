@@ -400,7 +400,9 @@
   String
   (-to-tla-value [v]
     (p* ::to-tla--string
-        (StringValue. v)))
+        (throw (ex-info "We don't support strings for now, use a keyword instead."
+                        {:string v}))
+        #_(StringValue. v)))
 
   Boolean
   (-to-tla-value [v]
@@ -443,12 +445,15 @@
 (defn- process-operator*
   "Created so we can use the same \"meat\" when invoking the function
   in a context outside TLC."
-  [identifier f self context main-var]
+  [identifier f self main-var]
   (p* ::process-operator*
-      (let [global main-var
+      (let [global (dissoc main-var ::extra-args)
+            #_ #__ (when (::extra-args main-var)
+                     (throw (ex-info (str "po* -- " self " ==== " (::extra-args main-var) " ==== " (keys main-var)) {})))
             local (get-in main-var [::procs self])
+            extra-args (::extra-args main-var)
             result (p ::result (f (p* ::result--merge
-                                      (merge {:self self} global context local))))
+                                      (merge {:self self} global extra-args local))))
             result-global (medley/filter-keys namespace result)
             result-local (medley/remove-keys namespace result)
             metadata (if (:recife/metadata result-global)
@@ -459,24 +464,25 @@
                        ;; which is triggered by multiple threads only, so we do this
                        ;; check here to try to prevent it.
                        (merge (:recife/metadata result-global)
-                              {:context [identifier (merge {:self self} context)]})
-                       {:context [identifier (merge {:self self} context)]})]
-        (if (nil? result)
-          (assoc main-var :recife/metadata metadata)
-          (merge
-           ;; All namespaced keywords are global.
-           (dissoc result-global :recife/metadata)
-           ;; While unamespaced keywords are part of the
-           ;; process as local variables.
-           {::procs (merge (::procs result-global)
-                           {self
-                            ;; Remove `extra-args` and `self`
-                            ;; so they don't become stateful.
-                            (apply dissoc result-local :self (keys context))})
-            :recife/metadata metadata})))))
+                              {:context [identifier (merge {:self self} extra-args)]})
+                       {:context [identifier (merge {:self self} extra-args)]})]
+        (p* ::process-operator*--return
+            (if (nil? result)
+              (dissoc (assoc main-var :recife/metadata metadata) ::extra-args)
+              (merge
+               ;; All namespaced keywords are global.
+               (dissoc result-global :recife/metadata)
+               ;; While unamespaced keywords are part of the
+               ;; process as local variables.
+               {::procs (merge (::procs result-global)
+                               {self
+                                ;; Remove `extra-args` and `self`
+                                ;; so they don't become stateful.
+                                (apply dissoc result-local :self (keys extra-args))})
+                :recife/metadata metadata}))))))
 
 (defn process-operator
-  [identifier f self-tla ^RecordValue extra-args-tla ^RecordValue main-var-tla]
+  [identifier f self-tla ^RecordValue main-var-tla]
   (p* ::process-operator
       (try
         (let [self (p ::process-operator--self
@@ -484,13 +490,13 @@
               main-var (p ::process-operator--main-var
                           (tla-edn/to-edn main-var-tla))
               ;; `"_no"` is a indicator that the operator is not using extra args.
-              extra-args (if #_(contains? (.-state extra-args-tla) :-no)
-                           (contains? (set (mapv str (.-names ^RecordValue extra-args-tla))) "_no")
-                           {}
-                           (p ::process-operator--extra-args
-                              (tla-edn/to-edn extra-args-tla)))
+              #_ #_extra-args (if #_(contains? (.-state extra-args-tla) :-no)
+                                  (contains? (set (mapv str (.-names ^RecordValue extra-args-tla))) "_no")
+                                  {}
+                                  (p ::process-operator--extra-args
+                                     (tla-edn/to-edn extra-args-tla)))
               result (p ::process-operator--result
-                        (process-operator* identifier f self extra-args main-var))]
+                        (process-operator* identifier f self main-var))]
           (p ::process-operator--to-tla-value
              (tla-edn/to-tla-value result)))
         (catch Exception e
@@ -630,8 +636,8 @@
                       :call
                       (format "%s(%s%s)"
                               (custom-munge (first args))
-                              (parse (first args))
-                              (if-let [call-args (seq (drop 1 args))]
+                              (parse (second args))
+                              (if-let [call-args (seq (drop 2 args))]
                                 (str ", "
                                      (->> call-args
                                           (mapv #(parse % f))
@@ -668,6 +674,9 @@
                   (set? expr)
                   (tla-edn/to-tla-value expr)
 
+                  (sequential? expr)
+                  (tla-edn/to-tla-value (set expr))
+
                   :else
                   expr)]
      (f [result expr]))))
@@ -702,6 +711,7 @@
     (get-in state [:recife/metadata :context])))
 
 (defmulti simulate
+  "Simulate trace."
   (fn [context _state]
     (first context)))
 
@@ -722,6 +732,14 @@
 (spec/defop recife_check_extra_args {:module "spec"}
   [^Value main-var]
   (p* ::recife_check_extra_args
+      #_(when (contains? (set (keys (tla-edn/to-edn main-var)))
+                         ::extra-args)
+
+          (throw (ex-info (str "extra --- " (tla-edn/to-tla-value
+                                             (contains? (set (keys (tla-edn/to-edn main-var)))
+                                                        ::extra-args))
+                               " ==== "
+                               (::extra-args (tla-edn/to-edn main-var))) {})))
       (tla-edn/to-tla-value
        (contains? (set (keys (tla-edn/to-edn main-var)))
                   ::extra-args))))
@@ -764,20 +782,21 @@
   ([identifier opts expr]
    (let [op (eval
              `(spec/defop ~(symbol (str (custom-munge identifier) "2")) {:module "spec"}
-                [~'self ^Value ~'extra-args ~'main-var]
-                (process-operator ~identifier ~expr ~'self ~'extra-args ~'main-var)))]
+                [~'self ~'main-var]
+                (process-operator ~identifier ~expr ~'self ~'main-var)))]
      (defmethod simulate identifier
        [context state]
        (let [self (get-in context [1 :self])
              identifier (first context)
              context' (second context)]
          ;; This is the same function that we use at `process-operator`.
-         (process-operator* identifier expr self context' (if (vector? state)
-                                                            (second state)
-                                                            state))))
+         (process-operator* identifier expr self (assoc (if (vector? state)
+                                                          (second state)
+                                                          state)
+                                                        ::extra-args context'))))
      (with-meta
        {:identifier (str (symbol (str (custom-munge identifier) "2"))
-                         "(self, _extra_args, _main_var) == self = self /\\ _main_var = _main_var /\\ _extra_args = _extra_args\n\n"
+                         "(self, _main_var) == self = self /\\ _main_var = _main_var\n\n"
                          (symbol (custom-munge identifier))
                          "(self, _main_var)")
         :op-ns (-> op meta :op-ns)
@@ -789,22 +808,18 @@
                                (-> opts meta :fair+)) :recife.fairness/strongly-fair)
         :recife/fairness-map (some->> (or (-> expr meta :fairness) (-> opts meta :fairness))
                                       (temporal-property (keyword (str (symbol identifier) "-fairness"))))
-        :form (parse [:if [:raw "recife_check_extra_args(main_var)"]
-                      #_[:raw "\"recife___core_SLASH_extra_args\" \\in DOMAIN _main_var"]
+        :form (parse [:if [:raw "recife_check_extra_args(_main_var)"]
                       [:and
-                       [:raw (format "recife_check_pc(main_var, self, \"%s\")"
-                                     (str (symbol identifier)))]
-                       #_[:raw (format "\nmain_var[%s][self][\"pc\"] = %s"
-                                     (tla-edn/to-tla-value ::procs)
-                                     (tla-edn/to-tla-value identifier))]
+                       [:raw (format "recife_check_pc(_main_var, self, %s)"
+                                     (str (tla-edn/to-tla-value identifier)))]
                        [:raw (str "main_var' = "
                                   (symbol (str (custom-munge identifier) "2"))
-                                  "(self, _main_var[\"recife___core_SLASH_extra_args\"], main_var)")]
+                                  "(self, _main_var)")]
                        #_[:raw "[x \\in DOMAIN main_var' \\ {\"recife_SLASH_metadata\"} |-> main_var'[x]] /= [x \\in DOMAIN main_var \\ {\"recife_SLASH_metadata\"} |-> main_var[x]]"]
-                       [:raw "recife_check_inequality(main_var, main_var')"]]
+                       [:raw "recife_check_inequality(_main_var, main_var')"]]
                       [:and
-                       [:raw (format "recife_check_pc(main_var, self, \"%s\")"
-                                     (str (symbol identifier)))]
+                       [:raw (format "recife_check_pc(_main_var, self, %s)"
+                                     (str (tla-edn/to-tla-value identifier)))]
                        #_[:raw (format "\nmain_var[%s][self][\"pc\"] = %s"
                                        (tla-edn/to-tla-value ::procs)
                                        (tla-edn/to-tla-value identifier))]
@@ -832,7 +847,7 @@
                                                                ;; local variable?
                                                                #_(keyword? v)
                                                                #_[:raw
-                                                                  (let [mv (str " main_var[" (parse v) "] ")]
+                                                                  (let [mv (str " _main_var[" (parse v) "] ")]
                                                                     (format " IF %s = {} THEN %s ELSE %s"
                                                                             mv
                                                                             (parse #{nil})
@@ -854,7 +869,7 @@
                                                                                    #{nil}))
                                                                                v)})
                                                                    [:raw (str " recife_operator_local"
-                                                                              (format "(self, %s, main_var)"
+                                                                              (format "(self, %s, _main_var)"
                                                                                       (tla-edn/to-tla-value
                                                                                        {:step identifier
                                                                                         :key k})))])
@@ -866,19 +881,17 @@
                                                                                 :value [k v]})))])))
                                        [:raw (str "\nmain_var' = "
                                                   (symbol (str (custom-munge identifier) "2"))
-                                                  "(self, "
-                                                  (->> (keys opts)
-                                                       (mapv #(hash-map % (symbol (custom-munge %))))
-                                                       (into {})
-                                                       tla-edn/to-tla-value)
-                                                  ", main_var)")]])]
-                         ;; If no opts, send a bogus structure.
+                                                  (format "(self, _main_var @@ [recife___core_SLASH_extra_args |-> %s])"
+                                                          (->> (keys opts)
+                                                               (mapv #(hash-map % (symbol (custom-munge %))))
+                                                               (into {})
+                                                               tla-edn/to-tla-value)))]])]
                          [:raw (str "main_var' = "
                                     (symbol (str (custom-munge identifier) "2"))
-                                    "(self, [_no |-> 0], main_var)")])
+                                    "(self, _main_var)")])
                        ;; With it we can test deadlock.
                        #_[:raw "[x \\in DOMAIN main_var' \\ {\"recife_SLASH_metadata\"} |-> main_var'[x]] /= [x \\in DOMAIN main_var \\ {\"recife_SLASH_metadata\"} |-> main_var[x]]"]
-                       [:raw "recife_check_inequality(main_var, main_var')"]]])
+                       [:raw "recife_check_inequality(_main_var, main_var')"]]])
         :recife.operator/type :operator}
        (merge (meta expr) (meta opts))))))
 
@@ -984,7 +997,8 @@
                                  (str (symbol (str (custom-munge identifier)
                                                    @counter))
                                       (if (seq env)
-                                        (format "(main_var @@ %s)" (tla-edn/to-tla-value env))
+                                        (format "(main_var @@ %s)"
+                                                (tla-edn/to-tla-value env))
                                         "(main_var)"))
                                  (finally
                                    (swap! counter inc))))
@@ -1001,6 +1015,11 @@
      :op-nss (mapv :ns @collector)
      :form form
      :recife.operator/type :temporal-property}))
+
+(defn fairness
+  [identifier expr]
+  (merge (temporal-property identifier expr)
+         {:recife.operator/type :fairness}))
 
 (defn goto
   [db identifier]
@@ -1041,11 +1060,11 @@
         formatted-init-expressions (-> (->> init
                                             (walk/prewalk (fn [v]
                                                             (if (= (::type v) ::one-of)
-                                                              (let [identifier (or (::identifier v )
+                                                              (let [identifier (or (::identifier v)
                                                                                    (gensym))
                                                                     v' (assoc v ::identifier identifier)]
                                                                 (swap! collected-ranges conj v')
-                                                                (str identifier))
+                                                                (keyword identifier))
                                                               v)))
                                             tla-edn/to-tla-value
                                             str)
@@ -1113,6 +1132,24 @@
                                                 (str/join "\n")
                                                 (str "PROPERTY\n"))
                                        "")
+        formatted-fairness-operators (or (some->> operators
+                                                  (filter (comp #{:fairness} :recife.operator/type))
+                                                  seq
+                                                  (mapv #(format "%s\n\n%s ==\n  %s"
+                                                                 (->> (:identifiers %)
+                                                                      (str/join "\n\n"))
+                                                                 (:identifier %)
+                                                                 (:form %)))
+                                                  (str/join "\n\n"))
+                                         "")
+        #_ #_ _ (def operators operators)
+        fairness-identifiers (or (some->> operators
+                                          (filter (comp #{:fairness} :recife.operator/type))
+                                          seq
+                                          (mapv :identifier)
+                                          (str/join " /\\ ")
+                                          (str " /\\ "))
+                                 "")
         unchanged-helper-variables (or (some->> @collected-ranges
                                                 seq
                                                 (mapv (fn [{::keys [identifier]}] (format "%s' = %s" identifier identifier)))
@@ -1218,11 +1255,14 @@ Next == (#{(:identifier next)}) \\/ #{terminating}
 
 #{formatted-temporal-properties}
 
+#{formatted-fairness-operators}
+
 Fairness ==
-   #{formatted-fairness}
+   #{formatted-fairness}#{fairness-identifiers}
 
 Spec == /\\ Init
         /\\ [][Next]_vars
+        \\* /\\ (WF_vars(_COLON_try_read(\"try_read\", _COLON_recife___example___readers_writers_SLASH_fairness100(main_var))))
         /\\ Fairness
 
 MyView == << recife_my_view(main_var) >>
@@ -1692,15 +1732,15 @@ VIEW
 
   Object
   (toString [_]
-    "# RecifeModel {}"))
+    "#RecifeModel {}"))
 
 (defmethod print-method RecifeModel
   [_o ^java.io.Writer w]
-  (.write w "# RecifeModel {}"))
+  (.write w "#RecifeModel {}"))
 
 (defmethod pp/simple-dispatch RecifeModel
   [^RecifeModel _]
-  (pr "# RecifeModel {}"))
+  (pr {:type `RecifeModel}))
 
 (defonce ^:private *current-model-run (atom nil))
 
@@ -1713,6 +1753,15 @@ VIEW
    (halt! @*current-model-run))
   ([model-run]
    (some-> model-run .close)
+   (when (some? model-run)
+     @model-run)))
+
+(defn get-result
+  "Wait for model run result and return it. If no arg is passed, it returns
+  the last model run."
+  ([]
+   (get-result @*current-model-run))
+  ([model-run]
    @model-run))
 
 (defn- run-model*
@@ -1746,7 +1795,9 @@ VIEW
      (throw (ex-info "For the initial state, all the keywords should be namespaced. Recife uses the convention in which namespaced keywords are global ones, while other keywords are process-local."
                      {:keywords-without-namespace simple-keywords})))
 
-   (halt!)
+   (try
+     (halt!)
+     (catch Exception _))
 
    ;; Run model.
    (let [use-buffer (if (contains? opts :use-buffer)
@@ -1847,7 +1898,7 @@ VIEW
                             (p/sh (format "kill -15 %s" (.pid (:proc result))))
                             (when use-buffer
                               (r.buf/stop-sync-loop!))
-                            (println (format "\n\n------- TLA+ process destroyed after %s seconds ------\n\n"
+                            (println (format "\n\n------- Recife process destroyed after %s seconds ------\n\n"
                                              (Math/round (/ (- (System/nanoTime) t0) 1E9))))))
 
                         clojure.lang.IDeref
@@ -1935,6 +1986,7 @@ VIEW
          constraints (filter #(= (type %) ::Constraint) components)
          action-constraints (filter #(= (type %) ::ActionConstraint) components)
          properties (filter #(= (type %) ::Property) components)
+         fairness (filter #(= (type %) ::Fairness) components)
          db-init (merge init-global-state
                         {::procs (->> processes
                                       (mapv :procs)
@@ -1953,7 +2005,8 @@ VIEW
                                 (map :operator invariants)
                                 (map :operator constraints)
                                 (map :operator action-constraints)
-                                (map :operator properties)))]
+                                (map :operator properties)
+                                (map :operator fairness)))]
      (run-model* db-init next' operators opts))))
 
 (defmacro defproc
@@ -2023,7 +2076,7 @@ VIEW
              temp-params# ~params
              ;; If we don't have `:procs`, use the name of the symbol as a proc name.
              procs# (or (:procs temp-params#)
-                        #{(keyword ~(str name))})
+                        #{keywordized-name#})
              ;; If we don't have `:local`, just use the first step (it should have
              ;; one only).
              local-variables# (or (:local temp-params#)
@@ -2078,6 +2131,16 @@ VIEW
        {:name name#
         :property expr#
         :operator (temporal-property name# expr#)})))
+
+(defmacro deffairness
+  [name expr]
+  `(def ~name
+     (let [name# (keyword (str *ns*) ~(str name))
+           expr# ~expr]
+       ^{:type ::Fairness}
+       {:name name#
+        :property expr#
+        :operator (fairness name# expr#)})))
 
 (defmacro defconstraint
   [name f]

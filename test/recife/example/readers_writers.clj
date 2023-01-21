@@ -20,14 +20,14 @@
 (defn- waiting-to-read
   [{:keys [::waiting]}]
   (->> waiting
-       (filter (comp :read :action))
+       (filter (comp #{:read} :action))
        (mapv :actor)
        set))
 
 (defn- waiting-to-write
   [{:keys [::waiting]}]
   (->> waiting
-       (filter (comp :write :action))
+       (filter (comp #{:write} :action))
        (mapv :actor)
        set))
 
@@ -35,7 +35,7 @@
   [actor db]
   (-> db
       (update ::readers conj actor)
-      (update ::waiting (comp vec rest))))
+      (update ::waiting rest)))
 
 (defn- write*
   [actor {:keys [::readers] :as db}]
@@ -78,14 +78,80 @@
        (update db ::readers disj actor)
        (update db ::writers disj actor)))})
 
+(rh/definvariant safety
+  [{:keys [::readers ::writers]}]
+  (and (not (and (seq readers)
+                 (seq writers)))
+       (<= (count writers) 1)))
+
+(rh/defproperty liveness
+  [{:keys [::readers ::writers]}]
+  (rh/and
+   (rh/for-all [actor actors]
+     (rh/always
+      (rh/eventually
+       (contains? readers actor))))
+
+   (rh/for-all [actor actors]
+     (rh/always
+      (rh/eventually
+       (contains? writers actor))))
+
+   (rh/for-all [actor actors]
+     (rh/always
+      (rh/eventually
+       (not (contains? readers actor)))))
+
+   (rh/for-all [actor actors]
+     (rh/always
+      (rh/eventually
+       (not (contains? writers actor)))))))
+
+(rh/deffairness fairness
+  [db]
+  (rh/and
+   (rh/for-all [actor actors]
+     (rh/fair
+      (rh/call :try-read ::try-read
+        (assoc db ::r/extra-args {:actor actor}))))
+
+   (rh/for-all [actor actors]
+     (rh/fair
+      (rh/call :try-write ::try-write
+        (assoc db ::r/extra-args {:actor actor}))))
+
+   (rh/fair (rh/call ::read-or-write ::read-or-write db))
+
+   (rh/fair
+    (rh/for-all [actor actors]
+      (rh/call :stop ::stop
+               (assoc db ::r/extra-args {:actor actor}))))))
+
 (comment
 
-  (r/run-model global #{try-read try-write read-or-write stop})
+  (r/run-model global #{try-read try-write read-or-write stop
+                        safety liveness fairness}
+               {#_ #_:trace-example? true
+                #_ #_:workers 1
+                #_ #_:debug? true})
+
+  (r/get-result)
   (r/halt!)
 
-  ())
+  (mapv waiting-to-read
+        (rh/get-trace (r/halt!)))
 
-;; TODO:
-;; - [ ] Can we uses Clerk to show information about each defproc (by
-;;       instrumenting more stuff)?
-;; - [ ] Use async by default
+  ;; TODO:
+  ;; - [x] Use async by default
+  ;; - [x] See why the process is running indefinitely
+  ;; - [x] Fix fairness
+  ;;   - [x] Make procs names unique if not defined
+  ;;   - [x] Check if we need to munge and demunge
+  ;;   - [ ] Parse proc to `:call` instead of a keyword
+  ;;   - [ ] Fix fairness in scheduling allocation
+  ;; - [ ] Can we uses Clerk to show information about each defproc (by
+  ;;       instrumenting more stuff)?
+  ;; - [ ] Add docstring support for each def
+  ;; - [ ] Don't return a vector with indexes in the trace unless asked for
+
+  ())
