@@ -182,12 +182,14 @@ assuming that the clients scheduled earlier release their resources."
 
   ;; Back to state.
   ;; 5854 states generated, 1690 distinct states found, 0 states left on queue.
-  @(r/run-model global #{request allocate return schedule
-                         resource-mutex allocator-invariant-1 allocator-invariant-2
-                         allocator-invariant-3 allocator-invariant-4
-                         clients-will-return clients-will-obtain inf-often-satisfied}
-                {#_ #_:debug? true
-                 #_ #_:workers 1})
+  (r/run-model global #{request allocate return schedule
+                        resource-mutex allocator-invariant-1 allocator-invariant-2
+                        allocator-invariant-3 allocator-invariant-4
+                        clients-will-return clients-will-obtain inf-often-satisfied}
+               {#_ #_:debug? true
+                #_ #_:workers 1})
+
+  (r/halt!)
 
   ;; 3m20 to 47s (~4.25x) after the performance improvements!!
   ;; 47s to 29s after adding keyword-cache
