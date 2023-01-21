@@ -24,7 +24,7 @@
   {:c clients
    :S (->> (seq resources) comb/subsets (mapv set) set)})
 
-(r/defproc request {}
+(r/defproc request
   {[:request
     non-deterministic-params]
    (fn [{:keys [:c :S ::unsat ::alloc] :as db}]
@@ -42,7 +42,7 @@
        (rh/call :allocate
          (assoc db ::r/extra-args {:c c :S S :i-sched i-sched}))))))
 
-(r/defproc ^{:fairness allocate-fairness} allocate {}
+(r/defproc ^{:fairness allocate-fairness} allocate
   {[:allocate
     (merge {:i-sched #(range (count (::sched %)))}
            non-deterministic-params)]
@@ -70,7 +70,7 @@
       (rh/call :return
         (assoc db ::r/extra-args {:c c :S (get alloc c)}))))))
 
-(r/defproc ^{:fairness return-fairness} return {}
+(r/defproc ^{:fairness return-fairness} return
   {[:return
     non-deterministic-params]
    (fn [{:keys [:c :S ::alloc] :as db}]
@@ -84,7 +84,7 @@
                      (not (contains? (set sched) %)))
                clients)))
 
-(r/defproc ^:fair schedule {}
+(r/defproc ^:fair schedule
   {[:schedule
     {:sq #(comb/permutations (to-schedule %))}]
    (fn [{:keys [:sq] :as db}]
@@ -178,7 +178,7 @@ assuming that the clients scheduled earlier release their resources."
 
   ;; TODO:
   ;; - [x] Profile performance.
-  ;; - [ ] Create helpers for `for-all`, `exists` and `invoke`.
+  ;; - [x] Create helpers for `for-all`, `exists` and `invoke`.
 
   ;; Back to state.
   ;; 5854 states generated, 1690 distinct states found, 0 states left on queue.

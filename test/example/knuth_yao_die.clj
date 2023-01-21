@@ -28,7 +28,7 @@
 
 (def done #{:1 :2 :3 :4 :5 :6})
 
-(r/defproc ^:fair next* {}
+(r/defproc ^:fair next*
   {[::next
     {:next-face (fn [_]
                   (if-not crooked?

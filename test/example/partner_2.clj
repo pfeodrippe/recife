@@ -32,7 +32,7 @@
 ;; can use the `:fair` keyword (here as a metadata of `initial-request`) to indicate
 ;; that to our process. There is also `:fair+`, but it's not widely used, learn
 ;; more about this in this great Hillel's article https://www.hillelwayne.com/post/fairness/.
-(r/defproc ^:fair initial-request {}
+(r/defproc ^:fair initial-request
   (fn [{:keys [::companies] :as db}]
     (let [companies-with-no-children (->> companies
                                           (medley/remove-vals (comp seq :children))

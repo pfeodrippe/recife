@@ -1955,7 +1955,7 @@ VIEW
 
   `name` is a symbol for this var.
 
-  `params` is a map of:
+  `params` is optional a map of:
      `:procs` - set of arbitrary idenfiers (keywords);
      `:local` - map with local variables, `:pc` is required.
 
@@ -1997,52 +1997,59 @@ VIEW
      (-> db
          (update :account/bob + (:amount db))
          r/done))})"
-  [name params steps]
-  `(def ~name
-     (let [keywordized-name# (keyword (str *ns*) ~(str name))
-           temp-steps# ~steps
-           ;; If you pass a function to `steps`, it means that you
-           ;; have only one step and the name of this will be derived
-           ;; from `name`.
-           steps# (if (fn? temp-steps#)
-                    {keywordized-name# temp-steps#}
-                    temp-steps#)
-           temp-params# ~params
-           ;; If we don't have `:procs`, use the name of the symbol as a proc name.
-           procs# (or (:procs temp-params#)
-                      #{(keyword ~(str name))})
-           ;; If we don't have `:local`, just use the first step (it should have
-           ;; one only).
-           local-variables# (or (:local temp-params#)
-                                {:pc (if (vector? (key (first steps#)))
-                                       (first (key (first steps#)))
-                                       (key (first steps#)))})
-           params# {:procs procs#
-                    :local local-variables#}]
-       (schema/explain-humanized schema/DefProc ['~name params# steps#] "Invalid `defproc` args")
-       ^{:type ::Proc}
-       {:name keywordized-name#
-        :steps-keys (->> steps#
-                         keys
-                         (mapv #(if (vector? %)
-                                  ;; If it's a vector, we are only interested
-                                  ;; in the identifier.
-                                  (first %)
-                                  %)))
-        :procs (->> (:procs params#)
-                    (mapv (fn [proc#]
-                            [proc# (:local params#)]))
-                    (into {}))
-        :operators (->> steps#
-                        (mapv #(let [[k# opts#] (if (vector? (key %))
-                                                  [(first (key %))
-                                                   (or (second (key %)) {})]
-                                                  [(key %)
-                                                   {}])]
-                                 (reg k#
-                                   (with-meta opts#
-                                     ~(meta name))
-                                   (val %)))))})))
+  {:arglists '([name params? steps])}
+  [name & [params' steps']]
+  (let [params (if (some? steps')
+                 params'
+                 {})
+        steps (if (some? steps')
+                steps'
+                params')]
+    `(def ~name
+       (let [keywordized-name# (keyword (str *ns*) ~(str name))
+             temp-steps# ~steps
+             ;; If you pass a function to `steps`, it means that you
+             ;; have only one step and the name of this will be derived
+             ;; from `name`.
+             steps# (if (fn? temp-steps#)
+                      {keywordized-name# temp-steps#}
+                      temp-steps#)
+             temp-params# ~params
+             ;; If we don't have `:procs`, use the name of the symbol as a proc name.
+             procs# (or (:procs temp-params#)
+                        #{(keyword ~(str name))})
+             ;; If we don't have `:local`, just use the first step (it should have
+             ;; one only).
+             local-variables# (or (:local temp-params#)
+                                  {:pc (if (vector? (key (first steps#)))
+                                         (first (key (first steps#)))
+                                         (key (first steps#)))})
+             params# {:procs procs#
+                      :local local-variables#}]
+         (schema/explain-humanized schema/DefProc ['~name params# steps#] "Invalid `defproc` args")
+         ^{:type ::Proc}
+         {:name keywordized-name#
+          :steps-keys (->> steps#
+                           keys
+                           (mapv #(if (vector? %)
+                                    ;; If it's a vector, we are only interested
+                                    ;; in the identifier.
+                                    (first %)
+                                    %)))
+          :procs (->> (:procs params#)
+                      (mapv (fn [proc#]
+                              [proc# (:local params#)]))
+                      (into {}))
+          :operators (->> steps#
+                          (mapv #(let [[k# opts#] (if (vector? (key %))
+                                                    [(first (key %))
+                                                     (or (second (key %)) {})]
+                                                    [(key %)
+                                                     {}])]
+                                   (reg k#
+                                     (with-meta opts#
+                                       ~(meta name))
+                                     (val %)))))}))))
 
 (defmacro definvariant
   [name & opts]

@@ -47,7 +47,7 @@
    ;; webhook.
    :partner/history []})
 
-(r/defproc initial-request {}
+(r/defproc initial-request
   (fn [{:keys [::companies] :as db}]
     ;; Initially, send only the companies with no children as there is no
     ;; `:id` that we can reference them in their parents.
@@ -63,7 +63,7 @@
 
 ;; Represents the partner server, it just adds an id to the company and send it
 ;; to the webhook, which will handle it.
-(r/defproc partner-server {}
+(r/defproc partner-server
   (fn [{:keys [:partner/reqs :id/counter ::companies] :as db}]
     ;; If all companies have an `:id` already, we are finished.
     (if (every? (comp :id val) companies)

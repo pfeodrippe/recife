@@ -19,7 +19,7 @@
    ::pending (repeat (count nodes) 0)
    ::token {:pos 0 :q 0 :color :black}})
 
-(r/defproc initiate-probe {}
+(r/defproc initiate-probe
   (fn [{::keys [token color counter] :as db}]
     (when (and (zero? (:pos token))
                (or (= (:color token) :black)
@@ -32,7 +32,7 @@
                           :color :white})
           (assoc-in [::color 0] :white)))))
 
-(r/defproc pass-token {}
+(r/defproc pass-token
   {[::pass-token
     {:i (disj nodes 0)}]
    (fn [{::keys [active token color counter] :keys [i] :as db}]
@@ -51,7 +51,7 @@
                                               (:color token)))))
            (assoc-in [::color i] :white))))})
 
-(r/defproc send-msg {}
+(r/defproc send-msg
   {[::send-msg
     {:i nodes
      :receiver nodes}]
@@ -71,7 +71,7 @@
            (update-in [::counter i] inc)
            (update-in [::pending receiver] inc))))})
 
-(r/defproc recv-msg {}
+(r/defproc recv-msg
   {[::recv-msg
     {:i nodes}]
    (fn [{::keys [pending] :keys [i] :as db}]
@@ -82,7 +82,7 @@
            (assoc-in [::color i] :black)
            (assoc-in [::active i] true))))})
 
-(r/defproc deactivate {}
+(r/defproc deactivate
   {[::deactivate
     {:i nodes}]
    (fn [{::keys [active] :keys [i] :as db}]
