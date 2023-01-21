@@ -59,8 +59,10 @@
 
 (comment
 
-  (def result (r/run-model model/global #{model/wire model/invariant} {:fp 6
-                                                                       :seed -3669946775118883845}))
+  (def result @(r/run-model model/global
+                            #{model/wire model/invariant}
+                            {:fp 6
+                             :seed -3669946775118883845}))
 
   (do
     (reset! balances {:alice 5M :bob 5M})
@@ -111,9 +113,9 @@
   ;; -     Do we need to assert the step which created the new process?
   ;; - [ ] Maybe make a protocol out of this?
   (def result
-    (r/run-model model/global #{model/wire model/invariant} {:fp 6
-                                                             :seed -3669946775118883845
-                                                             :dump-states? true}))
+    @(r/run-model model/global #{model/wire model/invariant} {:fp 6
+                                                              :seed -3669946775118883845
+                                                              :dump-states? true}))
 
   (let [init (fn [initial-global-state] (reset! balances initial-global-state))
         implementation-mapping

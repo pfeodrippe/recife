@@ -33,6 +33,6 @@
 (comment
 
   ;; ok.
-  (r/run-model global #{writer reader bounded-queue})
+  @(r/run-model global #{writer reader bounded-queue})
 
   ())

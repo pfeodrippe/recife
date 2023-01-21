@@ -42,6 +42,6 @@
 
 (comment
 
-  (r/run-model global #{main invariant})
+  @(r/run-model global #{main invariant})
 
   ())

@@ -45,7 +45,7 @@
 (comment
 
   ;; deadlock.
-  (def result (r/run-model global #{sender receiver eventually-always-ordered}))
+  (def result @(r/run-model global #{sender receiver eventually-always-ordered}))
 
   (ra/visualize-result result)
 

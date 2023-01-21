@@ -64,6 +64,6 @@
 (comment
 
   ;; invariant
-  (r/run-model global #{cache time' invariant type-ok})
+  @(r/run-model global #{cache time' invariant type-ok})
 
   ())

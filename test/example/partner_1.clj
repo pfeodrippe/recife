@@ -128,10 +128,10 @@
   ;; if every check was ok).
   (def result
     ;; No duplicates violation.
-    (r/run-model global
-                 #{initial-request partner-server
-                   webhook no-partner-history-duplicates}
-                 {:trace-example? true}))
+    @(r/run-model global
+                  #{initial-request partner-server
+                    webhook no-partner-history-duplicates}
+                  {:trace-example? true}))
 
   (ra/visualize-result result)
   (-> result
