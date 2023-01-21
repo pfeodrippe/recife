@@ -42,6 +42,6 @@
 (comment
 
   ;; invariant ~15 steps.
-  (r/run-model global #{actor time' invariant} #_{:raw-output? true})
+  @(r/run-model global #{actor time' invariant} #_{:raw-output? true})
 
   ())

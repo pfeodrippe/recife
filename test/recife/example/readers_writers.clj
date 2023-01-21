@@ -81,9 +81,11 @@
 (comment
 
   (r/run-model global #{try-read try-write read-or-write stop})
+  (r/halt!)
 
   ())
 
 ;; TODO:
 ;; - [ ] Can we uses Clerk to show information about each defproc (by
 ;;       instrumenting more stuff)?
+;; - [ ] Use async by default

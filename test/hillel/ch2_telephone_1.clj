@@ -43,7 +43,7 @@
 (comment
 
   ;; stuttering at state 8.
-  (-> (r/run-model global #{sender receiver eventually-always-ordered} {:fp 0 :seed 1})
+  (-> @(r/run-model global #{sender receiver eventually-always-ordered} {:fp 0 :seed 1})
       r/timeline-diff)
 
   ())

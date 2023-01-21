@@ -1702,13 +1702,21 @@ VIEW
   [^RecifeModel _]
   (pr "# RecifeModel {}"))
 
-(defn- run-model*
-  "Run model.
+(defonce ^:private *current-model-run (atom nil))
 
-  When you want to interrupt the process, you can add `:async true`
-  to `opts`. When a process has `generate` or `simulate` set, it's async by
-  default (but you can override it). You can use `.close` or `deref` on the
-  return to destroy the process or getting the value out of it, respectively."
+(defn halt!
+  "Halt model run. If no arg is passed, it halts the existing or last run (if
+  existing).
+
+  Returns @model-run."
+  ([]
+   (halt! @*current-model-run))
+  ([model-run]
+   (some-> model-run .close)
+   @model-run))
+
+(defn- run-model*
+  "Run model. Model run is async by default, use `halt!` to interrupt it."
   ([init-state next-operator operators]
    (run-model* init-state next-operator operators {}))
   ([init-state next-operator operators {:keys [seed fp workers tlc-args
@@ -1720,7 +1728,9 @@ VIEW
                                                ;; Below opts are used in the child
                                                ;; process.
                                                trace-example? dump-states?]
-                                        :as opts}]
+                                        :as opts
+                                        :or {workers :auto
+                                             async true}}]
    ;; Do some validation.
    (some->> (m/explain schema/Operator next-operator)
             me/humanize
@@ -1735,14 +1745,11 @@ VIEW
    (when-let [simple-keywords (seq (remove qualified-keyword? (keys init-state)))]
      (throw (ex-info "For the initial state, all the keywords should be namespaced. Recife uses the convention in which namespaced keywords are global ones, while other keywords are process-local."
                      {:keywords-without-namespace simple-keywords})))
+
+   (halt!)
+
    ;; Run model.
-   (let [workers (if (contains? opts :workers)
-                   workers
-                   :auto)
-         async (if (contains? opts :async)
-                 async
-                 (or simulate generate))
-         use-buffer (if (contains? opts :use-buffer)
+   (let [use-buffer (if (contains? opts :use-buffer)
                       use-buffer
                       generate)
 
@@ -1834,16 +1841,14 @@ VIEW
                       (reify
                         java.io.Closeable
                         (close [_]
-                          (if @*destroyed?
-                            (println "\n\n------- TLA+ process already destroyed ------\n\n")
-                            (do
-                              (reset! *destroyed? true)
-                              #_(p/destroy result)
-                              (p/sh (format "kill -15 %s" (.pid (:proc result))))
-                              (when use-buffer
-                                (r.buf/stop-sync-loop!))
-                              (println (format "\n\n------- TLA+ process destroyed after %s seconds ------\n\n"
-                                               (Math/round (/ (- (System/nanoTime) t0) 1E9)))))))
+                          (when-not @*destroyed?
+                            (reset! *destroyed? true)
+                            #_(p/destroy result)
+                            (p/sh (format "kill -15 %s" (.pid (:proc result))))
+                            (when use-buffer
+                              (r.buf/stop-sync-loop!))
+                            (println (format "\n\n------- TLA+ process destroyed after %s seconds ------\n\n"
+                                             (Math/round (/ (- (System/nanoTime) t0) 1E9))))))
 
                         clojure.lang.IDeref
                         (deref [_]
@@ -1873,6 +1878,7 @@ VIEW
                                          (swap! output conj line)
                                          (recur)))))
                                  @process)]
+         (reset! *current-model-run process)
          ;; Read line by line so we can stream the output to the user.
          (if async
            process

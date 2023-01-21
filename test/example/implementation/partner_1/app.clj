@@ -337,13 +337,13 @@
   (j-sql/find-by-keys db :company :all)
 
   (def result
-    (r/run-model model/global
-                 #{model/initial-request
-                   model/partner-server
-                   model/webhook
-                   model/no-partner-history-duplicates
-                   model/all-companies-will-have-an-id}
-                 {:trace-example? true}))
+    @(r/run-model model/global
+                  #{model/initial-request
+                    model/partner-server
+                    model/webhook
+                    model/no-partner-history-duplicates
+                    model/all-companies-will-have-an-id}
+                  {:trace-example? true}))
 
   ;; We cannot guarantee that the implementation is a refinement of the model,
   ;; but we can say that it satisfies the model. One way to generate a counterexample

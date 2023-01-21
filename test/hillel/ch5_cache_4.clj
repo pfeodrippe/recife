@@ -45,7 +45,7 @@
 
   ;; ok.
   (def states
-    (-> (r/run-model global #{actor time' invariant} {:dump-states? true})
+    (-> @(r/run-model global #{actor time' invariant} {:dump-states? true})
         r/states-from-result))
 
   (r/random-traces-from-states states 3)
