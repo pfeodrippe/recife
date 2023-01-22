@@ -186,7 +186,10 @@ assuming that the clients scheduled earlier release their resources."
                         resource-mutex allocator-invariant-1 allocator-invariant-2
                         allocator-invariant-3 allocator-invariant-4
                         clients-will-return clients-will-obtain inf-often-satisfied
-                        allocate-fairness return-fairness}
+                        ;; You can also use nested components that Recife will
+                        ;; flatten it for you. This way, you can group things
+                        ;; the way you prefer.
+                        [allocate-fairness return-fairness]}
                {#_ #_:debug? true
                 #_ #_:workers 1})
 

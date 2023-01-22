@@ -147,8 +147,8 @@
   ;; - [x] Fix fairness
   ;;   - [x] Make procs names unique if not defined
   ;;   - [x] Check if we need to munge and demunge
-  ;;   - [ ] Parse proc to `:call` instead of a keyword
-  ;;   - [ ] Fix fairness in scheduling allocation
+  ;;   - [x] Parse proc to `:call` instead of a keyword
+  ;;   - [x] Fix fairness in scheduling allocation
   ;; - [ ] Could we remove `pc` for perf purposes if we see that it's not being
   ;;       used?
   ;;   - https://kirkpatricktech.org/2019/01/18/fairness-semantics-of-pluscal/

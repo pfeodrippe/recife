@@ -1980,7 +1980,8 @@ VIEW
    (run-model init-global-state components {}))
   ([init-global-state components opts]
    (schema/explain-humanized schema/RunModelComponents components "Invalid components")
-   (let [processes (filter #(= (type %) ::Proc) components)
+   (let [components (set (flatten (seq components)))
+         processes (filter #(= (type %) ::Proc) components)
          invariants (filter #(= (type %) ::Invariant) components)
          constraints (filter #(= (type %) ::Constraint) components)
          action-constraints (filter #(= (type %) ::ActionConstraint) components)
