@@ -86,7 +86,7 @@
 
 (rh/defproperty liveness
   [{:keys [::readers ::writers]}]
-  (rh/and
+  (rh/and*
    (rh/for-all [actor actors]
      (rh/always
       (rh/eventually
@@ -109,23 +109,23 @@
 
 (rh/deffairness fairness
   [db]
-  (rh/and
+  (rh/and*
    (rh/for-all [actor actors]
      (rh/fair
-      (rh/call :try-read ::try-read
+      (rh/call try-read
         (assoc db ::r/extra-args {:actor actor}))))
 
    (rh/for-all [actor actors]
      (rh/fair
-      (rh/call :try-write ::try-write
+      (rh/call try-write
         (assoc db ::r/extra-args {:actor actor}))))
 
-   (rh/fair (rh/call ::read-or-write ::read-or-write db))
+   (rh/fair (rh/call read-or-write db))
 
    (rh/fair
     (rh/for-all [actor actors]
-      (rh/call :stop ::stop
-               (assoc db ::r/extra-args {:actor actor}))))))
+      (rh/call stop
+        (assoc db ::r/extra-args {:actor actor}))))))
 
 (comment
 
@@ -149,6 +149,11 @@
   ;;   - [x] Check if we need to munge and demunge
   ;;   - [ ] Parse proc to `:call` instead of a keyword
   ;;   - [ ] Fix fairness in scheduling allocation
+  ;; - [ ] Could we remove `pc` for perf purposes if we see that it's not being
+  ;;       used?
+  ;;   - https://kirkpatricktech.org/2019/01/18/fairness-semantics-of-pluscal/
+  ;; - [ ] For the same fairness/liveness, we call multiple functions using
+  ;;       the samwe db, could we improve perf here?
   ;; - [ ] Can we uses Clerk to show information about each defproc (by
   ;;       instrumenting more stuff)?
   ;; - [ ] Add docstring support for each def

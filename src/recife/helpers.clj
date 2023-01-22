@@ -1,5 +1,4 @@
 (ns recife.helpers
-  (:refer-clojure :exclude [and])
   (:require
    [clojure.math.combinatorics :as comb]
    [recife.core :as r]
@@ -36,11 +35,12 @@
                                  (if (seq? l)
                                    (last l)
                                    l))))]
-    (if (clojure.core/and (seq? form)
-                          (not (keyword? (first form)))
-                          (resolve (first form))
-                          (or (::operator? (meta (resolve (first form))))
-                              (= (namespace (symbol (resolve (first form)))) "recife.helpers")))
+    (if (or (::raw-form (meta form))
+            (and (seq? form)
+                 (not (keyword? (first form)))
+                 (resolve (first form))
+                 (or (::operator? (meta (resolve (first form))))
+                     (= (namespace (symbol (resolve (first form)))) "recife.helpers"))))
       form
       `[:invoke (quote ~(->> local-vars
                              (mapv (fn [l] [(keyword l) l]))
@@ -53,9 +53,8 @@
 (defn- parse-decl
   [decl]
   (if (or (= (count decl) 2)
-          (clojure.core/and
-           (> (count decl) 2)
-           (not (string? (first decl)))))
+          (and (> (count decl) 2)
+               (not (string? (first decl)))))
     [nil (first decl) (drop 1 decl)]
     [(first decl) (second decl) (drop 2 decl)]))
 
@@ -78,17 +77,6 @@
                                 (mapv (fn [p#] `(quote ~p#))
                                       params)))]
          (eval '~@body)))))
-
-#_(defmacro deffairness
-    {:arglists '([name doc-string? [db] body])}
-    [name & decl]
-    (let [[doc-string params body] (parse-decl decl)]
-      `(def ~(with-meta name
-               {:doc doc-string})
-         (binding [*env* (quote ~(add-global-vars
-                                  (mapv (fn [p#] `(quote ~p#))
-                                        params)))]
-           (eval '~@body)))))
 
 (defmacro definvariant
   {:arglists '([name doc-string? [db] body])}
@@ -173,15 +161,27 @@
   `[:fair+
     ~(invoke body)])
 
-(defmacro call
-  "Invoke process step."
-  [k step body]
-  `[:call ~k ~step
-    ~(invoke body)])
-
-(defmacro and
+(defmacro and*
   [& body]
   `[:and ~@(mapv invoke body)])
+
+(defmacro or*
+  [& body]
+  `[:or ~@(mapv invoke body)])
+
+(defmacro call
+  "Invoke process step."
+  [proc body]
+  (let [proc' (eval proc)]
+    (when-not (= (type proc') ::r/Proc)
+      (throw (ex-info "First argument of `call` should be a proc (return of `recife.core/defproc`)"
+                      {:non-proc proc})))
+    (into [:or]
+          (for [step-key (:steps-keys proc')]
+            `(for-all [~'self (keys (:procs ~proc))]
+               ^::raw-form
+               [:call ~step-key '~'self
+                ~(invoke body)])))))
 
 (defn combine
   "Get all the possible combinations of the domain with the values.
