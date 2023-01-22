@@ -1262,7 +1262,6 @@ Fairness ==
 
 Spec == /\\ Init
         /\\ [][Next]_vars
-        \\* /\\ (WF_vars(_COLON_try_read(\"try_read\", _COLON_recife___example___readers_writers_SLASH_fairness100(main_var))))
         /\\ Fairness
 
 MyView == << recife_my_view(main_var) >>
