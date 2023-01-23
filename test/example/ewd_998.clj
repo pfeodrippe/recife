@@ -133,28 +133,26 @@
 
   ;; It takes ~23s|6s for 3 nodes, 1 worker, counter/pending <= 1.
   ;; 1m38s|1m05s (56s after removing tla-edn.core binding) for 3 nodes, :auto and counter/pending <= 3.
-  (def result
-    (r/run-model global (concat
-                         #{initiate-probe pass-token
-                           send-msg recv-msg deactivate}
-                         (rh/with-features feature-flags
-                           :generate #{at-termination at-termination-detected}
-                           #{state-constraint}))
-                 (merge
-                  {:no-deadlock true
-                   :async true
-                   #_ #_:workers 1
-                   #_ #_:trace-example? true
-                   :depth -1
-                   ;; If you are using :generate, :use-buffer is
-                   ;; set automatically.
-                   #_ #_:use-buffer true}
-                  (rh/with-features feature-flags
-                    :generate {:generate {:num 10}}
-                    {}))))
-
-  (.close result)
-  @result
+  (r/run-model global (concat
+                       #{initiate-probe pass-token
+                         send-msg recv-msg deactivate}
+                       (rh/with-features feature-flags
+                         :generate #{at-termination at-termination-detected}
+                         #{state-constraint}))
+               (merge
+                {:no-deadlock true
+                 :async true
+                 #_ #_:workers 1
+                 #_ #_:trace-example? true
+                 :depth -1
+                 #_ #_:debug? true
+                 ;; If you are using :generate, :use-buffer is
+                 ;; set automatically.
+                 #_ #_:use-buffer true}
+                (rh/with-features feature-flags
+                  :generate {:generate {:num 10}}
+                  {})))
+  (r/halt!)
 
   (count (r/read-saved-data))
   (into (sorted-map)

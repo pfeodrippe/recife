@@ -24,6 +24,7 @@
 (import '(recife RecifeEdnValue))
 
 (set! *warn-on-reflection* true)
+(set! *unchecked-math* :warn-on-boxed)
 
 (def ^:private edn-value-byte
   (+ tlc2.value.ValueConstants/DUMMYVALUE 1))
@@ -56,36 +57,43 @@
         nil
 
         (keyword? v)
-        (StringValue. ^String (custom-munge (symbol v)))
+        (p* ::->tla--keyword
+            (StringValue. ^String (custom-munge (symbol v))))
 
         (boolean? v)
-        (BoolValue. v)
+        (p* ::->tla--boolean
+            (BoolValue. v))
 
         (int? v)
-        (IntValue/gen v)
+        (p* ::->tla--int
+            (IntValue/gen v))
 
         (vector? v)
-        (TupleValue.
-         (tla-edn/typed-array Value (mapv ->tla v)))
+        (p* ::->tla--vector
+            (TupleValue.
+             (tla-edn/typed-array Value (mapv ->tla v))))
 
         :else
         (let [coll v]
           (cond
             (empty? coll)
-            (tla-edn/-to-tla-value {:tla-edn.record/empty? true})
+            (p* ::->tla--empty
+                (tla-edn/-to-tla-value {:tla-edn.record/empty? true}))
 
             (every? keyword? (keys coll))
-            (RecordValue.
-             (tla-edn/typed-array UniqueString (mapv #(-> % key ^RecifeEdnValue tla-edn/to-tla-value .getUniqueString)
-                                                     coll))
-             (tla-edn/typed-array Value (mapv #(-> % val tla-edn/to-tla-value) coll))
-             false)
+            (p* ::->tla--record
+                (RecordValue.
+                 (tla-edn/typed-array UniqueString (mapv #(-> % key ^RecifeEdnValue tla-edn/to-tla-value .getUniqueString)
+                                                         coll))
+                 (tla-edn/typed-array Value (mapv #(-> % val tla-edn/to-tla-value) coll))
+                 false))
 
             :else
-            (FcnRcdValue.
-             (tla-edn/typed-array Value (mapv #(-> % key tla-edn/to-tla-value) coll))
-             (tla-edn/typed-array Value (mapv #(-> % val tla-edn/to-tla-value) coll))
-             false))))))
+            (p* ::->tla--fcn-rcd
+                (FcnRcdValue.
+                 (tla-edn/typed-array Value (mapv #(-> % key tla-edn/to-tla-value) coll))
+                 (tla-edn/typed-array Value (mapv #(-> % val tla-edn/to-tla-value) coll))
+                 false)))))))
 
 (defn edn-getKindString
   [^RecifeEdnValue _]

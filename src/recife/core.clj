@@ -34,6 +34,7 @@
 (set! *warn-on-reflection* false)
 #_(set! *warn-on-reflection* true)
 
+(set! *unchecked-math* false)
 #_(set! *unchecked-math* :warn-on-boxed)
 
 (defn- custom-munge
@@ -280,7 +281,7 @@
 
   FcnRcdValue
   (-to-edn [v]
-    (p* ::fcn
+    (p* ::tla-edn--fcn
         (if (fcn-rcd-is-tuple? v)
           (mapv tla-edn/-to-edn (.-values v))
           (zipmap (mapv tla-edn/-to-edn (.-domain v))
@@ -303,7 +304,7 @@
 
   TupleValue
   (-to-edn [v]
-    (p* ::tuple
+    (p* ::tla-edn--tuple
         (mapv tla-edn/-to-edn (.getElems v)))))
 
 (extend-protocol tla-edn/EdnToTla
@@ -327,7 +328,7 @@
 
   nil
   (tla-edn/-to-tla-value [_]
-    (p* ::tla-edn--null
+    (p* ::to-tla--null
         (RecifeEdnValue. nil)
         #_(tla-edn/to-tla-value :recife/null)))
 
@@ -482,21 +483,20 @@
                 :recife/metadata metadata}))))))
 
 (defn process-operator
-  [identifier f self-tla ^RecordValue main-var-tla]
+  [identifier f self-tla ^RecordValue main-var-tla ^Value extra-args]
   (p* ::process-operator
       (try
         (let [self (p ::process-operator--self
                       (tla-edn/to-edn self-tla))
               main-var (p ::process-operator--main-var
                           (tla-edn/to-edn main-var-tla))
-              ;; `"_no"` is a indicator that the operator is not using extra args.
-              #_ #_extra-args (if #_(contains? (.-state extra-args-tla) :-no)
-                                  (contains? (set (mapv str (.-names ^RecordValue extra-args-tla))) "_no")
-                                  {}
-                                  (p ::process-operator--extra-args
-                                     (tla-edn/to-edn extra-args-tla)))
+              extra-args (p ::process-operator--extra-args
+                            (tla-edn/to-edn extra-args))
               result (p ::process-operator--result
-                        (process-operator* identifier f self main-var))]
+                        (process-operator* identifier f self
+                                           (if (set? extra-args)
+                                             main-var
+                                             (assoc main-var ::extra-args extra-args))))]
           (p ::process-operator--to-tla-value
              (tla-edn/to-tla-value result)))
         (catch Exception e
@@ -782,8 +782,8 @@
   ([identifier opts expr]
    (let [op (eval
              `(spec/defop ~(symbol (str (custom-munge identifier) "2")) {:module "spec"}
-                [~'self ~'main-var]
-                (process-operator ~identifier ~expr ~'self ~'main-var)))]
+                [~'self ~'main-var ~'extra-args]
+                (process-operator ~identifier ~expr ~'self ~'main-var ~'extra-args)))]
      (defmethod simulate identifier
        [context state]
        (let [self (get-in context [1 :self])
@@ -796,7 +796,7 @@
                                                         ::extra-args context'))))
      (with-meta
        {:identifier (str (symbol (str (custom-munge identifier) "2"))
-                         "(self, _main_var) == self = self /\\ _main_var = _main_var\n\n"
+                         "(self, _main_var, _extra_args) == self = self /\\ _main_var = _main_var /\\ _extra_args = _extra_args\n\n"
                          (symbol (custom-munge identifier))
                          "(self, _main_var)")
         :op-ns (-> op meta :op-ns)
@@ -814,15 +814,11 @@
                                      (str (tla-edn/to-tla-value identifier)))]
                        [:raw (str "main_var' = "
                                   (symbol (str (custom-munge identifier) "2"))
-                                  "(self, _main_var)")]
-                       #_[:raw "[x \\in DOMAIN main_var' \\ {\"recife_SLASH_metadata\"} |-> main_var'[x]] /= [x \\in DOMAIN main_var \\ {\"recife_SLASH_metadata\"} |-> main_var[x]]"]
+                                  "(self, _main_var, {})")]
                        [:raw "recife_check_inequality(_main_var, main_var')"]]
                       [:and
                        [:raw (format "recife_check_pc(_main_var, self, %s)"
                                      (str (tla-edn/to-tla-value identifier)))]
-                       #_[:raw (format "\nmain_var[%s][self][\"pc\"] = %s"
-                                       (tla-edn/to-tla-value ::procs)
-                                       (tla-edn/to-tla-value identifier))]
                        (if (seq opts)
                          [:raw (parse [:exists (->> opts
                                                     (mapv (fn [[k v]]
@@ -881,16 +877,15 @@
                                                                                 :value [k v]})))])))
                                        [:raw (str "\nmain_var' = "
                                                   (symbol (str (custom-munge identifier) "2"))
-                                                  (format "(self, _main_var @@ [recife___core_SLASH_extra_args |-> %s])"
+                                                  (format "(self, _main_var, %s)"
                                                           (->> (keys opts)
                                                                (mapv #(hash-map % (symbol (custom-munge %))))
                                                                (into {})
                                                                tla-edn/to-tla-value)))]])]
                          [:raw (str "main_var' = "
                                     (symbol (str (custom-munge identifier) "2"))
-                                    "(self, _main_var)")])
+                                    "(self, _main_var, {})")])
                        ;; With it we can test deadlock.
-                       #_[:raw "[x \\in DOMAIN main_var' \\ {\"recife_SLASH_metadata\"} |-> main_var'[x]] /= [x \\in DOMAIN main_var \\ {\"recife_SLASH_metadata\"} |-> main_var[x]]"]
                        [:raw "recife_check_inequality(_main_var, main_var')"]]])
         :recife.operator/type :operator}
        (merge (meta expr) (meta opts))))))
@@ -2171,7 +2166,7 @@ VIEW
   r.buf/read-contents)
 
 (defn read-saved-data-if-new-content
-  "Read saved data if there is new content, otherwise, return `nil`.
+  "Reads saved data if there is new content, otherwise, returns `nil`.
   See `save!`."
   []
   (when (r.buf/has-new-contents?)
@@ -2180,7 +2175,33 @@ VIEW
 (comment
 
   ;; TODO (from 2022-12-17):
-  ;; - [ ] Use Clerk for for visualization
+  ;; - [x] Use Clerk for for visualization
+  ;; - [ ] Add action property support
+  ;; - [ ] Ability to  query for lineage
+  ;;   - [ ] E.g. how could I have an entity with such and such characteristics?
+  ;;   - This would help us to ask questions about the system
+  ;;   - [-] Use datalog?
+  ;;     - I guess not
+  ;; - [ ] How to improve observability over what's being tested?
+  ;;   - [ ] Gather real-time info about the running spec
+  ;;   - [ ] Ability to check traces while running
+  ;;     - [ ] Show it with clerk
+  ;; - [ ] Create a def that can abstract a state machine
+  ;; - [ ] Add `defchecker` (complement of `definvariant`)
+  ;; - [ ] Add a way to use locks without having the user having to reinvent the
+  ;;       wheel every time
+  ;; - [ ] Add `not*` to rh
+  ;; - [ ] Add `next*` to rh
+  ;; - [ ] Add a way to tell which property was violated
+  ;;   - https://github.com/tlaplus/tlaplus/issues/641
+  ;; - [ ] Check a trace using properties and invariants without running the
+  ;;       model
+  ;;   - [ ] With it, we can create visualizations
+  ;; - [ ] Can we build a spec without using the TLA+ compiler?
+  ;;   - For perf purposes so we can avoid as many conversions as possible
+  ;;   - [ ] Maybe we can leverage TLCGet to retrieve the initial values?
+  ;; - [ ] Create var which holds state info
+  ;; - [ ] Add a way to override default Spec expression
 
   ())
 

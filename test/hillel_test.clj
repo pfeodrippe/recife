@@ -253,7 +253,7 @@
                 :name :hillel.ch5-cache-3/invariant
                 :data {:well [:this :is :it]}}}
               :distinct-states 77
-              :generated-states 93
+              :generated-states 94
               :seed 1
               :fp 0}
              result))
@@ -345,7 +345,7 @@
                 :name :hillel.ch5-cache-3/invariant
                 :data {:well [:this :is :it]}}}
               :distinct-states 77
-              :generated-states 93
+              :generated-states 94
               :seed 1
               :fp 0}
              (->> (r/timeline-diff result)
