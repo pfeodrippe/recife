@@ -63,12 +63,10 @@
 
 (comment
 
-  (def result
-    (r/run-model global #{next* eita}
-                 {:generate true
-                  :depth 15}))
-
-  (.close result)
+  (r/run-model global #{next* eita}
+               {:generate true
+                :depth 15})
+  (r/halt!)
 
   (count (r/read-saved-data))
 

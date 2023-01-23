@@ -10,6 +10,8 @@
    (recife RecifeEdnValue)))
 
 (set! *warn-on-reflection* true)
+(set! *unchecked-math* false)
+#_(set! *unchecked-math* :warn-on-boxed)
 
 (def ^:dynamic *env* {:global-vars [] :local-vars []})
 
