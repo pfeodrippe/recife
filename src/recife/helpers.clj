@@ -44,13 +44,23 @@
                  (or (::operator? (meta (resolve (first form))))
                      (= (namespace (symbol (resolve (first form)))) "recife.helpers"))))
       form
-      `[:invoke (quote ~(->> local-vars
-                             (mapv (fn [l] [(keyword l) l]))
-                             (into {})))
-        (fn [{:keys ~(vec local-vars)
-              :as db#}]
-          (let [~(first global-vars) db#]
-            ~form))])))
+      (if (= (count global-vars) 2)
+        `[:invoke (quote ~(->> local-vars
+                               (mapv (fn [l] [(keyword l) l]))
+                               (into {})))
+          (fn [{:keys ~(vec local-vars)
+                :as db#}
+               db'#]
+            (let [~(first global-vars) db#
+                  ~(second global-vars) db'#]
+              ~form))]
+        `[:invoke (quote ~(->> local-vars
+                               (mapv (fn [l] [(keyword l) l]))
+                               (into {})))
+          (fn [{:keys ~(vec local-vars)
+                :as db#}]
+            (let [~(first global-vars) db#]
+              ~form))]))))
 
 (defn- parse-decl
   [decl]
@@ -65,6 +75,21 @@
   [name & decl]
   (let [[_doc-string params body] (parse-decl decl)]
     `(r/defproperty ~name
+       (binding [*env* (quote ~(add-global-vars
+                                (mapv (fn [p#] `(quote ~p#))
+                                      params)))]
+         (eval '~@body)))))
+
+(defmacro defaction-property
+  {:arglists '([name doc-string? [db db'] body])}
+  [name & decl]
+  (let [[_doc-string params [body]] (parse-decl decl)
+        body (list (cons `box (list body)))]
+    (when-not (= (count params) 2)
+      (throw (ex-info "Action constraints requires two arguments"
+                      {:params params
+                       :expected '[db db']})))
+    `(r/defaction-property ~name
        (binding [*env* (quote ~(add-global-vars
                                 (mapv (fn [p#] `(quote ~p#))
                                       params)))]
@@ -151,6 +176,11 @@
 (defmacro eventually
   [body]
   `[:eventually
+    ~(invoke body)])
+
+(defmacro box
+  [body]
+  `[:box
     ~(invoke body)])
 
 (defmacro fair

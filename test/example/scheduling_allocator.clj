@@ -174,6 +174,11 @@ assuming that the clients scheduled earlier release their resources."
      (rh/eventually
       (empty? (get unsat c))))))
 
+(rh/defaction-property action-prop
+  [{:keys [::unsat]}
+   {unsat' ::unsat}]
+  (not= unsat unsat'))
+
 (comment
 
   ;; TODO:
@@ -186,10 +191,17 @@ assuming that the clients scheduled earlier release their resources."
                         resource-mutex allocator-invariant-1 allocator-invariant-2
                         allocator-invariant-3 allocator-invariant-4
                         clients-will-return clients-will-obtain inf-often-satisfied
+
                         ;; You can also use nested components that Recife will
                         ;; flatten it for you. This way, you can group things
                         ;; the way you prefer.
-                        [allocate-fairness return-fairness]}
+                        [allocate-fairness return-fairness]
+
+                        ;; You can also check action properties, they receive 2 arguments,
+                        ;; the current state (db) and the next state (db'). Uncomment
+                        ;; below to see things failing when unsat is not different from
+                        ;; unsat in the next state.
+                        #_action-prop}
                {#_ #_:debug? true
                 #_ #_:workers 1})
 
