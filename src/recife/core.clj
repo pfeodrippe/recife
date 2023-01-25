@@ -566,15 +566,25 @@
           (throw e)))))
 
 (defn process-local-operator
-  [f ^Value main-var-tla]
-  (p* ::process-local-operator
-      (try
-        (let [main-var (p ::local-op-to-edn-main-var-tla (tla-edn/to-edn main-var-tla))
-              result (p ::local-op-result (f main-var))]
-          (p ::local-op-to-tla (tla-edn/to-tla-value result)))
-        (catch Exception e
-          (serialize-obj e exception-filename)
-          (throw e)))))
+  ([f ^Value main-var-tla]
+   (p* ::process-local-operator
+       (try
+         (let [main-var (p ::local-op-to-edn-main-var-tla (tla-edn/to-edn main-var-tla))
+               result (p ::local-op-result (f main-var))]
+           (p ::local-op-to-tla (tla-edn/to-tla-value result)))
+         (catch Exception e
+           (serialize-obj e exception-filename)
+           (throw e)))))
+  ([f ^Value main-var-tla ^Value main-var-tla']
+   (p* ::process-local-operator
+       (try
+         (let [main-var (p ::local-op-to-edn-main-var-tla (tla-edn/to-edn main-var-tla))
+               main-var' (p ::local-op-to-edn-main-var-tla' (tla-edn/to-edn main-var-tla'))
+               result (p ::local-op-result (f main-var main-var'))]
+           (p ::local-op-to-tla (tla-edn/to-tla-value result)))
+         (catch Exception e
+           (serialize-obj e exception-filename)
+           (throw e))))))
 
 (defn parse
   "`f` is a function which receives one argument, a vector, the
@@ -608,6 +618,9 @@
 
                       :eventually
                       (format "<>(%s)" (parse (first args) f))
+
+                      :box
+                      (format "[][%s]_main_var" (parse (first args) f))
 
                       :always
                       (format "[](%s)" (parse (first args) f))
@@ -948,7 +961,9 @@
      :recife.operator/type :action-constraint}))
 
 (defn- compile-temporal-property
-  [collector identifier]
+  "If `:action?` is set, the function will receive 2 arguments, the current var
+  and the next one."
+  [collector identifier {:keys [action?]}]
   (let [
         ;; With `counter` we are able to use many functions for the same
         ;; temporal property.
@@ -958,19 +973,29 @@
                            (cond
                              (fn? expr)
                              (let [op (eval
-                                       `(spec/defop ~(symbol (str (custom-munge identifier)
-                                                                  @counter))
-                                          {:module "spec"}
-                                          [^Value ~'main-var]
-                                          (process-local-operator ~expr ~'main-var)))]
+                                       (if action?
+                                         `(spec/defop ~(symbol (str (custom-munge identifier)
+                                                                    @counter))
+                                            {:module "spec"}
+                                            [^Value ~'main-var ^Value ~'main-var']
+                                            (process-local-operator ~expr ~'main-var ~'main-var'))
+                                         `(spec/defop ~(symbol (str (custom-munge identifier)
+                                                                    @counter))
+                                            {:module "spec"}
+                                            [^Value ~'main-var]
+                                            (process-local-operator ~expr ~'main-var))))]
                                (swap! collector conj {:identifier (str (symbol (str (custom-munge identifier)
                                                                                     @counter))
-                                                                       "(_main_var) == _main_var = _main_var")
+                                                                       (if action?
+                                                                         "(_main_var, _main_var_2) == _main_var = _main_var /\\ _main_var_2 = _main_var_2"
+                                                                         "(_main_var) == _main_var = _main_var"))
                                                       :op-ns (-> op meta :op-ns)})
                                (try
                                  (str (symbol (str (custom-munge identifier)
                                                    @counter))
-                                      "(main_var)")
+                                      (if action?
+                                        "(main_var, main_var')"
+                                        "(main_var)"))
                                  (finally
                                    (swap! counter inc))))
 
@@ -979,22 +1004,32 @@
                              (map? expr)
                              (let [{:keys [:env] f :fn} expr
                                    op (eval
-                                       `(spec/defop ~(symbol (str (custom-munge identifier)
-                                                                  @counter))
-                                          {:module "spec"}
-                                          [^Value ~'main-var]
-                                          (process-local-operator ~f ~'main-var)))]
+                                       (if action?
+                                         `(spec/defop ~(symbol (str (custom-munge identifier)
+                                                                    @counter))
+                                            {:module "spec"}
+                                            [^Value ~'main-var ^Value ~'main-var']
+                                            (process-local-operator ~f ~'main-var ~'main-var'))
+                                         `(spec/defop ~(symbol (str (custom-munge identifier)
+                                                                    @counter))
+                                            {:module "spec"}
+                                            [^Value ~'main-var]
+                                            (process-local-operator ~f ~'main-var))))]
                                (swap! collector conj {:identifier (str (symbol (str (custom-munge identifier)
                                                                                     @counter))
-                                                                       "(_main_var) == _main_var = _main_var")
+                                                                       (if action?
+                                                                         "(_main_var, _main_var_2) == _main_var = _main_var /\\ _main_var_2 = _main_var_2"
+                                                                         "(_main_var) == _main_var = _main_var"))
                                                       :op-ns (-> op meta :op-ns)})
                                (try
                                  (str (symbol (str (custom-munge identifier)
                                                    @counter))
-                                      (if (seq env)
-                                        (format "(main_var @@ %s)"
-                                                (tla-edn/to-tla-value env))
-                                        "(main_var)"))
+                                      (if action?
+                                        "(main_var, main_var')"
+                                        (if (seq env)
+                                          (format "(main_var @@ %s)"
+                                                  (tla-edn/to-tla-value env))
+                                          "(main_var)")))
                                  (finally
                                    (swap! counter inc))))
 
@@ -1002,14 +1037,16 @@
                              result))))))
 
 (defn temporal-property
-  [identifier expr]
-  (let [collector (atom [])
-        form ((compile-temporal-property collector identifier) expr)]
-    {:identifier (symbol (custom-munge identifier))
-     :identifiers (mapv :identifier @collector)
-     :op-nss (mapv :ns @collector)
-     :form form
-     :recife.operator/type :temporal-property}))
+  ([identifier expr]
+   (temporal-property identifier expr {}))
+  ([identifier expr {:keys [action?] :as opts}]
+   (let [collector (atom [])
+         form ((compile-temporal-property collector identifier opts) expr)]
+     {:identifier (symbol (custom-munge identifier))
+      :identifiers (mapv :identifier @collector)
+      :op-nss (mapv :ns @collector)
+      :form form
+      :recife.operator/type :temporal-property})))
 
 (defn fairness
   [identifier expr]
@@ -1547,6 +1584,10 @@ VIEW
                                                  :name (to-edn-string (str/replace (first objects) #"_COLON_" ""))}
                                                 (when (.exists (io/as-file invariant-data-filename))
                                                   {:data (deserialize-obj invariant-data-filename)}))})
+
+                           EC/TLC_ACTION_PROPERTY_VIOLATED_BEHAVIOR
+                           (record {:violation {:type :action-property
+                                                :name (to-edn-string (str/replace (first objects) #"_COLON_" ""))}})
 
                            EC/TLC_MODULE_VALUE_JAVA_METHOD_OVERRIDE
                            (record {:error-messages (str/split (last objects) #"\n")})
@@ -2127,6 +2168,16 @@ VIEW
         :property expr#
         :operator (temporal-property name# expr#)})))
 
+(defmacro defaction-property
+  [name expr]
+  `(def ~name
+     (let [name# (keyword (str *ns*) ~(str name))
+           expr# ~expr]
+       ^{:type ::Property}
+       {:name name#
+        :property expr#
+        :operator (temporal-property name# expr# {:action? true})})))
+
 (defmacro deffairness
   [name expr]
   `(def ~name
@@ -2176,7 +2227,13 @@ VIEW
 
   ;; TODO (from 2022-12-17):
   ;; - [x] Use Clerk for for visualization
-  ;; - [ ] Add action property support
+  ;; - [x] Add action property support
+  ;;   - [x] Operator
+  ;;   - [x] Trace info
+  ;; - [-] Add `next*` to rh
+  ;;   - It can't be used in temporal properties (AFAIK), and action properties
+  ;;     already receive the next state
+  ;; - [ ] Add documentation using Clerk
   ;; - [ ] Ability to  query for lineage
   ;;   - [ ] E.g. how could I have an entity with such and such characteristics?
   ;;   - This would help us to ask questions about the system
@@ -2191,8 +2248,7 @@ VIEW
   ;; - [ ] Add a way to use locks without having the user having to reinvent the
   ;;       wheel every time
   ;; - [ ] Add `not*` to rh
-  ;; - [ ] Add `next*` to rh
-  ;; - [ ] Add a way to tell which property was violated
+  ;; - [ ] Add a way to tell which temporal properties were violated
   ;;   - https://github.com/tlaplus/tlaplus/issues/641
   ;; - [ ] Check a trace using properties and invariants without running the
   ;;       model
@@ -2202,6 +2258,7 @@ VIEW
   ;;   - [ ] Maybe we can leverage TLCGet to retrieve the initial values?
   ;; - [ ] Create var which holds state info
   ;; - [ ] Add a way to override default Spec expression
+  ;; - [ ] Integrate with Soufflé (https://souffle-lang.github.io/source)?
 
   ())
 

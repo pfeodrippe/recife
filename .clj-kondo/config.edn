@@ -11,5 +11,6 @@
            recife.helpers/definvariant clojure.core/defn
            recife.helpers/defconstraint clojure.core/defn
            recife.helpers/defaction-constraint clojure.core/defn
+           recife.helpers/defaction-property clojure.core/defn
            recife.helpers/for-all clojure.core/let
            recife.helpers/for-some clojure.core/let}}
