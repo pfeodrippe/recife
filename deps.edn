@@ -22,7 +22,7 @@
                      clj-http-fake/clj-http-fake {:mvn/version "1.0.3"}
                      com.github.seancorfield/honeysql {:mvn/version "2.0.0-rc5"}
                      metosin/muuntaja {:mvn/version "0.6.8"}
-                     io.github.pfeodrippe/dev-tooling {:mvn/version "1.0.47"}}
+                     io.github.pfeodrippe/dev-tooling {:mvn/version "1.0.48"}}
         :extra-paths ["test" "notebooks"]}
   :test {:jvm-opts ["-XX:-OmitStackTraceInFastThrow"]
          :extra-deps {nubank/matcher-combinators {:mvn/version "3.1.4"}
