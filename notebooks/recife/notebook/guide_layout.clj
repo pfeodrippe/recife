@@ -9,7 +9,7 @@
 ;; ◊link{https://github.com/nextjournal/clerk}{Clerk} to build this
 ;; doc.
 
-;; Which means that everything you read here come from simple clojure
+;; Which means that everything you read here comes from simple clojure
 ;; namespaces (including
 ;; ◊link{https://github.com/pfeodrippe/recife/blob/master/notebooks/recife/notebook/guide_layout.clj}{this
 ;; file}).
