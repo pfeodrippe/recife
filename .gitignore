@@ -22,3 +22,9 @@ clj-kondo*.snap
 states/
 
 .recife*
+
+.classpath
+.clerk/
+.settings/
+public/
+.project
