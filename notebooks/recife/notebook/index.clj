@@ -45,10 +45,11 @@
   (build!)
 
   ;; TODO:
-  ;; - [ ] Use `dev-tooling`
-  ;; - [ ] Serve thing using GH pages
+  ;; - [x] Use `dev-tooling`
+  ;; - [x[ Serve docs using GH pages
+  ;; - [x] reasoning
+  ;; - [ ] fix responsiveness
   ;; - [ ] proc
-  ;; - [ ] reasoning
   ;; - [ ] invariant
   ;; - [ ] temporal property
   ;; - [ ] action property
