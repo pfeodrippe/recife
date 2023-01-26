@@ -23,7 +23,7 @@
                      com.github.seancorfield/honeysql {:mvn/version "2.0.0-rc5"}
                      metosin/muuntaja {:mvn/version "0.6.8"}
                      io.github.pfeodrippe/dev-tooling {:mvn/version "1.0.47"}}
-        :extra-paths ["test"]}
+        :extra-paths ["test" "notebooks"]}
   :test {:jvm-opts ["-XX:-OmitStackTraceInFastThrow"]
          :extra-deps {nubank/matcher-combinators {:mvn/version "3.1.4"}
                       lambdaisland/kaocha {:mvn/version "1.0-612"}
