@@ -7,6 +7,8 @@ A model checker library in Clojure.
 
 See the 2021 London Clojurians talk https://www.youtube.com/watch?v=TkENblqzxcw.
 
+== Below is outdated, check the new docs location at https://recife.pfeodrippe.com/.
+
 == Usage
 
 We will use the following aliases during the documentation.
