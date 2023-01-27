@@ -2233,7 +2233,7 @@ VIEW
   ;; - [-] Add `next*` to rh
   ;;   - It can't be used in temporal properties (AFAIK), and action properties
   ;;     already receive the next state
-  ;; - [ ] Add documentation using Clerk
+  ;; - [x] Add documentation using Clerk
   ;; - [ ] Ability to  query for lineage
   ;;   - [ ] E.g. how could I have an entity with such and such characteristics?
   ;;   - This would help us to ask questions about the system

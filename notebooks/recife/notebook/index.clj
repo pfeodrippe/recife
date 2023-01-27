@@ -48,10 +48,11 @@
   ;; - [x] Use `dev-tooling`
   ;; - [x[ Serve docs using GH pages
   ;; - [x] reasoning
-  ;; - [ ] fix responsiveness
+  ;; - [x] fix responsiveness
   ;; - [ ] proc
   ;; - [ ] invariant
   ;; - [ ] temporal property
+  ;; - [ ] fix flickering on phone
   ;; - [ ] action property
   ;; - [ ] constraint
   ;; - [ ] action constraint
