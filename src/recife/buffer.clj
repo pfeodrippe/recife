@@ -114,6 +114,14 @@
 
 (def ^:private *saved (atom []))
 
+(defn flush!
+  []
+  (buf-write nil)
+  (buf-rewind)
+  (buf-write 1)
+  (buf-rewind)
+  (reset! *saved []))
+
 (defn- -save!
   [v]
   (locking lock
@@ -127,17 +135,16 @@
       (swap! *saved conj v)
 
       (when (= (count @*saved) 100)
-        (buf-write nil)
-        (buf-rewind)
-        (buf-write 1)
-        (buf-rewind)
-        (reset! *saved []))
+        (flush!))
 
       (catch Exception ex
         (println ex)
         (throw ex)))))
 
 (defn save!
+  "Save key value so it can be retrieved later.
+
+  `:use-buffer` must be set or this will throw."
   [v]
   (try
     (p* ::save!

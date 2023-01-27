@@ -201,13 +201,15 @@ assuming that the clients scheduled earlier release their resources."
                         ;; the current state (db) and the next state (db'). Uncomment
                         ;; below to see things failing when unsat is not different from
                         ;; unsat in the next state.
-                        #_action-prop}
+                        action-prop}
                {#_ #_:debug? true
                 #_ #_:workers 1})
 
+  (count (r/read-saved-data))
   (r/halt!)
 
   ;; 3m20 to 47s (~4.25x) after the performance improvements!!
   ;; 47s to 29s after adding keyword-cache
+  ;; 14s after fairness was fixed
 
   ())

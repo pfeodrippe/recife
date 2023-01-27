@@ -52,7 +52,9 @@
                 :as db#}
                db'#]
             (let [~(first global-vars) db#
-                  ~(second global-vars) db'#]
+                  ~(second global-vars) db'#
+                  ~'--db db#
+                  ~'--db' db'#]
               ~form))]
         `[:invoke (quote ~(->> local-vars
                                (mapv (fn [l] [(keyword l) l]))
@@ -70,6 +72,25 @@
     [nil (first decl) (drop 1 decl)]
     [(first decl) (second decl) (drop 2 decl)]))
 
+(declare get-trace-value)
+(declare set-trace-value!)
+
+#_(defn -save-action-property-violation
+  [name db']
+  (when (not (get-trace-value ::trace-violated?))
+    (let [current-state (tlc2.util.IdThread/getCurrentState)]
+      (r/save! {::trace-violation (conj (->> (tlc2.module.TLCExt/getTrace nil nil nil
+                                                                          current-state
+                                                                          nil 0 nil)
+                                             tla-edn-2.core/to-edn
+                                             (mapv :main-var))
+                                        ;; Append next state to trace.
+                                        db')
+                ::trace-violation-type :action-property
+                ::name name})
+      (set-trace-value! ::trace-violated? true)))
+  false)
+
 (defmacro defproperty
   {:arglists '([name doc-string? [db] body])}
   [name & decl]
@@ -80,26 +101,34 @@
                                       params)))]
          (eval '~@body)))))
 
+(defn -save-action-property-violation
+  [name db']
+  (when (not (get-trace-value ::trace-violated?))
+    (let [current-state (tlc2.util.IdThread/getCurrentState)]
+      (r/save! {::trace-violation (conj (->> (tlc2.module.TLCExt/getTrace nil nil nil
+                                                                          current-state
+                                                                          nil 0 nil)
+                                             tla-edn-2.core/to-edn
+                                             (mapv :main-var))
+                                        ;; Append next state to trace.
+                                        db')
+                ::trace-violation-type :action-property
+                ::name name})
+      (set-trace-value! ::trace-violated? true)))
+  false)
+
 (defmacro defaction-property
   {:arglists '([name doc-string? [db db'] body])}
   [name & decl]
-  (let [[_doc-string params [body]] (parse-decl decl)
-        body (list (cons `box (list body)))]
-    (when-not (= (count params) 2)
-      (throw (ex-info "Action constraints requires two arguments"
-                      {:params params
-                       :expected '[db db']})))
+  (let [[_doc-string params body] (parse-decl decl)
+        _ (when-not (= (count params) 2)
+            (throw (ex-info "Action constraints requires two arguments"
+                            {:params params
+                             :expected '[db db']})))
+        body (list (cons `box (list (list 'or (cons 'do body)
+                                          `(-save-action-property-violation (symbol ~(str *ns*) (str '~name))
+                                                                            ~'--db')))))]
     `(r/defaction-property ~name
-       (binding [*env* (quote ~(add-global-vars
-                                (mapv (fn [p#] `(quote ~p#))
-                                      params)))]
-         (eval '~@body)))))
-
-(defmacro deffairness
-  {:arglists '([name doc-string? [db] body])}
-  [name & decl]
-  (let [[_doc-string params body] (parse-decl decl)]
-    `(r/deffairness ~name
        (binding [*env* (quote ~(add-global-vars
                                 (mapv (fn [p#] `(quote ~p#))
                                       params)))]
@@ -113,6 +142,16 @@
        ~doc-string
        (fn ~params
          ~@body))))
+
+(defmacro deffairness
+  {:arglists '([name doc-string? [db] body])}
+  [name & decl]
+  (let [[_doc-string params body] (parse-decl decl)]
+    `(r/deffairness ~name
+       (binding [*env* (quote ~(add-global-vars
+                                (mapv (fn [p#] `(quote ~p#))
+                                      params)))]
+         (eval '~@body)))))
 
 (defmacro defconstraint
   {:arglists '([name doc-string? [db] body])}

@@ -1637,6 +1637,7 @@ VIEW
                                 (Thread. ^Runnable (fn []
                                                      #_(when-let [ch-buf (some-> @r.buf/*client-channel .buf)]
                                                          (println "Remaining data size in buffer:" (count ch-buf)))
+                                                     (r.buf/flush!)
                                                      (when-not @*closed-properly?
                                                        (println "\n---- Closing child Recife process ----\n")
                                                        (let [pstats @@u/pd]
@@ -1646,6 +1647,7 @@ VIEW
             _ (do (p* ::process
                       (doto ^tlc2.TLC tlc
                         .process))
+                  (r.buf/flush!)
                   (reset! *closed-properly? true)
                   (let [pstats @@u/pd]
                     (when (:stats pstats)
@@ -1808,13 +1810,14 @@ VIEW
                                                complete-response?
                                                no-deadlock
                                                depth async simulate generate
-                                               use-buffer
+                                                continue
                                                ;; Below opts are used in the child
                                                ;; process.
                                                trace-example? dump-states?]
                                         :as opts
                                         :or {workers :auto
-                                             async true}}]
+                                             async true
+                                             use-buffer true}}]
    ;; Do some validation.
    (some->> (m/explain schema/Operator next-operator)
             me/humanize
@@ -1835,10 +1838,7 @@ VIEW
      (catch Exception _))
 
    ;; Run model.
-   (let [use-buffer (if (contains? opts :use-buffer)
-                      use-buffer
-                      generate)
-
+   (let [use-buffer true
          file (doto (File/createTempFile "eita" ".tla") .delete) ; we are interested in the random name of the folder
          abs-path (-> file .getAbsolutePath (str/split #"\.") first (str "/spec.tla"))
          opts-file-path (-> file .getAbsolutePath (str/split #"\.") first (str "/opts.edn"))
@@ -1852,9 +1852,9 @@ VIEW
                            :spec-name file-name})
          _ (spit abs-path module-contents)
          _ (when use-buffer
+             (r.buf/reset-buf!)
              (r.buf/sync!) ; sync so we can make sure that the writer can write
              (reset! r.buf/*contents [])
-             (r.buf/reset-buf!)
              (r.buf/start-sync-loop!))
          ;; Also put a file with opts in the same folder so we can read configuration
          ;; in the tlc-handler function.
@@ -1869,6 +1869,7 @@ VIEW
                          depth (conj "-depth" depth)
                          seed (conj "-seed" seed)
                          fp (conj "-fp" fp)
+                         continue (conj "-continue")
                          no-deadlock (conj "-deadlock")
                          workers (conj "-workers" (if (keyword? workers)
                                                     (name workers)
@@ -2208,7 +2209,8 @@ VIEW
         :constraint f#
         :operator (action-constraint name# f#)})))
 
-(def save!
+(def ^{:arglists (:arglists (meta #'r.buf/save!))}
+  save!
   "Save data that can be fetched in real time, it can be used for statistics."
   r.buf/save!)
 
@@ -2234,9 +2236,10 @@ VIEW
   ;;   - It can't be used in temporal properties (AFAIK), and action properties
   ;;     already receive the next state
   ;; - [x] Add documentation using Clerk
-  ;; - [ ] Ability to  query for lineage
+  ;; - [ ] Ability to  query for provenance
   ;;   - [ ] E.g. how could I have an entity with such and such characteristics?
   ;;   - This would help us to ask questions about the system
+  ;;   - [ ] Add doc
   ;;   - [-] Use datalog?
   ;;     - I guess not
   ;; - [ ] How to improve observability over what's being tested?

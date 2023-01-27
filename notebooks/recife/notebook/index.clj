@@ -64,5 +64,8 @@
   ;; - [ ] simulation
   ;; - [ ] model check
   ;; - [ ] non determinism
+  ;; - [ ] partner example
+  ;;   - [ ] driving implementation from traces
+  ;;   - [ ] reproducing bugs
 
   ())

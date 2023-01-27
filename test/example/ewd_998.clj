@@ -145,10 +145,7 @@
                  #_ #_:workers 1
                  #_ #_:trace-example? true
                  :depth -1
-                 #_ #_:debug? true
-                 ;; If you are using :generate, :use-buffer is
-                 ;; set automatically.
-                 #_ #_:use-buffer true}
+                 #_ #_:debug? true}
                 (rh/with-features feature-flags
                   :generate {:generate {:num 10}}
                   {})))
