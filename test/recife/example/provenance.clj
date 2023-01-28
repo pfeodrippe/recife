@@ -22,6 +22,6 @@
 ;; - [ ] Can we find multiple examples using TLC?
 ;;   - [x] Save violations
 ;;   - [x] Action property
+;;   - [x] Invariant
 ;;   - [ ] Temporal property
-;;   - [ ] Invariants
 ;; - [ ] Maybe can use core.logic for the traces?
