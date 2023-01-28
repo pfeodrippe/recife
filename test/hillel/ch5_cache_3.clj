@@ -57,8 +57,9 @@
   [db]
   ;; As this is just normal Clojure code, you can use whatever
   ;; libarry you want, e.g. `Malli` to check for your own schema.
-  (m/validate [:map [:cache/resource-cap int?
-                     :cache/resources-left int?]]
+  (m/validate [:map
+               [:cache/resource-cap :int]
+               [:cache/resources-left :int]]
               db))
 
 (comment

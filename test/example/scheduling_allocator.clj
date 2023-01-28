@@ -7,7 +7,8 @@
    [clojure.set :as set]
    [medley.core :as medley]
    [recife.core :as r]
-   [recife.helpers :as rh]))
+   [recife.helpers :as rh]
+   [recife.trace :as rt]))
 
 (def clients
   #{:c1 :c2 :c3})
@@ -146,6 +147,15 @@ assuming that the clients scheduled earlier release their resources."
                           (set/subset? (get unsat client) previous-resources))))
          (every? true?))))
 
+;; InfOftenSatisfied ==
+;;   \A c \in Clients : []<>(unsat[c] = {})
+(rh/defproperty inf-often-satisfied
+  [{:keys [::unsat]}]
+  (rh/for-all [c clients]
+    (rh/always
+     (rh/eventually
+      (empty? (get unsat c))))))
+
 ;; ClientsWillReturn ==
 ;;   \A c \in Clients : unsat[c]={} ~> alloc[c]={}
 (rh/defproperty clients-will-return
@@ -162,17 +172,335 @@ assuming that the clients scheduled earlier release their resources."
   (rh/for-all [c clients
                r resources]
     (rh/leads-to
-     (contains? (get unsat c) r)
-     (contains? (get alloc c) r))))
+     ;; FIXME: Switch one `contains?` with the other.
+     (contains? (get alloc c) r)
+     (contains? (get unsat c) r))))
 
-;; InfOftenSatisfied ==
-;;   \A c \in Clients : []<>(unsat[c] = {})
-(rh/defproperty inf-often-satisfied
-  [{:keys [::unsat]}]
-  (rh/for-all [c clients]
-    (rh/always
-     (rh/eventually
-      (empty? (get unsat c))))))
+
+;; Switch unsat with alloc at clients-will-obtain.
+
+
+(def result
+  {:trace
+   [[0
+     {:example.scheduling-allocator/unsat {:c2 #{}, :c3 #{}, :c1 #{}},
+      :example.scheduling-allocator/alloc {:c2 #{}, :c3 #{}, :c1 #{}},
+      :example.scheduling-allocator/sched [],
+      :recife.core/procs
+      #:example.scheduling-allocator{:allocate {:pc :allocate},
+                                     :return {:pc :return},
+                                     :request {:pc :request},
+                                     :schedule {:pc :schedule}}}]
+    [1
+     {:example.scheduling-allocator/unsat
+      {:c2 #{}, :c3 #{}, :c1 #{:r2}},
+      :example.scheduling-allocator/alloc {:c2 #{}, :c3 #{}, :c1 #{}},
+      :example.scheduling-allocator/sched [],
+      :recife.core/procs
+      #:example.scheduling-allocator{:allocate {:pc :allocate},
+                                     :return {:pc :return},
+                                     :request {:pc :request},
+                                     :schedule {:pc :schedule}},
+      :recife/metadata
+      {:context
+       [:request
+        {:self :example.scheduling-allocator/request,
+         :c :c1,
+         :S #{:r2}}]}}]
+    [2
+     {:example.scheduling-allocator/sched [],
+      :example.scheduling-allocator/unsat
+      {:c2 #{:r1}, :c3 #{}, :c1 #{:r2}},
+      :recife.core/procs
+      #:example.scheduling-allocator{:allocate {:pc :allocate},
+                                     :return {:pc :return},
+                                     :request {:pc :request},
+                                     :schedule {:pc :schedule}},
+      :example.scheduling-allocator/alloc {:c2 #{}, :c3 #{}, :c1 #{}},
+      :recife/metadata
+      {:context
+       [:request
+        {:self :example.scheduling-allocator/request,
+         :c :c2,
+         :S #{:r1}}]}}]
+    [3
+     {:example.scheduling-allocator/sched [:c2 :c1],
+      :example.scheduling-allocator/unsat
+      {:c2 #{:r1}, :c3 #{}, :c1 #{:r2}},
+      :recife.core/procs
+      #:example.scheduling-allocator{:allocate {:pc :allocate},
+                                     :return {:pc :return},
+                                     :request {:pc :request},
+                                     :schedule {:pc :schedule}},
+      :example.scheduling-allocator/alloc {:c2 #{}, :c3 #{}, :c1 #{}},
+      :recife/metadata
+      {:context
+       [:schedule
+        {:self :example.scheduling-allocator/schedule,
+         :sq [:c2 :c1]}]}}]
+    [4
+     {:example.scheduling-allocator/sched [:c1],
+      :example.scheduling-allocator/unsat
+      {:c2 #{}, :c3 #{}, :c1 #{:r2}},
+      :recife.core/procs
+      #:example.scheduling-allocator{:allocate {:pc :allocate},
+                                     :return {:pc :return},
+                                     :request {:pc :request},
+                                     :schedule {:pc :schedule}},
+      :example.scheduling-allocator/alloc
+      {:c2 #{:r1}, :c3 #{}, :c1 #{}},
+      :recife/metadata
+      {:context
+       [:allocate
+        {:self :example.scheduling-allocator/allocate,
+         :i-sched 0,
+         :c :c2,
+         :S #{:r1}}]}}]
+    [5
+     {:example.scheduling-allocator/sched [:c1],
+      :example.scheduling-allocator/unsat
+      {:c2 #{}, :c3 #{}, :c1 #{:r2}},
+      :recife.core/procs
+      #:example.scheduling-allocator{:allocate {:pc :allocate},
+                                     :return {:pc :return},
+                                     :request {:pc :request},
+                                     :schedule {:pc :schedule}},
+      :example.scheduling-allocator/alloc {:c2 #{}, :c3 #{}, :c1 #{}},
+      :recife/metadata
+      {:context
+       [:return
+        {:self :example.scheduling-allocator/return,
+         :c :c2,
+         :S #{:r1}}]}}]
+    [6
+     {:example.scheduling-allocator/sched [],
+      :example.scheduling-allocator/unsat {:c2 #{}, :c3 #{}, :c1 #{}},
+      :recife.core/procs
+      #:example.scheduling-allocator{:allocate {:pc :allocate},
+                                     :return {:pc :return},
+                                     :request {:pc :request},
+                                     :schedule {:pc :schedule}},
+      :example.scheduling-allocator/alloc
+      {:c2 #{}, :c3 #{}, :c1 #{:r2}},
+      :recife/metadata
+      {:context
+       [:allocate
+        {:self :example.scheduling-allocator/allocate,
+         :i-sched 0,
+         :c :c1,
+         :S #{:r2}}]}}]
+    [7
+     {:example.scheduling-allocator/sched [],
+      :example.scheduling-allocator/unsat {:c2 #{}, :c3 #{}, :c1 #{}},
+      :recife.core/procs
+      #:example.scheduling-allocator{:allocate {:pc :allocate},
+                                     :return {:pc :return},
+                                     :request {:pc :request},
+                                     :schedule {:pc :schedule}},
+      :example.scheduling-allocator/alloc {:c2 #{}, :c3 #{}, :c1 #{}},
+      :recife/metadata
+      {:context
+       [:return
+        {:self :example.scheduling-allocator/return,
+         :c :c1,
+         :S #{:r2}}]}}]
+    [8
+     {:example.scheduling-allocator/sched [],
+      :example.scheduling-allocator/unsat
+      {:c2 #{}, :c3 #{:r1}, :c1 #{}},
+      :recife.core/procs
+      #:example.scheduling-allocator{:allocate {:pc :allocate},
+                                     :return {:pc :return},
+                                     :request {:pc :request},
+                                     :schedule {:pc :schedule}},
+      :example.scheduling-allocator/alloc {:c2 #{}, :c3 #{}, :c1 #{}},
+      :recife/metadata
+      {:context
+       [:request
+        {:self :example.scheduling-allocator/request,
+         :c :c3,
+         :S #{:r1}}]}}]
+    [9
+     {:example.scheduling-allocator/sched [:c3],
+      :example.scheduling-allocator/unsat
+      {:c2 #{}, :c3 #{:r1}, :c1 #{}},
+      :recife.core/procs
+      #:example.scheduling-allocator{:allocate {:pc :allocate},
+                                     :return {:pc :return},
+                                     :request {:pc :request},
+                                     :schedule {:pc :schedule}},
+      :example.scheduling-allocator/alloc {:c2 #{}, :c3 #{}, :c1 #{}},
+      :recife/metadata
+      {:context
+       [:schedule
+        {:self :example.scheduling-allocator/schedule, :sq [:c3]}]}}]
+    [10
+     {:example.scheduling-allocator/sched [],
+      :example.scheduling-allocator/unsat {:c2 #{}, :c3 #{}, :c1 #{}},
+      :recife.core/procs
+      #:example.scheduling-allocator{:allocate {:pc :allocate},
+                                     :return {:pc :return},
+                                     :request {:pc :request},
+                                     :schedule {:pc :schedule}},
+      :example.scheduling-allocator/alloc
+      {:c2 #{}, :c3 #{:r1}, :c1 #{}},
+      :recife/metadata
+      {:context
+       [:allocate
+        {:self :example.scheduling-allocator/allocate,
+         :i-sched 0,
+         :c :c3,
+         :S #{:r1}}]}}]
+    [11
+     {:example.scheduling-allocator/sched [],
+      :example.scheduling-allocator/unsat {:c2 #{}, :c3 #{}, :c1 #{}},
+      :recife.core/procs
+      #:example.scheduling-allocator{:allocate {:pc :allocate},
+                                     :return {:pc :return},
+                                     :request {:pc :request},
+                                     :schedule {:pc :schedule}},
+      :example.scheduling-allocator/alloc {:c2 #{}, :c3 #{}, :c1 #{}},
+      :recife/metadata
+      {:context
+       [:return
+        {:self :example.scheduling-allocator/return,
+         :c :c3,
+         :S #{:r1}}]}}]
+    [12
+     {:example.scheduling-allocator/sched [],
+      :example.scheduling-allocator/unsat
+      {:c2 #{}, :c3 #{:r1}, :c1 #{}},
+      :recife.core/procs
+      #:example.scheduling-allocator{:allocate {:pc :allocate},
+                                     :return {:pc :return},
+                                     :request {:pc :request},
+                                     :schedule {:pc :schedule}},
+      :example.scheduling-allocator/alloc {:c2 #{}, :c3 #{}, :c1 #{}},
+      :recife/metadata
+      {:context
+       [:request
+        {:self :example.scheduling-allocator/request,
+         :c :c3,
+         :S #{:r1}}]}}]
+    [13
+     {:example.scheduling-allocator/sched [],
+      :example.scheduling-allocator/unsat
+      {:c2 #{:r2}, :c3 #{:r1}, :c1 #{}},
+      :recife.core/procs
+      #:example.scheduling-allocator{:allocate {:pc :allocate},
+                                     :return {:pc :return},
+                                     :request {:pc :request},
+                                     :schedule {:pc :schedule}},
+      :example.scheduling-allocator/alloc {:c2 #{}, :c3 #{}, :c1 #{}},
+      :recife/metadata
+      {:context
+       [:request
+        {:self :example.scheduling-allocator/request,
+         :c :c2,
+         :S #{:r2}}]}}]
+    [14
+     {:example.scheduling-allocator/sched [:c2 :c3],
+      :example.scheduling-allocator/unsat
+      {:c2 #{:r2}, :c3 #{:r1}, :c1 #{}},
+      :recife.core/procs
+      #:example.scheduling-allocator{:allocate {:pc :allocate},
+                                     :return {:pc :return},
+                                     :request {:pc :request},
+                                     :schedule {:pc :schedule}},
+      :example.scheduling-allocator/alloc {:c2 #{}, :c3 #{}, :c1 #{}},
+      :recife/metadata
+      {:context
+       [:schedule
+        {:self :example.scheduling-allocator/schedule,
+         :sq [:c2 :c3]}]}}]
+    [15
+     {:example.scheduling-allocator/sched [:c3],
+      :example.scheduling-allocator/unsat
+      {:c2 #{}, :c3 #{:r1}, :c1 #{}},
+      :recife.core/procs
+      #:example.scheduling-allocator{:allocate {:pc :allocate},
+                                     :return {:pc :return},
+                                     :request {:pc :request},
+                                     :schedule {:pc :schedule}},
+      :example.scheduling-allocator/alloc
+      {:c2 #{:r2}, :c3 #{}, :c1 #{}},
+      :recife/metadata
+      {:context
+       [:allocate
+        {:self :example.scheduling-allocator/allocate,
+         :i-sched 0,
+         :c :c2,
+         :S #{:r2}}]}}]
+    [16
+     {:example.scheduling-allocator/sched [:c3],
+      :example.scheduling-allocator/unsat
+      {:c2 #{}, :c3 #{:r1}, :c1 #{}},
+      :recife.core/procs
+      #:example.scheduling-allocator{:allocate {:pc :allocate},
+                                     :return {:pc :return},
+                                     :request {:pc :request},
+                                     :schedule {:pc :schedule}},
+      :example.scheduling-allocator/alloc {:c2 #{}, :c3 #{}, :c1 #{}},
+      :recife/metadata
+      {:context
+       [:return
+        {:self :example.scheduling-allocator/return,
+         :c :c2,
+         :S #{:r2}}]}}]
+    [17
+     {:example.scheduling-allocator/sched [],
+      :example.scheduling-allocator/unsat {:c2 #{}, :c3 #{}, :c1 #{}},
+      :recife.core/procs
+      #:example.scheduling-allocator{:allocate {:pc :allocate},
+                                     :return {:pc :return},
+                                     :request {:pc :request},
+                                     :schedule {:pc :schedule}},
+      :example.scheduling-allocator/alloc
+      {:c2 #{}, :c3 #{:r1}, :c1 #{}},
+      :recife/metadata
+      {:context
+       [:allocate
+        {:self :example.scheduling-allocator/allocate,
+         :i-sched 0,
+         :c :c3,
+         :S #{:r1}}]}}]
+    [18
+     {:example.scheduling-allocator/sched [],
+      :example.scheduling-allocator/unsat {:c2 #{}, :c3 #{}, :c1 #{}},
+      :recife.core/procs
+      #:example.scheduling-allocator{:allocate {:pc :allocate},
+                                     :return {:pc :return},
+                                     :request {:pc :request},
+                                     :schedule {:pc :schedule}},
+      :example.scheduling-allocator/alloc {:c2 #{}, :c3 #{}, :c1 #{}},
+      :recife/metadata
+      {:context
+       [:return
+        {:self :example.scheduling-allocator/return,
+         :c :c3,
+         :S #{:r1}}]}}]
+    [19
+     {:example.scheduling-allocator/sched [],
+      :example.scheduling-allocator/unsat
+      {:c2 #{}, :c3 #{}, :c1 #{:r2}},
+      :recife.core/procs
+      #:example.scheduling-allocator{:allocate {:pc :allocate},
+                                     :return {:pc :return},
+                                     :request {:pc :request},
+                                     :schedule {:pc :schedule}},
+      :example.scheduling-allocator/alloc {:c2 #{}, :c3 #{}, :c1 #{}},
+      :recife/metadata
+      {:context
+       [:request
+        {:self :example.scheduling-allocator/request,
+         :c :c1,
+         :S #{:r2}}]}}]],
+   :trace-info {:violation {:type :back-to-state, :state-number 5}},
+   :distinct-states 876,
+   :generated-states 1192,
+   :seed 1339240922788492105,
+   :fp 31})
+
 
 (rh/defaction-property action-prop
   [{:keys [::unsat]}
@@ -187,6 +515,7 @@ assuming that the clients scheduled earlier release their resources."
 
   ;; Back to state.
   ;; 5854 states generated, 1690 distinct states found, 0 states left on queue.
+  ;; ~14s|10s.
   (r/run-model global #{request allocate return schedule
                         resource-mutex allocator-invariant-1 allocator-invariant-2
                         allocator-invariant-3 allocator-invariant-4
@@ -205,6 +534,25 @@ assuming that the clients scheduled earlier release their resources."
                {#_ #_:debug? true
                 #_ #_:workers 1})
 
+  (rt/check-temporal-properties result
+                                #{request allocate return schedule
+                                  resource-mutex allocator-invariant-1 allocator-invariant-2
+                                  allocator-invariant-3 allocator-invariant-4
+                                  clients-will-return clients-will-obtain inf-often-satisfied
+
+                                  ;; You can also use nested components that Recife will
+                                  ;; flatten it for you. This way, you can group things
+                                  ;; the way you prefer.
+                                  [allocate-fairness return-fairness]})
+
+  ;; ok
+  (rt/check-temporal-properties result #{clients-will-obtain clients-will-return
+                                         #_inf-often-satisfied})
+
+  ;; ok
+  (rt/check-temporal-property result inf-often-satisfied)
+
+  (r/get-result)
   (r/read-saved-data :recife/violation)
   (r/halt!)
 

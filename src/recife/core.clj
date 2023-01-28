@@ -567,24 +567,30 @@
 
 (defn process-local-operator
   ([f ^Value main-var-tla]
+   (process-local-operator f main-var-tla nil))
+  ([f ^Value main-var-tla ^Value extra-args-tla]
    (p* ::process-local-operator
        (try
          (let [main-var (p ::local-op-to-edn-main-var-tla (tla-edn/to-edn main-var-tla))
-               result (p ::local-op-result (f main-var))]
-           (p ::local-op-to-tla (tla-edn/to-tla-value result)))
-         (catch Exception e
-           (serialize-obj e exception-filename)
-           (throw e)))))
-  ([f ^Value main-var-tla ^Value main-var-tla']
-   (p* ::process-local-operator
-       (try
-         (let [main-var (p ::local-op-to-edn-main-var-tla (tla-edn/to-edn main-var-tla))
-               main-var' (p ::local-op-to-edn-main-var-tla' (tla-edn/to-edn main-var-tla'))
-               result (p ::local-op-result (f main-var main-var'))]
+               result (p ::local-op-result (f (if extra-args-tla
+                                                (merge main-var (tla-edn/to-edn extra-args-tla))
+                                                main-var)))]
            (p ::local-op-to-tla (tla-edn/to-tla-value result)))
          (catch Exception e
            (serialize-obj e exception-filename)
            (throw e))))))
+
+(defn process-local-operator--primed
+  [f ^Value main-var-tla ^Value main-var-tla']
+  (p* ::process-local-operator--primed
+      (try
+        (let [main-var (p ::local-op-to-edn-main-var-tla (tla-edn/to-edn main-var-tla))
+              main-var' (p ::local-op-to-edn-main-var-tla' (tla-edn/to-edn main-var-tla'))
+              result (p ::local-op-result (f main-var main-var'))]
+          (p ::local-op-to-tla (tla-edn/to-tla-value result)))
+        (catch Exception e
+          (serialize-obj e exception-filename)
+          (throw e)))))
 
 (defn parse
   "`f` is a function which receives one argument, a vector, the
@@ -629,6 +635,26 @@
                       (format "(%s) ~> (%s)"
                               (parse (first args) f)
                               (parse (second args) f))
+
+                      :implies
+                      (format "(%s) => (%s)"
+                              (parse (first args) f)
+                              (parse (second args) f))
+
+                      :not
+                      (format "~(%s)"
+                              (parse (first args) f))
+
+                      :=
+                      (format "(%s) = (%s)"
+                              (parse (first args) f)
+                              (parse (second args) f))
+
+                      :current-state
+                      (format "main_var")
+
+                      :next-state
+                      (format "main_var'")
 
                       :invoke
                       (parse {:env (->> (first args)
@@ -978,7 +1004,7 @@
                                                                     @counter))
                                             {:module "spec"}
                                             [^Value ~'main-var ^Value ~'main-var']
-                                            (process-local-operator ~expr ~'main-var ~'main-var'))
+                                            (process-local-operator--primed ~expr ~'main-var ~'main-var'))
                                          `(spec/defop ~(symbol (str (custom-munge identifier)
                                                                     @counter))
                                             {:module "spec"}
@@ -1009,17 +1035,17 @@
                                                                     @counter))
                                             {:module "spec"}
                                             [^Value ~'main-var ^Value ~'main-var']
-                                            (process-local-operator ~f ~'main-var ~'main-var'))
+                                            (process-local-operator--primed ~f ~'main-var ~'main-var'))
                                          `(spec/defop ~(symbol (str (custom-munge identifier)
                                                                     @counter))
                                             {:module "spec"}
-                                            [^Value ~'main-var]
-                                            (process-local-operator ~f ~'main-var))))]
+                                            [^Value ~'main-var ^Value ~'extra-args]
+                                            (process-local-operator ~f ~'main-var ~'extra-args))))]
                                (swap! collector conj {:identifier (str (symbol (str (custom-munge identifier)
                                                                                     @counter))
                                                                        (if action?
                                                                          "(_main_var, _main_var_2) == _main_var = _main_var /\\ _main_var_2 = _main_var_2"
-                                                                         "(_main_var) == _main_var = _main_var"))
+                                                                         "(_main_var, _extra_args) == _main_var = _main_var /\\ _extra_args = _extra_args"))
                                                       :op-ns (-> op meta :op-ns)})
                                (try
                                  (str (symbol (str (custom-munge identifier)
@@ -1027,9 +1053,9 @@
                                       (if action?
                                         "(main_var, main_var')"
                                         (if (seq env)
-                                          (format "(main_var @@ %s)"
+                                          (format "(main_var, %s)"
                                                   (tla-edn/to-tla-value env))
-                                          "(main_var)")))
+                                          "(main_var, {})")))
                                  (finally
                                    (swap! counter inc))))
 
@@ -2022,6 +2048,7 @@ VIEW
          constraints (filter #(= (type %) ::Constraint) components)
          action-constraints (filter #(= (type %) ::ActionConstraint) components)
          properties (filter #(= (type %) ::Property) components)
+         action-properties (filter #(= (type %) ::ActionProperty) components)
          fairness (filter #(= (type %) ::Fairness) components)
          db-init (merge init-global-state
                         {::procs (->> processes
@@ -2042,6 +2069,7 @@ VIEW
                                 (map :operator constraints)
                                 (map :operator action-constraints)
                                 (map :operator properties)
+                                (map :operator action-properties)
                                 (map :operator fairness)))]
      (run-model* db-init next' operators opts))))
 
@@ -2146,7 +2174,7 @@ VIEW
                                        ~(meta name))
                                      (val %)))))}))))
 
-(defmacro definvariant
+(defmacro -definvariant
   [name & opts]
   `(def ~name
      (let [name# (keyword (str *ns*) ~(str name))
@@ -2158,7 +2186,7 @@ VIEW
         :invariant f#
         :operator (invariant name# doc-string# f#)})))
 
-(defmacro defproperty
+(defmacro -defproperty
   [name expr]
   `(def ~name
      (let [name# (keyword (str *ns*) ~(str name))
@@ -2168,17 +2196,17 @@ VIEW
         :property expr#
         :operator (temporal-property name# expr#)})))
 
-(defmacro defaction-property
+(defmacro -defaction-property
   [name expr]
   `(def ~name
      (let [name# (keyword (str *ns*) ~(str name))
            expr# ~expr]
-       ^{:type ::Property}
+       ^{:type ::ActionProperty}
        {:name name#
         :property expr#
         :operator (temporal-property name# expr# {:action? true})})))
 
-(defmacro deffairness
+(defmacro -deffairness
   [name expr]
   `(def ~name
      (let [name# (keyword (str *ns*) ~(str name))
@@ -2188,7 +2216,7 @@ VIEW
         :property expr#
         :operator (fairness name# expr#)})))
 
-(defmacro defconstraint
+(defmacro -defconstraint
   [name f]
   `(def ~name
      (let [name# (keyword (str *ns*) ~(str name))
@@ -2198,7 +2226,7 @@ VIEW
         :constraint f#
         :operator (state-constraint name# f#)})))
 
-(defmacro defaction-constraint
+(defmacro -defaction-constraint
   [name f]
   `(def ~name
      (let [name# (keyword (str *ns*) ~(str name))
@@ -2262,6 +2290,8 @@ VIEW
   ;; - [ ] Create var which holds state info
   ;; - [ ] Add a way to override default Spec expression
   ;; - [ ] Integrate with Soufflé (https://souffle-lang.github.io/source)?
+  ;; - [ ] Warn about invalid temporal property?
+  ;; - [ ] Add `["-lncheck" "final"]` by default
 
   ())
 
