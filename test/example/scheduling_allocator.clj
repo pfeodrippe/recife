@@ -205,7 +205,7 @@ assuming that the clients scheduled earlier release their resources."
                {#_ #_:debug? true
                 #_ #_:workers 1})
 
-  (count (r/read-saved-data))
+  (r/read-saved-data :recife/violation)
   (r/halt!)
 
   ;; 3m20 to 47s (~4.25x) after the performance improvements!!

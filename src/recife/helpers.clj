@@ -75,22 +75,6 @@
 (declare get-trace-value)
 (declare set-trace-value!)
 
-#_(defn -save-action-property-violation
-  [name db']
-  (when (not (get-trace-value ::trace-violated?))
-    (let [current-state (tlc2.util.IdThread/getCurrentState)]
-      (r/save! {::trace-violation (conj (->> (tlc2.module.TLCExt/getTrace nil nil nil
-                                                                          current-state
-                                                                          nil 0 nil)
-                                             tla-edn-2.core/to-edn
-                                             (mapv :main-var))
-                                        ;; Append next state to trace.
-                                        db')
-                ::trace-violation-type :action-property
-                ::name name})
-      (set-trace-value! ::trace-violated? true)))
-  false)
-
 (defmacro defproperty
   {:arglists '([name doc-string? [db] body])}
   [name & decl]
@@ -103,18 +87,21 @@
 
 (defn -save-action-property-violation
   [name db']
-  (when (not (get-trace-value ::trace-violated?))
+  (when (not (get-trace-value :recife/trace-violated?))
     (let [current-state (tlc2.util.IdThread/getCurrentState)]
-      (r/save! {::trace-violation (conj (->> (tlc2.module.TLCExt/getTrace nil nil nil
-                                                                          current-state
-                                                                          nil 0 nil)
-                                             tla-edn-2.core/to-edn
-                                             (mapv :main-var))
-                                        ;; Append next state to trace.
-                                        db')
-                ::trace-violation-type :action-property
-                ::name name})
-      (set-trace-value! ::trace-violated? true)))
+      (r/save! :recife/violation
+               {:trace (->> (conj (->> (tlc2.module.TLCExt/getTrace nil nil nil
+                                                                    current-state
+                                                                    nil 0 nil)
+                                       tla-edn-2.core/to-edn
+                                       (mapv :main-var))
+                                  ;; Append next state to trace.
+                                  db')
+                            (map-indexed (fn [idx step] [idx step]))
+                            vec)
+                :type :action-property
+                :name name})
+      (set-trace-value! :recive/trace-violated? true)))
   false)
 
 (defmacro defaction-property

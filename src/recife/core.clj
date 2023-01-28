@@ -1816,8 +1816,7 @@ VIEW
                                                trace-example? dump-states?]
                                         :as opts
                                         :or {workers :auto
-                                             async true
-                                             use-buffer true}}]
+                                             async true}}]
    ;; Do some validation.
    (some->> (m/explain schema/Operator next-operator)
             me/humanize
@@ -1854,7 +1853,7 @@ VIEW
          _ (when use-buffer
              (r.buf/reset-buf!)
              (r.buf/sync!) ; sync so we can make sure that the writer can write
-             (reset! r.buf/*contents [])
+             (reset! r.buf/*contents {})
              (r.buf/start-sync-loop!))
          ;; Also put a file with opts in the same folder so we can read configuration
          ;; in the tlc-handler function.
@@ -2214,7 +2213,8 @@ VIEW
   "Save data that can be fetched in real time, it can be used for statistics."
   r.buf/save!)
 
-(def read-saved-data
+(def ^{:arglists (:arglists (meta #'r.buf/read-contents))}
+  read-saved-data
   "Read saved data, see `save!`."
   r.buf/read-contents)
 

@@ -15,7 +15,7 @@
   (atom (File/createTempFile "my-file" ".txt")))
 
 (defonce *contents
-  (atom []))
+  (atom {}))
 
 (defonce ^:private *new-contents?
   (atom false))
@@ -142,24 +142,27 @@
         (throw ex)))))
 
 (defn save!
-  "Save key value so it can be retrieved later.
+  "Save value so it can be retrieved later. the value will be saved in a `bucket`.
+  `bucket` is just a key (usually a keyword).
 
-  `:use-buffer` must be set or this will throw."
-  [v]
-  (try
-    (p* ::save!
-        (>!! @*client-channel v))
-    (catch Exception ex
-      (if (nil? @*client-channel)
-        (throw (ex-info "
+  If no `bucket` is passed, it stores data in a `:default` bucket."
+  ([value]
+   (save! :default value))
+  ([bucket value]
+   (try
+     (p* ::save!
+         (>!! @*client-channel [bucket value]))
+     (catch Exception ex
+       (if (nil? @*client-channel)
+         (throw (ex-info "
 
 Error when trying to save data, you need to set `:use-buffer` or
 run Recife using `:generate`.
 
 "
-                        {}))
-        (throw ex))))
-  true)
+                         {}))
+         (throw ex))))
+   true))
 
 (defonce ^:private lock-sync
   (Object.))
@@ -174,7 +177,11 @@ run Recife using `:generate`.
        (buf-read-next-line)
        (loop [v (buf-read-next-line)]
          (when v
-           (swap! *contents conj v)
+           (swap! *contents (fn [contents]
+                              (let [[bucket value] v]
+                                (if (contains? contents bucket)
+                                  (update contents bucket conj value)
+                                  (update contents bucket (comp vec conj) value)))))
            (recur (buf-read-next-line))))
        (when (seq @*contents)
          (reset! *new-contents? true))
@@ -222,47 +229,14 @@ run Recife using `:generate`.
               (-save! v)))))))
 
 (defn read-contents
-  []
-  (reset! *new-contents? false)
-  @*contents)
+  ([]
+   (read-contents :default))
+  ([bucket]
+   (reset! *new-contents? false)
+   (if (= bucket :all)
+     @*contents
+     (get @*contents bucket))))
 
 (defn has-new-contents?
   []
   @*new-contents?)
-
-(comment
-
-  (doall
-   (mapv #(save! {:g %}) (range 100)))
-
-  (sync!)
-
-  (read-contents)
-
-  (count (read-contents))
-
-  (can-read?)
-
-  (save! {:a 30})
-
-  (buf-rewind)
-  (for [_ (range 100)]
-    (buf-read-next-line))
-
-  (buf-rewind)
-  (loop [v (buf-read-next-line)
-         x []]
-    (if v
-      (recur (buf-read-next-line)
-             (conj x v))
-      x))
-
-  (do (.clear @*buf)
-      true)
-
-  (.position @*buf)
-
-  (str @*channel-file)
-
-
-  ())
