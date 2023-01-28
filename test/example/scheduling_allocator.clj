@@ -201,7 +201,7 @@ assuming that the clients scheduled earlier release their resources."
                         ;; the current state (db) and the next state (db'). Uncomment
                         ;; below to see things failing when unsat is not different from
                         ;; unsat in the next state.
-                        action-prop}
+                        #_action-prop}
                {#_ #_:debug? true
                 #_ #_:workers 1})
 

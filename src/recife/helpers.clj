@@ -113,13 +113,31 @@
                             {:params params
                              :expected '[db db']})))
         body (list (cons `box (list (list 'or (cons 'do body)
-                                          `(-save-action-property-violation (symbol ~(str *ns*) (str '~name))
-                                                                            ~'--db')))))]
+                                          `(-save-action-property-violation
+                                            (symbol ~(str *ns*) (str '~name))
+                                            ~'--db')))))]
     `(r/defaction-property ~name
        (binding [*env* (quote ~(add-global-vars
                                 (mapv (fn [p#] `(quote ~p#))
                                       params)))]
          (eval '~@body)))))
+
+(defn -save-invariant-violation
+  [name]
+  (when (not (get-trace-value :recife/trace-violated?))
+    (let [current-state (tlc2.util.IdThread/getCurrentState)]
+      (r/save! :recife/violation
+               {:trace (->> (->> (tlc2.module.TLCExt/getTrace nil nil nil
+                                                              current-state
+                                                              nil 0 nil)
+                                 tla-edn-2.core/to-edn
+                                 (mapv :main-var))
+                            (map-indexed (fn [idx step] [idx step]))
+                            vec)
+                :type :invariant
+                :name name})
+      (set-trace-value! :recive/trace-violated? true)))
+  false)
 
 (defmacro definvariant
   {:arglists '([name doc-string? [db] body])}
@@ -128,7 +146,8 @@
     `(r/definvariant ~name
        ~doc-string
        (fn ~params
-         ~@body))))
+         (or ~@body
+             (-save-invariant-violation (symbol ~(str *ns*) (str '~name))))))))
 
 (defmacro deffairness
   {:arglists '([name doc-string? [db] body])}

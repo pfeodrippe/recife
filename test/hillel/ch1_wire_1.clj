@@ -36,8 +36,11 @@
 (comment
 
   (-> @(r/run-model global #{wire invariant} {#_ #_:raw-output? true
-                                             #_ #_:debug? true
-                                             #_ #_:run-local? true})
+                                              #_ #_:debug? true
+                                              #_ #_:run-local? true})
       r/timeline-diff)
+
+  (r/read-saved-data :recife/violation)
+  (r/get-result)
 
   ())
