@@ -1,35 +1,60 @@
 (ns recife.trace
   (:require
+   [clojure.edn :as edn]
    [malli.core :as m]
    [recife.core :as r]))
 
 (defn temporal-property->map
   [temporal-property]
-  {:type :root
-   :child (m/parse
-           [:schema {:registry
-                     {"tla"
-                      [:or
-                       [:catn
-                        [:type [:= :for-all]]
-                        [:bindings [:map-of :symbol [:schema [:ref "tla"]]]]
-                        [:child [:schema [:ref "tla"]]]]
-                       [:catn
-                        [:type [:= :leads-to]]
-                        [:source [:schema [:ref "tla"]]]
-                        [:target [:schema [:ref "tla"]]]]
-                       [:catn
-                        [:type [:= :invoke]]
-                        [:bindings [:map-of :keyword [:schema [:ref "tla"]]]]
-                        [:function [:schema [:ref "tla"]]]]
-                       [:catn
-                        [:type [:= :not]]
-                        [:child [:schema [:ref "tla"]]]]
-                       fn?
-                       coll?
-                       symbol?]}}
-            "tla"]
-           (:property temporal-property))})
+  (m/parse
+   [:schema {:registry
+             {"tla"
+              [:or
+               [:catn
+                [:type [:= :for-all]]
+                [:bindings [:map-of :symbol [:schema [:ref "tla"]]]]
+                [:child [:schema [:ref "tla"]]]]
+               [:catn
+                [:type [:= :always]]
+                [:child [:schema [:ref "tla"]]]]
+               [:catn
+                [:type [:= :eventually]]
+                [:child [:schema [:ref "tla"]]]]
+               [:catn
+                [:type [:= :leads-to]]
+                [:source [:schema [:ref "tla"]]]
+                [:target [:schema [:ref "tla"]]]]
+               [:catn
+                [:type [:= :implies]]
+                [:source [:schema [:ref "tla"]]]
+                [:target [:schema [:ref "tla"]]]]
+               [:catn
+                [:type [:= :invoke]]
+                [:bindings [:map-of :keyword [:schema [:ref "tla"]]]]
+                [:function [:schema [:ref "tla"]]]]
+               [:catn
+                [:type [:= :not]]
+                [:child [:schema [:ref "tla"]]]]
+               fn?
+               coll?
+               symbol?]}}
+    "tla"]
+   (:property temporal-property)))
+
+(defonce ^:dynamic *trace-view* nil)
+
+(defmacro with-info
+  [info & body]
+  `(binding [*trace-view* (merge *trace-view* ~info)]
+     ~@body))
+
+(defn debug
+  [v]
+  (when (:debug *trace-view*)
+    (swap! (:debug *trace-view*) conj
+           (merge {:debug v}
+                  (select-keys *trace-view* [#_:current-state :env])
+                  (select-keys (:current-state *trace-view*) [::idx])))))
 
 (defmulti parse-tla :type)
 
@@ -40,19 +65,10 @@
                    :error :__NOT_IMPLEMENTED
                    :value value})))
 
-(defmethod parse-tla :invoke
-  [{:keys [bindings function env]}]
-  `{:value (~function (merge (:db ~'trace) ~bindings))
-    :debug {:env ~env
-            :type :invoke}})
-
 (defmethod parse-tla :not
   [{:keys [child env]}]
   `(let [res# ~(parse-tla (assoc child :env env))]
-     {:value (not (:value res#))
-      :debug {:child res#
-              :env ~env
-              :type :not}}))
+     (not res#)))
 
 (defmethod parse-tla :for-all
   [{:keys [bindings child env]}]
@@ -64,104 +80,80 @@
                                                                   (mapv (fn [sym]
                                                                           [(keyword sym) sym]))
                                                                   (into {})))))))]
-     {:value (mapv :value result#)
-      :debug {:children result#
-              :env ~env
-              :type :for-all}}))
+     (every? (comp true? boolean) result#)))
 
-(defn -leads-to
-  [trace id env source-result target-result]
-  (let [key* {:id id
-              :env env
-              :type :leads-to}
-        last-state? (or (nil? (:next-idx trace))
-                        (<= (:next-idx trace)
-                            (:idx trace)))
-        source-value (:value source-result)
-        target-value (:value target-result)
-        history (get @(:tableau trace) key*)
-        was-enabled (:source-enabled (last history))
-        source-enabled (if target-value
-                         ;; Disable source when target is true.
-                         false
-                         (or source-value was-enabled))]
-    (swap! (:tableau trace) update key*
-           (comp vec conj)
-           {:idx (:idx trace)
-            :source-enabled (boolean source-enabled)
-            :target-enabled target-value})
-    ;; If we are not in last state, we don't know the result yet.
-    {:value (boolean
-             (or (not last-state?)
-                 (not source-enabled)
-                 ;; We need to iterate on the loopback (if any) to check
-                 ;; if target becomes eventually true.
-                 (when-let [next-idx (:next-idx trace)]
-                   (some :target-enabled (drop next-idx history)))))
-     :debug {:env env
-             :source-result source-result
-             :target-result target-result
-             :type :leads-to}}))
+(defmethod parse-tla :invoke
+  [{:keys [bindings function env]}]
+  `(let [result# (~function (merge (:current-state *trace-view*) ~bindings))]
+     (debug {:result result#
+             :form (edn/read-string ~(:form (meta bindings)))
+             :env ~env})
+     result#))
 
-(defmethod parse-tla :leads-to
+;; - We are trying to make [](F => []G) work first.
+;; - How do we keep G activated once it's triggered?
+;; - Don't check state by state, check the entire behavior.
+;; - `always` probably needs to receive the trace + loopback that's concerning for
+;; itself.
+;;   - The parents cuts it
+;;   - ~~If there is no loopback, then `always` is false~~
+;;     - NOT true!! Let's assume that the trace is complete
+;; - What we need now is get for eventually to work, but without
+;;   knowing that it's eventually by using the definition
+
+;; F ~> G == [](F => <>G)
+
+(defn -always
+  [env child-fn]
+  (let [{:keys [behavior]} *trace-view*
+        result (loop [[state & behavior-rest] behavior]
+                 (cond
+                   (not state)
+                   true
+
+                   (with-info {:env env
+                               :current-state state
+                               :behavior behavior-rest}
+                     (child-fn))
+                   (recur behavior-rest)
+
+                   :else
+                   false))]
+    (debug {:result result
+            :env env
+            :type :always})
+    result))
+
+(defmethod parse-tla :always
+  [{:keys [child env]}]
+  `(-always ~env (fn []
+                   ~(parse-tla (assoc child :env env)))))
+
+;; Using the definition that eventually is equal to `(not (always (not true))`
+;; or not always false.
+(defmethod parse-tla :eventually
+  [{:keys [child env]}]
+  `(not (-always ~env (fn []
+                        (not
+                         ~(parse-tla (assoc child :env env)))))))
+
+(defn -implies
+  [env source-fn target-fn]
+  (with-info {:env env}
+    (let [result (or (not (source-fn))
+                     (target-fn))]
+      (debug {:type :implies
+              :result result
+              :env env})
+      result)))
+
+(defmethod parse-tla :implies
   [{:keys [source target env]}]
-  (let [id (keyword (gensym))]
-    `(-leads-to ~'trace ~id ~env
-                ~(parse-tla (assoc source :env env))
-                ~(parse-tla (assoc target :env env)))))
-
-#_(defmethod parse-tla :always
-  [{:keys [source target env]}]
-  (let [id (keyword (gensym))]
-    `(let [trace# ~'trace
-           k# {:id ~id
-               :env ~env
-               :type :leads-to}
-           last-state?# (or (nil? (:next-idx trace#))
-                            (<= (:next-idx trace#)
-                                (:idx trace#)))
-           source-result# ~(parse-tla (assoc source :env env))
-           target-result# ~(parse-tla (assoc target :env env))
-           source-value# (:value source-result#)
-           target-value# (:value target-result#)
-           history# (get @(:tableau trace#) k#)
-           was-enabled# (:source-enabled (last history#))
-           source-enabled# (if target-value#
-                             ;; Disable source when target is true.
-                             false
-                             (or source-value# was-enabled#))]
-       (swap! (:tableau trace#) update k#
-              (comp vec conj)
-              {:idx (:idx trace#)
-               :source-enabled (boolean source-enabled#)
-               :target-enabled target-value#})
-       ;; If we are not in last state, we don't know the result yet.
-       {:value (boolean
-                 (or (not last-state?#)
-                     (not source-enabled#)
-                     ;; We need to iterate on the loopback (if any) to check
-                     ;; if target becomes eventually true.
-                     (when-let [next-idx# (:next-idx trace#)]
-                       (some :target-enabled (drop next-idx# history#)))))
-        :debug {:env ~env
-                :source-result source-result#
-                :target-result target-result#
-                :type :leads-to}})))
-
-(defn -process-for-all
-  [result]
-  (let [values (flatten (:value result))]
-    {:value (every? true? values)
-     :debug {:type :root
-             :child result}}))
-
-;; :root knows how to deal with the different kinds of children so
-;; it can process a boolean result.
-(defmethod parse-tla :root
-  [{:keys [child]}]
-  `(let [result# ~(parse-tla child)]
-     (case ~(:type child)
-       :for-all (-process-for-all result#))))
+  `(-implies ~env
+             (fn []
+               ~(parse-tla (assoc source :env env)))
+             (fn []
+               ~(parse-tla (assoc target :env env)))))
 
 (defn check-temporal-property
   "Given a result (the dereffed return from `r/run-model`), it checks if a
@@ -177,30 +169,35 @@
   The return is a map with a `:violated?` key, indicating if this temp property
   is violated by the trace from `result`."
   [result temporal-property]
-  (def temporal-property temporal-property)
-  (let [compiled-property
-        (eval `(fn [~'trace]
-                 (let [~'trace (update ~'trace :tableau atom)]
-                   [~(parse-tla (temporal-property->map temporal-property))
-                    (deref (:tableau ~'trace))])))]
-    (loop [[[idx db] & trace-rest] (:trace result)
-           tableau {}
-           trace-result nil]
-      (let [trace {:idx idx
-                   :next-idx (if (seq trace-rest)
-                               (inc idx)
-                               (-> result :trace-info :violation :state-number))
-                   :db db
-                   :tableau tableau}]
 
-        (if idx
-          (let [[trace-result tableau] (compiled-property trace)]
-            (recur trace-rest
-                   tableau
-                   trace-result))
-          (with-meta {:violated? (not (:value trace-result))}
-            {:debug (:debug trace-result)
-             :tableau (:tableau trace)}))))))
+  (def temporal-property temporal-property)
+  (def result result)
+
+  (:property temporal-property)
+  (identity result)
+
+  (temporal-property->map temporal-property)
+
+  (let [compiled-property
+        (eval `(fn [trace-view#]
+                 (binding [*trace-view* trace-view#]
+                   ~(parse-tla (temporal-property->map temporal-property)))))
+
+        loopback-idx (-> result :trace-info :violation :state-number)
+        behavior (->> (:trace result)
+                      (mapv second))
+        trace-view {:behavior (->> behavior
+                                   (map-indexed (fn [idx v]
+                                                  (assoc v ::idx idx)))
+                                   vec)
+                    :loopback-idx loopback-idx
+                    :current-state (assoc (first behavior) ::idx 0)
+                    :debug (atom [])}
+        violated? (not (compiled-property trace-view))]
+    (def ^:dynamic *trace-view* trace-view)
+    (with-meta {:violated? violated?}
+      {:violated? violated?
+       :debug @(:debug trace-view)})))
 
 (defn check-temporal-properties
   "Given a result (the dereffed return from `r/run-model`) and the temporal properties
@@ -220,11 +217,15 @@
 (comment
 
   ;; TODO:
-  ;; - [x] Leads to
-  ;; - [x] For all
-  ;; - [x] Not
-  ;; - [ ] Always
+  ;; - [x] Try to encode operators using formal definitions
+  ;;   - Page 88 of Specifying Systems (Sec. 8.1)
+  ;;     - http://lamport.azurewebsites.net/tla/book-21-07-04.pdf
+  ;; - [x] Always
+  ;; - [ ] Leads to
   ;; - [ ] Eventually
+  ;; - [ ] Implies that
+  ;; - [ ] For all
+  ;; - [ ] Not
   ;; - [ ] For some
   ;; - [ ] Call
   ;; - [ ] And*

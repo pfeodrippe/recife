@@ -156,6 +156,15 @@ assuming that the clients scheduled earlier release their resources."
      (rh/eventually
       (empty? (get unsat c))))))
 
+;; FIXME: Remove below and uncomment above.
+#_(rh/defproperty inf-often-satisfied
+  [{:keys [::unsat]}]
+  (rh/for-all [c clients]
+    (rh/always
+     (empty? (get unsat c)))))
+
+#_(rt/check-temporal-property result inf-often-satisfied)
+
 ;; ClientsWillReturn ==
 ;;   \A c \in Clients : unsat[c]={} ~> alloc[c]={}
 (rh/defproperty clients-will-return
@@ -167,19 +176,137 @@ assuming that the clients scheduled earlier release their resources."
 
 ;; ClientsWillObtain ==
 ;;   \A c \in Clients, r \in Resources : r \in unsat[c] ~> r \in alloc[c]
-(rh/defproperty clients-will-obtain
+#_(rh/defproperty clients-will-obtain
   [{:keys [::unsat ::alloc]}]
   (rh/for-all [c clients
                r resources]
     (rh/leads-to
-     ;; FIXME: Switch one `contains?` with the other.
-     (contains? (get alloc c) r)
-     (contains? (get unsat c) r))))
+     (contains? (get unsat c) r)
+     (contains? (get alloc c) r))))
 
+;; FIXME: Remove below and uncomment above.
+(rh/defproperty clients-will-obtain
+  [{:keys [::unsat ::alloc]}]
+  (rh/for-all [c clients
+               r resources]
+    (rh/always
+     (rh/implies*
+      (contains? (get unsat c) r)
+      (rh/eventually
+       (contains? (get alloc c) r))))
+    #_(rh/leads-to
+       (contains? (get alloc c) r)
+       (contains? (get unsat c) r))))
 
-;; Switch unsat with alloc at clients-will-obtain.
+#_(rh/defproperty clients-will-obtain
+  [{:keys [::unsat ::alloc]}]
+  (rh/for-all [c clients
+               r resources]
+    (rh/always
+     (rh/implies*
+      (contains? (get unsat c) r)
+      (rh/always
+       (contains? (get alloc c) r))))))
 
+(rh/defaction-property action-prop
+  [{:keys [::unsat]}
+   {unsat' ::unsat}]
+  (not= unsat unsat'))
 
+(comment
+
+  (meta (rt/check-temporal-property result clients-will-obtain))
+
+  ;; TODO:
+  ;; - [x] Profile performance.
+  ;; - [x] Create helpers for `for-all`, `exists` and `invoke`.
+
+  ;; Back to state.
+  ;; 5854 states generated, 1690 distinct states found, 0 states left on queue.
+  ;; ~14s|10s.
+  (r/run-model global #{request allocate return schedule
+                        resource-mutex allocator-invariant-1 allocator-invariant-2
+                        allocator-invariant-3 allocator-invariant-4
+                        clients-will-return clients-will-obtain inf-often-satisfied
+
+                        ;; You can also use nested components that Recife will
+                        ;; flatten it for you. This way, you can group things
+                        ;; the way you prefer.
+                        [allocate-fairness return-fairness]
+
+                        ;; You can also check action properties, they receive 2 arguments,
+                        ;; the current state (db) and the next state (db'). Uncomment
+                        ;; below to see things failing when unsat is not different from
+                        ;; unsat in the next state.
+                        #_action-prop}
+               {#_ #_:debug? true
+                #_ #_:workers 1})
+
+  (r/get-result)
+  (r/read-saved-data :recife/violation)
+  (r/halt!)
+
+  #_(rt/check-temporal-properties result
+                                  #{request allocate return schedule
+                                    resource-mutex allocator-invariant-1 allocator-invariant-2
+                                    allocator-invariant-3 allocator-invariant-4
+                                    clients-will-return clients-will-obtain inf-often-satisfied
+
+                                    ;; You can also use nested components that Recife will
+                                    ;; flatten it for you. This way, you can group things
+                                    ;; the way you prefer.
+                                    [allocate-fairness return-fairness]})
+
+  ;; ok
+  (rt/check-temporal-property result clients-will-obtain)
+
+  (rt/check-temporal-properties result #{clients-will-obtain clients-will-return
+                                         #_inf-often-satisfied})
+
+  ;; error
+  (rt/check-temporal-property result inf-often-satisfied)
+
+  ;; 3m20 to 47s (~4.25x) after the performance improvements!!
+  ;; 47s to 29s after adding keyword-cache
+  ;; 14s after fairness was fixed
+
+  ())
+
+;; For bogus inf-often-satisfied.
+(def result
+  {:trace
+   [[0
+     {:example.scheduling-allocator/unsat {:c2 #{}, :c3 #{}, :c1 #{}},
+      :example.scheduling-allocator/alloc {:c2 #{}, :c3 #{}, :c1 #{}},
+      :example.scheduling-allocator/sched [],
+      :recife.core/procs
+      #:example.scheduling-allocator{:allocate {:pc :allocate},
+                                     :return {:pc :return},
+                                     :request {:pc :request},
+                                     :schedule {:pc :schedule}}}]
+    [1
+     {:example.scheduling-allocator/unsat
+      {:c2 #{:r2 :r1}, :c3 #{}, :c1 #{}},
+      :example.scheduling-allocator/alloc {:c2 #{}, :c3 #{}, :c1 #{}},
+      :example.scheduling-allocator/sched [],
+      :recife.core/procs
+      #:example.scheduling-allocator{:allocate {:pc :allocate},
+                                     :return {:pc :return},
+                                     :request {:pc :request},
+                                     :schedule {:pc :schedule}},
+      :recife/metadata
+      {:context
+       [:request
+        {:self :example.scheduling-allocator/request,
+         :c :c2,
+         :S #{:r2 :r1}}]}}]],
+   :trace-info {},
+   :distinct-states 501,
+   :generated-states 624,
+   :seed -6974244426852576208,
+   :fp 74})
+
+;; For bogus clients-will-obtain.
 (def result
   {:trace
    [[0
@@ -501,63 +628,52 @@ assuming that the clients scheduled earlier release their resources."
    :seed 1339240922788492105,
    :fp 31})
 
-
-(rh/defaction-property action-prop
-  [{:keys [::unsat]}
-   {unsat' ::unsat}]
-  (not= unsat unsat'))
-
-(comment
-
-  ;; TODO:
-  ;; - [x] Profile performance.
-  ;; - [x] Create helpers for `for-all`, `exists` and `invoke`.
-
-  ;; Back to state.
-  ;; 5854 states generated, 1690 distinct states found, 0 states left on queue.
-  ;; ~14s|10s.
-  (r/run-model global #{request allocate return schedule
-                        resource-mutex allocator-invariant-1 allocator-invariant-2
-                        allocator-invariant-3 allocator-invariant-4
-                        clients-will-return clients-will-obtain inf-often-satisfied
-
-                        ;; You can also use nested components that Recife will
-                        ;; flatten it for you. This way, you can group things
-                        ;; the way you prefer.
-                        [allocate-fairness return-fairness]
-
-                        ;; You can also check action properties, they receive 2 arguments,
-                        ;; the current state (db) and the next state (db'). Uncomment
-                        ;; below to see things failing when unsat is not different from
-                        ;; unsat in the next state.
-                        #_action-prop}
-               {#_ #_:debug? true
-                #_ #_:workers 1})
-
-  (rt/check-temporal-properties result
-                                #{request allocate return schedule
-                                  resource-mutex allocator-invariant-1 allocator-invariant-2
-                                  allocator-invariant-3 allocator-invariant-4
-                                  clients-will-return clients-will-obtain inf-often-satisfied
-
-                                  ;; You can also use nested components that Recife will
-                                  ;; flatten it for you. This way, you can group things
-                                  ;; the way you prefer.
-                                  [allocate-fairness return-fairness]})
-
-  ;; ok
-  (rt/check-temporal-properties result #{clients-will-obtain clients-will-return
-                                         #_inf-often-satisfied})
-
-  ;; ok
-  (rt/check-temporal-property result inf-often-satisfied)
-
-  (r/get-result)
-  (r/read-saved-data :recife/violation)
-  (r/halt!)
-
-  ;; 3m20 to 47s (~4.25x) after the performance improvements!!
-  ;; 47s to 29s after adding keyword-cache
-  ;; 14s after fairness was fixed
-
-  ())
+;; For second bogus clients-will-obtain ([] => .. []).
+#_(def result
+  {:trace
+   [[0
+     {:example.scheduling-allocator/unsat {:c2 #{}, :c3 #{}, :c1 #{}},
+      :example.scheduling-allocator/alloc {:c2 #{}, :c3 #{}, :c1 #{}},
+      :example.scheduling-allocator/sched [],
+      :recife.core/procs
+      #:example.scheduling-allocator{:allocate {:pc :allocate},
+                                     :return {:pc :return},
+                                     :request {:pc :request},
+                                     :schedule {:pc :schedule}}}]
+    [1
+     {:example.scheduling-allocator/unsat
+      {:c2 #{}, :c3 #{:r2}, :c1 #{}},
+      :example.scheduling-allocator/alloc {:c2 #{}, :c3 #{}, :c1 #{}},
+      :example.scheduling-allocator/sched [],
+      :recife.core/procs
+      #:example.scheduling-allocator{:allocate {:pc :allocate},
+                                     :return {:pc :return},
+                                     :request {:pc :request},
+                                     :schedule {:pc :schedule}},
+      :recife/metadata
+      {:context
+       [:request
+        {:self :example.scheduling-allocator/request,
+         :c :c3,
+         :S #{:r2}}]}}]
+    [2
+     {:example.scheduling-allocator/sched [],
+      :example.scheduling-allocator/unsat
+      {:c2 #{:r2}, :c3 #{:r2}, :c1 #{}},
+      :recife.core/procs
+      #:example.scheduling-allocator{:allocate {:pc :allocate},
+                                     :return {:pc :return},
+                                     :request {:pc :request},
+                                     :schedule {:pc :schedule}},
+      :example.scheduling-allocator/alloc {:c2 #{}, :c3 #{}, :c1 #{}},
+      :recife/metadata
+      {:context
+       [:request
+        {:self :example.scheduling-allocator/request,
+         :c :c2,
+         :S #{:r2}}]}}]],
+   :trace-info {},
+   :distinct-states 143,
+   :generated-states 185,
+   :seed -2163426199091678328,
+   :fp 74})
