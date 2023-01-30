@@ -2292,6 +2292,7 @@ VIEW
   ;; - [ ] Integrate with Soufflé (https://souffle-lang.github.io/source)?
   ;; - [ ] Warn about invalid temporal property?
   ;; - [ ] Add `["-lncheck" "final"]` by default
+  ;; - [ ] Check if it's possible to do refinement
 
   ())
 

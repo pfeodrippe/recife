@@ -84,16 +84,14 @@
 
   ;; back-to-state at around 30-32 states (back to 2-4)
   (def result
-    ;; When you have `:simulate` or `:generate` set as a truthy value,
-    ;; the return will be async. You can close or deref (@).
     @(r/run-model global #{thread at-most-one-critical no-livelocks}
                   {:workers 1
                    :fp 0
                    :seed 1
-                   :async true
                    #_ #_:simulate true
                    #_ #_:run-local? true}))
 
+  (r/get-result)
   (ra/visualize-result result)
 
   ;; TODO:

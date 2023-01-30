@@ -99,9 +99,11 @@
                      (= (namespace (symbol (resolve (first form)))) "recife.helpers"))))
       form
       (if (= (count global-vars) 2)
-        `[:invoke (quote ~(->> local-vars
-                               (mapv (fn [l] [(keyword l) l]))
-                               (into {})))
+        `[:invoke (with-meta
+                    (quote ~(->> local-vars
+                                 (mapv (fn [l] [(keyword l) l]))
+                                 (into {})))
+                    {:form ~(pr-str form)})
           (fn [{:keys ~(vec local-vars)
                 :as db#}
                db'#]
@@ -110,9 +112,11 @@
                   ~'--db db#
                   ~'--db' db'#]
               ~form))]
-        `[:invoke (quote ~(->> local-vars
-                               (mapv (fn [l] [(keyword l) l]))
-                               (into {})))
+        `[:invoke (with-meta
+                    (quote ~(->> local-vars
+                                 (mapv (fn [l] [(keyword l) l]))
+                                 (into {})))
+                    {:form ~(pr-str form)})
           (fn [{:keys ~(vec local-vars)
                 :as db#}]
             (let [~(first global-vars) db#]

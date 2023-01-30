@@ -47,25 +47,32 @@
   ;; TODO:
   ;; - [x] Use `dev-tooling`
   ;; - [x[ Serve docs using GH pages
-  ;; - [x] reasoning
-  ;; - [x] fix responsiveness
-  ;; - [ ] proc
-  ;; - [ ] invariant
-  ;; - [ ] temporal property
-  ;; - [ ] fix flickering on phone
-  ;; - [ ] action property
-  ;; - [ ] constraint
-  ;; - [ ] action constraint
-  ;; - [ ] tutorial
-  ;; - [ ] design
-  ;;   - [ ] implementation details
-  ;; - [ ] gather data for statistics
-  ;; - [ ] generate
-  ;; - [ ] simulation
-  ;; - [ ] model check
-  ;; - [ ] non determinism
-  ;; - [ ] partner example
-  ;;   - [ ] driving implementation from traces
-  ;;   - [ ] reproducing bugs
+  ;; - [x] Reasoning
+  ;; - [x] Fix responsiveness
+  ;; - [ ] Proc
+  ;; - [ ] Invariant
+  ;; - [ ] Temporal property
+  ;; - [ ] Action property
+  ;; - [ ] Constraint
+  ;; - [ ] Action constraint
+  ;; - [ ] Tutorial
+  ;; - [ ] Design
+  ;;   - [ ] Implementation details
+  ;; - [ ] Gather data for statistics
+  ;; - [ ] Generate
+  ;; - [ ] Simulation
+  ;; - [ ] Model checking
+  ;; - [ ] Non determinism
+  ;; - [ ] Partner example
+  ;;   - [ ] Driving implementation from traces
+  ;;   - [ ] Reproducing bugs
+
+  ;; TODO:
+  ;; - [ ] Fix flickering on phone
+  ;;   -  [ ] Try to use the unbundled version of Clerk
+  ;; - [ ] Add search field
+  ;; - [ ] Add ToC
+  ;; - [ ] Add navigation between pages
+  ;; - [ ] Diminish font size for mobile
 
   ())
