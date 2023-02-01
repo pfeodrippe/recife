@@ -4,7 +4,8 @@
   (:require
    [clojure.set :as set]
    [recife.core :as r]
-   [recife.helpers :as rh]))
+   [recife.helpers :as rh]
+   [recife.trace :as rt]))
 
 (def global
   ;; Namespaced keywords (::readers is equivalent to :recife.example.readers-writers/readers)
@@ -84,28 +85,33 @@
                  (seq writers)))
        (<= (count writers) 1)))
 
-(rh/defproperty liveness
-  [{:keys [::readers ::writers]}]
-  (rh/and*
-   (rh/for-all [actor actors]
-     (rh/always
-      (rh/eventually
-       (contains? readers actor))))
+(rh/defproperty eventually-actor-is-reader
+  [{:keys [::readers]}]
+  (rh/for-all [actor actors]
+    (rh/always
+     (rh/eventually
+      (contains? readers actor)))))
 
-   (rh/for-all [actor actors]
-     (rh/always
-      (rh/eventually
-       (contains? writers actor))))
+(rh/defproperty eventually-actor-is-writer
+  [{:keys [::writers]}]
+  (rh/for-all [actor actors]
+    (rh/always
+     (rh/eventually
+      (contains? writers actor)))))
 
-   (rh/for-all [actor actors]
-     (rh/always
-      (rh/eventually
-       (not (contains? readers actor)))))
+(rh/defproperty eventually-actor-is-not-a-reader
+  [{:keys [::readers]}]
+  (rh/for-all [actor actors]
+    (rh/always
+     (rh/eventually
+      (not (contains? readers actor))))))
 
-   (rh/for-all [actor actors]
-     (rh/always
-      (rh/eventually
-       (not (contains? writers actor)))))))
+(rh/defproperty eventually-actor-is-not-a-writer
+  [{:keys [::writers]}]
+  (rh/for-all [actor actors]
+    (rh/always
+     (rh/eventually
+      (not (contains? writers actor))))))
 
 (rh/deffairness fairness
   [db]
@@ -129,13 +135,34 @@
 
 (comment
 
+  #_(rh/defproperty eventually-actor-is-writer
+      [{:keys [::writers]}]
+      (rh/for-all [actor #{0} #_actors]
+        (rh/always
+         (rh/eventually
+          (contains? writers actor)))))
+
+  (meta (rt/check-temporal-property result eventually-actor-is-writer))
+
+  (rt/check-temporal-properties result
+                                #{try-read try-write read-or-write stop
+                                  safety fairness
+                                  eventually-actor-is-reader eventually-actor-is-writer
+                                  eventually-actor-is-not-a-reader eventually-actor-is-not-a-writer})
+
+
+
+
+
   (r/run-model global #{try-read try-write read-or-write stop
-                        safety liveness fairness}
+                        safety fairness
+                        eventually-actor-is-reader eventually-actor-is-writer
+                        eventually-actor-is-not-a-reader eventually-actor-is-not-a-writer}
                {#_ #_:trace-example? true
                 #_ #_:workers 1
                 #_ #_:debug? true})
 
-  (r/get-result)
+  (def result (r/get-result))
   (r/halt!)
 
   (mapv waiting-to-read
@@ -160,3 +187,325 @@
   ;; - [ ] Don't return a vector with indexes in the trace unless asked for
 
   ())
+
+(def result
+  '{:trace
+    [[0
+      {:recife.example.readers-writers/readers #{},
+       :recife.example.readers-writers/writers #{},
+       :recife.example.readers-writers/waiting [],
+       :recife.core/procs
+       #:recife.example.readers-writers{:read-or-write
+                                        {:pc
+                                         :recife.example.readers-writers/read-or-write},
+                                        :try-read {:pc :try-read},
+                                        :try-write {:pc :try-write},
+                                        :stop {:pc :stop}}}]
+     [1
+      {:recife.example.readers-writers/readers #{},
+       :recife.example.readers-writers/writers #{},
+       :recife.example.readers-writers/waiting
+       [{:action :read, :actor 1}],
+       :recife.core/procs
+       #:recife.example.readers-writers{:read-or-write
+                                        {:pc
+                                         :recife.example.readers-writers/read-or-write},
+                                        :try-read {:pc :try-read},
+                                        :try-write {:pc :try-write},
+                                        :stop {:pc :stop}},
+       :recife/metadata
+       {:context
+        [:try-read
+         {:self :recife.example.readers-writers/try-read, :actor 1}]}}]
+     [2
+      {:recife.example.readers-writers/readers #{},
+       :recife.example.readers-writers/writers #{},
+       :recife.example.readers-writers/waiting
+       [{:action :read, :actor 1} {:action :read, :actor 2}],
+       :recife.core/procs
+       #:recife.example.readers-writers{:read-or-write
+                                        {:pc
+                                         :recife.example.readers-writers/read-or-write},
+                                        :try-read {:pc :try-read},
+                                        :try-write {:pc :try-write},
+                                        :stop {:pc :stop}},
+       :recife/metadata
+       {:context
+        [:try-read
+         {:self :recife.example.readers-writers/try-read, :actor 2}]}}]
+     [3
+      {:recife.example.readers-writers/readers #{},
+       :recife.example.readers-writers/writers #{},
+       :recife.example.readers-writers/waiting
+       [{:action :read, :actor 1}
+        {:action :read, :actor 2}
+        {:action :write, :actor 0}],
+       :recife.core/procs
+       #:recife.example.readers-writers{:read-or-write
+                                        {:pc
+                                         :recife.example.readers-writers/read-or-write},
+                                        :try-read {:pc :try-read},
+                                        :try-write {:pc :try-write},
+                                        :stop {:pc :stop}},
+       :recife/metadata
+       {:context
+        [:try-write
+         {:self :recife.example.readers-writers/try-write, :actor 0}]}}]
+     [4
+      {:recife.example.readers-writers/readers #{},
+       :recife.example.readers-writers/writers #{},
+       :recife.example.readers-writers/waiting
+       [{:action :read, :actor 1}
+        {:action :read, :actor 2}
+        {:action :write, :actor 0}
+        {:action :read, :actor 0}],
+       :recife.core/procs
+       #:recife.example.readers-writers{:read-or-write
+                                        {:pc
+                                         :recife.example.readers-writers/read-or-write},
+                                        :try-read {:pc :try-read},
+                                        :try-write {:pc :try-write},
+                                        :stop {:pc :stop}},
+       :recife/metadata
+       {:context
+        [:try-read
+         {:self :recife.example.readers-writers/try-read, :actor 0}]}}]
+     [5
+      {:recife.example.readers-writers/readers #{},
+       :recife.example.readers-writers/writers #{},
+       :recife.example.readers-writers/waiting
+       [{:action :read, :actor 1}
+        {:action :read, :actor 2}
+        {:action :write, :actor 0}
+        {:action :read, :actor 0}
+        {:action :write, :actor 1}],
+       :recife.core/procs
+       #:recife.example.readers-writers{:read-or-write
+                                        {:pc
+                                         :recife.example.readers-writers/read-or-write},
+                                        :try-read {:pc :try-read},
+                                        :try-write {:pc :try-write},
+                                        :stop {:pc :stop}},
+       :recife/metadata
+       {:context
+        [:try-write
+         {:self :recife.example.readers-writers/try-write, :actor 1}]}}]
+     [6
+      {:recife.example.readers-writers/readers #{},
+       :recife.example.readers-writers/writers #{},
+       :recife.example.readers-writers/waiting
+       [{:action :read, :actor 1}
+        {:action :read, :actor 2}
+        {:action :write, :actor 0}
+        {:action :read, :actor 0}
+        {:action :write, :actor 1}
+        {:action :write, :actor 2}],
+       :recife.core/procs
+       #:recife.example.readers-writers{:read-or-write
+                                        {:pc
+                                         :recife.example.readers-writers/read-or-write},
+                                        :try-read {:pc :try-read},
+                                        :try-write {:pc :try-write},
+                                        :stop {:pc :stop}},
+       :recife/metadata
+       {:context
+        [:try-write
+         {:self :recife.example.readers-writers/try-write, :actor 2}]}}]
+     [7
+      {:recife.example.readers-writers/readers #{1},
+       :recife.example.readers-writers/writers #{},
+       :recife.example.readers-writers/waiting
+       ({:action :read, :actor 2}
+        {:action :write, :actor 0}
+        {:action :read, :actor 0}
+        {:action :write, :actor 1}
+        {:action :write, :actor 2}),
+       :recife.core/procs
+       #:recife.example.readers-writers{:read-or-write
+                                        {:pc
+                                         :recife.example.readers-writers/read-or-write},
+                                        :try-read {:pc :try-read},
+                                        :try-write {:pc :try-write},
+                                        :stop {:pc :stop}},
+       :recife/metadata
+       {:context
+        [:recife.example.readers-writers/read-or-write
+         {:self :recife.example.readers-writers/read-or-write}]}}]
+     [8
+      {:recife.example.readers-writers/readers #{},
+       :recife.example.readers-writers/writers #{},
+       :recife.example.readers-writers/waiting
+       ({:action :read, :actor 2}
+        {:action :write, :actor 0}
+        {:action :read, :actor 0}
+        {:action :write, :actor 1}
+        {:action :write, :actor 2}),
+       :recife.core/procs
+       #:recife.example.readers-writers{:read-or-write
+                                        {:pc
+                                         :recife.example.readers-writers/read-or-write},
+                                        :try-read {:pc :try-read},
+                                        :try-write {:pc :try-write},
+                                        :stop {:pc :stop}},
+       :recife/metadata
+       {:context
+        [:stop
+         {:self :recife.example.readers-writers/stop, :actor 1}]}}]
+     [9
+      {:recife.example.readers-writers/readers #{2},
+       :recife.example.readers-writers/writers #{},
+       :recife.example.readers-writers/waiting
+       ({:action :write, :actor 0}
+        {:action :read, :actor 0}
+        {:action :write, :actor 1}
+        {:action :write, :actor 2}),
+       :recife.core/procs
+       #:recife.example.readers-writers{:read-or-write
+                                        {:pc
+                                         :recife.example.readers-writers/read-or-write},
+                                        :try-read {:pc :try-read},
+                                        :try-write {:pc :try-write},
+                                        :stop {:pc :stop}},
+       :recife/metadata
+       {:context
+        [:recife.example.readers-writers/read-or-write
+         {:self :recife.example.readers-writers/read-or-write}]}}]
+     [10
+      {:recife.example.readers-writers/readers #{},
+       :recife.example.readers-writers/writers #{},
+       :recife.example.readers-writers/waiting
+       ({:action :write, :actor 0}
+        {:action :read, :actor 0}
+        {:action :write, :actor 1}
+        {:action :write, :actor 2}),
+       :recife.core/procs
+       #:recife.example.readers-writers{:read-or-write
+                                        {:pc
+                                         :recife.example.readers-writers/read-or-write},
+                                        :try-read {:pc :try-read},
+                                        :try-write {:pc :try-write},
+                                        :stop {:pc :stop}},
+       :recife/metadata
+       {:context
+        [:stop
+         {:self :recife.example.readers-writers/stop, :actor 2}]}}]
+     [11
+      {:recife.example.readers-writers/readers #{},
+       :recife.example.readers-writers/writers #{0},
+       :recife.example.readers-writers/waiting
+       ({:action :read, :actor 0}
+        {:action :write, :actor 1}
+        {:action :write, :actor 2}),
+       :recife.core/procs
+       #:recife.example.readers-writers{:read-or-write
+                                        {:pc
+                                         :recife.example.readers-writers/read-or-write},
+                                        :try-read {:pc :try-read},
+                                        :try-write {:pc :try-write},
+                                        :stop {:pc :stop}},
+       :recife/metadata
+       {:context
+        [:recife.example.readers-writers/read-or-write
+         {:self :recife.example.readers-writers/read-or-write}]}}]
+     [12
+      {:recife.example.readers-writers/readers #{},
+       :recife.example.readers-writers/writers #{},
+       :recife.example.readers-writers/waiting
+       ({:action :read, :actor 0}
+        {:action :write, :actor 1}
+        {:action :write, :actor 2}),
+       :recife.core/procs
+       #:recife.example.readers-writers{:read-or-write
+                                        {:pc
+                                         :recife.example.readers-writers/read-or-write},
+                                        :try-read {:pc :try-read},
+                                        :try-write {:pc :try-write},
+                                        :stop {:pc :stop}},
+       :recife/metadata
+       {:context
+        [:stop
+         {:self :recife.example.readers-writers/stop, :actor 0}]}}]
+     [13
+      {:recife.example.readers-writers/readers #{0},
+       :recife.example.readers-writers/writers #{},
+       :recife.example.readers-writers/waiting
+       ({:action :write, :actor 1} {:action :write, :actor 2}),
+       :recife.core/procs
+       #:recife.example.readers-writers{:read-or-write
+                                        {:pc
+                                         :recife.example.readers-writers/read-or-write},
+                                        :try-read {:pc :try-read},
+                                        :try-write {:pc :try-write},
+                                        :stop {:pc :stop}},
+       :recife/metadata
+       {:context
+        [:recife.example.readers-writers/read-or-write
+         {:self :recife.example.readers-writers/read-or-write}]}}]
+     [14
+      {:recife.example.readers-writers/readers #{},
+       :recife.example.readers-writers/writers #{},
+       :recife.example.readers-writers/waiting
+       ({:action :write, :actor 1} {:action :write, :actor 2}),
+       :recife.core/procs
+       #:recife.example.readers-writers{:read-or-write
+                                        {:pc
+                                         :recife.example.readers-writers/read-or-write},
+                                        :try-read {:pc :try-read},
+                                        :try-write {:pc :try-write},
+                                        :stop {:pc :stop}},
+       :recife/metadata
+       {:context
+        [:stop
+         {:self :recife.example.readers-writers/stop, :actor 0}]}}]
+     [15
+      {:recife.example.readers-writers/readers #{},
+       :recife.example.readers-writers/writers #{1},
+       :recife.example.readers-writers/waiting
+       ({:action :write, :actor 2}),
+       :recife.core/procs
+       #:recife.example.readers-writers{:read-or-write
+                                        {:pc
+                                         :recife.example.readers-writers/read-or-write},
+                                        :try-read {:pc :try-read},
+                                        :try-write {:pc :try-write},
+                                        :stop {:pc :stop}},
+       :recife/metadata
+       {:context
+        [:recife.example.readers-writers/read-or-write
+         {:self :recife.example.readers-writers/read-or-write}]}}]
+     [16
+      {:recife.example.readers-writers/readers #{},
+       :recife.example.readers-writers/writers #{},
+       :recife.example.readers-writers/waiting
+       ({:action :write, :actor 2}),
+       :recife.core/procs
+       #:recife.example.readers-writers{:read-or-write
+                                        {:pc
+                                         :recife.example.readers-writers/read-or-write},
+                                        :try-read {:pc :try-read},
+                                        :try-write {:pc :try-write},
+                                        :stop {:pc :stop}},
+       :recife/metadata
+       {:context
+        [:stop
+         {:self :recife.example.readers-writers/stop, :actor 1}]}}]
+     [17
+      {:recife.example.readers-writers/readers #{},
+       :recife.example.readers-writers/writers #{2},
+       :recife.example.readers-writers/waiting (),
+       :recife.core/procs
+       #:recife.example.readers-writers{:read-or-write
+                                        {:pc
+                                         :recife.example.readers-writers/read-or-write},
+                                        :try-read {:pc :try-read},
+                                        :try-write {:pc :try-write},
+                                        :stop {:pc :stop}},
+       :recife/metadata
+       {:context
+        [:recife.example.readers-writers/read-or-write
+         {:self :recife.example.readers-writers/read-or-write}]}}]],
+    :trace-info {:violation {:type :back-to-state, :state-number 0}},
+    :distinct-states 13155,
+    :generated-states 23808,
+    :seed 1392499644786422311,
+    :fp 104})

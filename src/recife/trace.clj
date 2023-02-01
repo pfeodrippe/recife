@@ -24,6 +24,11 @@
                 [:type [:= :leads-to]]
                 [:source [:schema [:ref "tla"]]]
                 [:target [:schema [:ref "tla"]]]]
+               ;; TODO: And can receive multiple arguments.
+               #_[:catn
+                  [:type [:= :and]]
+                  [:source [:schema [:ref "tla"]]]
+                  [:target [:schema [:ref "tla"]]]]
                [:catn
                 [:type [:= :implies]]
                 [:source [:schema [:ref "tla"]]]
@@ -53,8 +58,8 @@
   (when (:debug *trace-view*)
     (swap! (:debug *trace-view*) conj
            (merge {:debug v}
-                  (select-keys *trace-view* [#_:current-state :env])
-                  (select-keys (:current-state *trace-view*) [::idx])))))
+                  (select-keys *trace-view* [:env :loopback-idx :chain])
+                  (dissoc (:current-state *trace-view*) ::r/procs :recife/metadata)))))
 
 (defmulti parse-tla :type)
 
@@ -65,30 +70,50 @@
                    :error :__NOT_IMPLEMENTED
                    :value value})))
 
+(defn -not
+  [env child-fn]
+  (with-info {:chain (concat (:chain *trace-view*) [:not])}
+    (let [result (child-fn)]
+      (debug {:result result
+              :type :not
+              :env env})
+      (not result))))
+
 (defmethod parse-tla :not
   [{:keys [child env]}]
-  `(let [res# ~(parse-tla (assoc child :env env))]
-     (not res#)))
+  `(-not ~env (fn []
+                ~(parse-tla (assoc child :env env)))))
 
 (defmethod parse-tla :for-all
   [{:keys [bindings child env]}]
-  `(let [result# (doall
-                  (for ~(->> bindings
-                             (apply concat)
-                             vec)
-                    ~(parse-tla (assoc child :env (merge env (->> (keys bindings)
-                                                                  (mapv (fn [sym]
-                                                                          [(keyword sym) sym]))
-                                                                  (into {})))))))]
-     (every? (comp true? boolean) result#)))
+  `(with-info {:chain (concat (:chain *trace-view*) [:for-all])}
+     (let [result# (doall
+                    (for ~(->> bindings
+                               (mapv (fn [[k# v#]]
+                                       [k# (if (and (seq? v#)
+                                                    (number? (first v#)))
+                                             `(quote ~v#)
+                                             v#)]))
+                               (apply concat)
+                               vec)
+                      ~(parse-tla (assoc child :env (merge env (->> (keys bindings)
+                                                                    (mapv (fn [sym]
+                                                                            [(keyword sym) sym]))
+                                                                    (into {})))))))]
+       (debug {:result result#
+               :type :for-all
+               :env ~env})
+       (every? (comp true? boolean) result#))))
 
 (defmethod parse-tla :invoke
   [{:keys [bindings function env]}]
-  `(let [result# (~function (merge (:current-state *trace-view*) ~bindings))]
-     (debug {:result result#
-             :form (edn/read-string ~(:form (meta bindings)))
-             :env ~env})
-     result#))
+  `(with-info {:chain (concat (:chain *trace-view*) [:invoke])}
+     (let [result# (~function (merge (:current-state *trace-view*) ~bindings))]
+       (debug {:result result#
+               :type :invoke
+               :form (edn/read-string ~(:form (meta bindings)))
+               :env ~env})
+       result#)))
 
 ;; - We are trying to make [](F => []G) work first.
 ;; - How do we keep G activated once it's triggered?
@@ -104,25 +129,36 @@
 (defn -always
   [env child-fn]
   (let [{:keys [behavior loopback-idx]} *trace-view*
-        result (loop [[state & behavior-rest] behavior
-                      idx 0]
-                 (cond
-                   (not state)
-                   true
+        invoke-child (fn [idx state behavior-rest]
+                       (with-info {:env env
+                                   :current-state state
+                                   :loopback-idx (if (pos? (- idx loopback-idx))
+                                                   (inc (- (count behavior) loopback-idx))
+                                                   loopback-idx)
+                                   :behavior (concat (concat [state] behavior-rest)
+                                                     ;; If we are inside the loopback, append
+                                                     ;; the loopback behavior until just before the actual
+                                                     ;; state.
+                                                     (->> (take (- idx loopback-idx) behavior)
+                                                          (mapv #(assoc % ::idx (+ loopback-idx idx)))))}
+                         (let [result (child-fn)]
+                           #_(println :>>>RESULT result :chain (:chain *trace-view*))
+                           result)))
+        result (loop [[state & behavior-rest] behavior]
+                 #_(do (println "\n")
+                     (clojure.pprint/pprint
+                      {:state state
+                       :chain (:chain *trace-view*)}))
+                 (let [idx (::idx state)]
+                   (cond
+                     (not state)
+                     true
 
-                   (with-info {:env env
-                               :current-state state
-                               :behavior (concat behavior-rest
-                                                 ;; If we are inside the loopback, append
-                                                 ;; the loopback behavior until just before the actual
-                                                 ;; state.
-                                                 (->> (take (- idx loopback-idx) behavior)
-                                                      (mapv #(assoc % ::idx (+ loopback-idx idx)))))}
-                     (child-fn))
-                   (recur behavior-rest (inc idx))
+                     (invoke-child idx state behavior-rest)
+                     (recur behavior-rest)
 
-                   :else
-                   false))]
+                     :else
+                     false)))]
     (debug {:result result
             :env env
             :type :always})
@@ -130,16 +166,35 @@
 
 (defmethod parse-tla :always
   [{:keys [child env]}]
-  `(-always ~env (fn []
-                   ~(parse-tla (assoc child :env env)))))
+  `(with-info {:chain (concat (:chain *trace-view*) [:always])}
+     (-always ~env (fn []
+                     ~(parse-tla (assoc child :env env))))))
+
+#_`(fn [trace-view#]
+     (binding [*trace-view* trace-view#]
+       ~(parse-tla (temporal-property->map temporal-property))))
 
 ;; Using the definition that eventually is equal to `(not (always (not true))`
 ;; or not always false.
+(defn -eventually
+  [env child-fn]
+  (with-info {:chain (concat (:chain *trace-view*) [:eventually])}
+    (let [result (child-fn)]
+      (debug {:result result
+              :type :eventually
+              :env env})
+      result)))
+
 (defmethod parse-tla :eventually
   [{:keys [child env]}]
-  `(not (-always ~env (fn []
-                        (not
-                         ~(parse-tla (assoc child :env env)))))))
+  `(-eventually ~env (fn []
+                       ~(parse-tla {:type :not
+                                    :env env
+                                    :child {:type :always
+                                            :child {:type :not
+                                                    :child (assoc child :env env)
+                                                    :env env}
+                                            :env env}}))))
 
 (defn -implies
   [env source-fn target-fn]
@@ -153,23 +208,25 @@
 
 (defmethod parse-tla :implies
   [{:keys [source target env]}]
-  `(-implies ~env
-             (fn []
-               ~(parse-tla (assoc source :env env)))
-             (fn []
-               ~(parse-tla (assoc target :env env)))))
+  `(with-info {:chain (concat (:chain *trace-view*) [:implies])}
+     (-implies ~env
+               (fn []
+                 ~(parse-tla (assoc source :env env)))
+               (fn []
+                 ~(parse-tla (assoc target :env env))))))
 
 ;; Using the definition for leads-to: F ~> G == [](F => <>G).
 (defmethod parse-tla :leads-to
   [{:keys [source target env]}]
-  `(-always ~env
-            (fn []
-              ~(parse-tla {:type :implies
-                           :env env
-                           :source (assoc source :env env)
-                           :target {:type :eventually
-                                    :env env
-                                    :child (assoc target :env env)}}))))
+  `(with-info {:chain (concat (:chain *trace-view*) [:leads-to])}
+     (-always ~env
+              (fn []
+                ~(parse-tla {:type :implies
+                             :env env
+                             :source (assoc source :env env)
+                             :target {:type :eventually
+                                      :env env
+                                      :child (assoc target :env env)}})))))
 
 (defn check-temporal-property
   "Given a result (the dereffed return from `r/run-model`), it checks if a
@@ -223,9 +280,11 @@
 
   Check `check-temporal-property` for more information about the return values."
   [result components]
-  (let [properties (set (filter #(= (type %) ::r/Property)
-                                (flatten (seq components))))]
+  (let [properties (->> (flatten (seq components))
+                        (filter #(= (type %) ::r/Property))
+                        set)]
     (->> properties
+         (sort-by :name)
          (mapv (fn [{:keys [name] :as property}]
                  [name (check-temporal-property result property)]))
          (into {}))))
