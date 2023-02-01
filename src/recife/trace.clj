@@ -101,21 +101,25 @@
 ;; - What we need now is get for eventually to work, but without
 ;;   knowing that it's eventually by using the definition
 
-;; F ~> G == [](F => <>G)
-
 (defn -always
   [env child-fn]
-  (let [{:keys [behavior]} *trace-view*
-        result (loop [[state & behavior-rest] behavior]
+  (let [{:keys [behavior loopback-idx]} *trace-view*
+        result (loop [[state & behavior-rest] behavior
+                      idx 0]
                  (cond
                    (not state)
                    true
 
                    (with-info {:env env
                                :current-state state
-                               :behavior behavior-rest}
+                               :behavior (concat behavior-rest
+                                                 ;; If we are inside the loopback, append
+                                                 ;; the loopback behavior until just before the actual
+                                                 ;; state.
+                                                 (->> (take (- idx loopback-idx) behavior)
+                                                      (mapv #(assoc % ::idx (+ loopback-idx idx)))))}
                      (child-fn))
-                   (recur behavior-rest)
+                   (recur behavior-rest (inc idx))
 
                    :else
                    false))]
@@ -154,6 +158,18 @@
                ~(parse-tla (assoc source :env env)))
              (fn []
                ~(parse-tla (assoc target :env env)))))
+
+;; Using the definition for leads-to: F ~> G == [](F => <>G).
+(defmethod parse-tla :leads-to
+  [{:keys [source target env]}]
+  `(-always ~env
+            (fn []
+              ~(parse-tla {:type :implies
+                           :env env
+                           :source (assoc source :env env)
+                           :target {:type :eventually
+                                    :env env
+                                    :child (assoc target :env env)}}))))
 
 (defn check-temporal-property
   "Given a result (the dereffed return from `r/run-model`), it checks if a
@@ -221,13 +237,13 @@
   ;;   - Page 88 of Specifying Systems (Sec. 8.1)
   ;;     - http://lamport.azurewebsites.net/tla/book-21-07-04.pdf
   ;; - [x] Always
-  ;; - [ ] Leads to
-  ;; - [ ] Eventually
-  ;; - [ ] Implies that
-  ;; - [ ] For all
+  ;; - [x] Leads to
+  ;; - [x] Eventually
+  ;; - [x] Implies
+  ;; - [x] For all
+  ;; - [x] Call (invoke)
   ;; - [ ] Not
   ;; - [ ] For some
-  ;; - [ ] Call
   ;; - [ ] And*
   ;; - [ ] Or*
 
