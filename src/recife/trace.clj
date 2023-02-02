@@ -15,6 +15,10 @@
                 [:bindings [:map-of :symbol [:schema [:ref "tla"]]]]
                 [:child [:schema [:ref "tla"]]]]
                [:catn
+                [:type [:= :exists]]
+                [:bindings [:map-of :symbol [:schema [:ref "tla"]]]]
+                [:child [:schema [:ref "tla"]]]]
+               [:catn
                 [:type [:= :always]]
                 [:child [:schema [:ref "tla"]]]]
                [:catn
@@ -24,11 +28,12 @@
                 [:type [:= :leads-to]]
                 [:source [:schema [:ref "tla"]]]
                 [:target [:schema [:ref "tla"]]]]
-               ;; TODO: And can receive multiple arguments.
-               #_[:catn
-                  [:type [:= :and]]
-                  [:source [:schema [:ref "tla"]]]
-                  [:target [:schema [:ref "tla"]]]]
+               [:catn
+                [:type [:= :and]]
+                [:children [:* [:schema [:ref "tla"]]]]]
+               [:catn
+                [:type [:= :or]]
+                [:children [:* [:schema [:ref "tla"]]]]]
                [:catn
                 [:type [:= :implies]]
                 [:source [:schema [:ref "tla"]]]
@@ -84,6 +89,38 @@
   `(-not ~env (fn []
                 ~(parse-tla (assoc child :env env)))))
 
+(defn -and
+  [env children-fn]
+  (with-info {:chain (concat (:chain *trace-view*) [:and])}
+    (let [result (children-fn)]
+      (debug {:result result
+              :type :and
+              :env env})
+      result)))
+
+(defmethod parse-tla :and
+  [{:keys [children env]}]
+  `(-and ~env (fn []
+                (->> ~(->> children
+                           (mapv #(parse-tla (assoc % :env env))))
+                     (every? (comp true? boolean))))))
+
+(defn -or
+  [env children-fn]
+  (with-info {:chain (concat (:chain *trace-view*) [:or])}
+    (let [result (children-fn)]
+      (debug {:result result
+              :type :or
+              :env env})
+      result)))
+
+(defmethod parse-tla :or
+  [{:keys [children env]}]
+  `(-and ~env (fn []
+                (->> ~(->> children
+                           (mapv #(parse-tla (assoc % :env env))))
+                     (some (comp true? boolean))))))
+
 (defmethod parse-tla :for-all
   [{:keys [bindings child env]}]
   `(with-info {:chain (concat (:chain *trace-view*) [:for-all])}
@@ -104,6 +141,18 @@
                :type :for-all
                :env ~env})
        (every? (comp true? boolean) result#))))
+
+(defmethod parse-tla :exists
+  [{:keys [bindings child env]}]
+  `(with-info {:chain (concat (:chain *trace-view*) [:exists])}
+     ~(parse-tla {:type :not
+                  :env env
+                  :child {:type :for-all
+                          :bindings bindings
+                          :env env
+                          :child {:type :not
+                                  :env env
+                                  :child (assoc child :env env)}}})))
 
 (defmethod parse-tla :invoke
   [{:keys [bindings function env]}]
@@ -242,15 +291,6 @@
   The return is a map with a `:violated?` key, indicating if this temp property
   is violated by the trace from `result`."
   [result temporal-property]
-
-  (def temporal-property temporal-property)
-  (def result result)
-
-  (:property temporal-property)
-  (identity result)
-
-  (temporal-property->map temporal-property)
-
   (let [compiled-property
         (eval `(fn [trace-view#]
                  (binding [*trace-view* trace-view#]
@@ -267,7 +307,7 @@
                     :current-state (assoc (first behavior) ::idx 0)
                     :debug (atom [])}
         violated? (not (compiled-property trace-view))]
-    (def ^:dynamic *trace-view* trace-view)
+    #_(def ^:dynamic *trace-view* trace-view)
     (with-meta {:violated? violated?}
       {:violated? violated?
        :debug @(:debug trace-view)})))
@@ -301,9 +341,9 @@
   ;; - [x] Implies
   ;; - [x] For all
   ;; - [x] Call (invoke)
-  ;; - [ ] Not
-  ;; - [ ] For some
-  ;; - [ ] And*
-  ;; - [ ] Or*
+  ;; - [x] Not
+  ;; - [x] For some (exists)
+  ;; - [x] And*
+  ;; - [x] Or*
 
   ())

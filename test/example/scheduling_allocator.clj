@@ -237,7 +237,7 @@ assuming that the clients scheduled earlier release their resources."
                {#_ #_:debug? true
                 #_ #_:workers 1})
 
-  (r/get-result)
+  (def result (r/get-result))
   (r/read-saved-data :recife/violation)
   (r/halt!)
 
@@ -249,6 +249,24 @@ assuming that the clients scheduled earlier release their resources."
                                   allocator-invariant-3 allocator-invariant-4
                                   clients-will-return clients-will-obtain inf-often-satisfied
                                   [allocate-fairness return-fairness]})
+
+  (rh/defproperty clients-will-obtain
+    [{:keys [::unsat ::alloc]}]
+    (rh/and*
+     (rh/for-all [c clients]
+       (rh/for-all [r resources]
+         ;; We just add not*(s) here so we can test the temporal property checks,
+         ;; but the meaning is exactly the same as the original.
+         (rh/not*
+          (rh/not*
+           (rh/leads-to
+            (contains? (get unsat c) r)
+            (contains? (get alloc c) r))))))
+     (rh/for-some [c clients
+                   r resources]
+       (rh/leads-to
+        (contains? (get alloc c) r)
+        (contains? (get unsat c) r)))))
 
   ())
 
