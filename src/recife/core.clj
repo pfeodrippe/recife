@@ -2262,6 +2262,7 @@ VIEW
   ;;   - It can't be used in temporal properties (AFAIK), and action properties
   ;;     already receive the next state
   ;; - [x] Add documentation using Clerk
+  ;; - [ ] Use it for real cases at work
   ;; - [ ] Ability to  query for provenance
   ;;   - [ ] E.g. how could I have an entity with such and such characteristics?
   ;;   - This would help us to ask questions about the system
@@ -2273,11 +2274,11 @@ VIEW
   ;;   - [ ] Ability to check traces while running
   ;;     - [ ] Show it with clerk
   ;; - [ ] Create a def that can abstract a state machine
-  ;; - [ ] Add `defchecker` (complement of `definvariant`)
+  ;; - [x] Add `defchecker` (complement of `definvariant`)
   ;; - [ ] Add a way to use locks without having the user having to reinvent the
   ;;       wheel every time
-  ;; - [ ] Add `not*` to rh
-  ;; - [ ] Add a way to tell which temporal properties were violated
+  ;; - [x] Add `not*` to rh
+  ;; - [x] Add a way to tell which temporal properties were violated
   ;;   - https://github.com/tlaplus/tlaplus/issues/641
   ;; - [ ] Check a trace using properties and invariants without running the
   ;;       model
