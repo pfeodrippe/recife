@@ -17,6 +17,7 @@
    [potemkin :refer [def-map-type]]
    [recife.buffer :as r.buf]
    [recife.schema :as schema]
+   [recife.trace :as rt]
    [recife.util :as u :refer [p*]]
    [taoensso.tufte :as tufte :refer [defnp p defnp-]]
    [tla-edn-2.core :as tla-edn]
@@ -1836,7 +1837,7 @@ VIEW
                                                complete-response?
                                                no-deadlock
                                                depth async simulate generate
-                                                continue
+                                               continue
                                                ;; Below opts are used in the child
                                                ;; process.
                                                trace-example? dump-states?]
@@ -1883,7 +1884,7 @@ VIEW
              (r.buf/start-sync-loop!))
          ;; Also put a file with opts in the same folder so we can read configuration
          ;; in the tlc-handler function.
-         _ (spit opts-file-path (merge opts
+         _ (spit opts-file-path (merge (dissoc opts ::components)
                                        (when use-buffer
                                          {::channel-file-path (str @r.buf/*channel-file)})))
          tlc-opts (->> (cond-> ["-noTE" "-nowarning"]
@@ -1975,7 +1976,12 @@ VIEW
                             (try
                               (let [edn (-> @output last edn/read-string)]
                                 (if (map? edn)
-                                  edn
+                                  (cond-> edn
+                                    (= (-> edn :trace-info :violation :type) :back-to-state)
+                                    ;; Tell the user which temporal properties are violated,
+                                    ;; this still needs lots of testing!
+                                    (assoc-in [:experimental :violated-temporal-properties]
+                                              (rt/check-temporal-properties edn (::components opts))))
                                   (println (-> @output last))))
                               (catch Exception _
                                 (println (-> @output last))))))))
@@ -2071,7 +2077,7 @@ VIEW
                                 (map :operator properties)
                                 (map :operator action-properties)
                                 (map :operator fairness)))]
-     (run-model* db-init next' operators opts))))
+     (run-model* db-init next' operators (assoc opts ::components components)))))
 
 (defmacro defproc
   "Defines a process and its multiple instances (`:procs`).
@@ -2293,6 +2299,7 @@ VIEW
   ;; - [ ] Warn about invalid temporal property?
   ;; - [ ] Add `["-lncheck" "final"]` by default
   ;; - [ ] Check if it's possible to do refinement
+  ;;   - https://hillelwayne.com/post/refinement/#fnref:scope
 
   ())
 

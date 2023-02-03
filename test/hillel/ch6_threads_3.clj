@@ -84,14 +84,15 @@
 
   ;; back-to-state at around 30-32 states (back to 2-4)
   (def result
-    @(r/run-model global #{thread at-most-one-critical no-livelocks}
-                  {:workers 1
-                   :fp 0
-                   :seed 1
-                   #_ #_:simulate true
-                   #_ #_:run-local? true}))
+    (r/run-model global #{thread at-most-one-critical no-livelocks}
+                 {#_ #_:workers 1
+                  :fp 0
+                  :seed 1
+                  #_ #_:simulate true
+                  #_ #_:run-local? true}))
 
   (r/get-result)
+  (r/halt!)
   (ra/visualize-result result)
 
   ;; TODO:
@@ -114,6 +115,7 @@
   ;;   - [x] Get number of states checked and the number of traces
   ;;   - [x] For multiple workers, get first trace
   ;; - 19s achieved after removing TLA checks
+  ;; - 5s
   ;; - [ ] Check statistics http://conf.tlapl.us/2022/JackMarkusTLA+Statistics.pdf
   ;; - [ ] Create macro that sends data from chilren processes  to the current
   ;;       JVM

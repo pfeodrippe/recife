@@ -449,7 +449,9 @@
                  :distinct-states 45
                  :generated-states 91
                  :seed 1
-                 :fp 0}
+                 :fp 0
+                 :experimental {:violated-temporal-properties
+                                #:hillel.ch6-threads-2{:no-livelocks {:violated? true}}}}
                 result))
     (simulate-assert result)))
 
@@ -924,6 +926,8 @@
             :generated-states nil
             :seed 1
             :fp 0
-            :simulation {:states-count 580 :traces-count 5}}
+            :simulation {:states-count 580 :traces-count 5}
+            :experimental {:violated-temporal-properties
+                           #:hillel.ch6-threads-3{:no-livelocks {:violated? true}}}}
            result))
     (simulate-assert result)))
