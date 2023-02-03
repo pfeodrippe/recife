@@ -2,7 +2,7 @@
   (:require
    [clojure.edn :as edn]
    [malli.core :as m]
-   [recife.core :as r]))
+   [recife.core :as-alias r]))
 
 (defn temporal-property->map
   [temporal-property]
@@ -291,26 +291,28 @@
   The return is a map with a `:violated?` key, indicating if this temp property
   is violated by the trace from `result`."
   [result temporal-property]
-  (let [compiled-property
-        (eval `(fn [trace-view#]
-                 (binding [*trace-view* trace-view#]
-                   ~(parse-tla (temporal-property->map temporal-property)))))
+  (if (nil? (-> result :trace-info :violation :state-number))
+    {:violated? false}
+    (let [compiled-property
+          (eval `(fn [trace-view#]
+                   (binding [*trace-view* trace-view#]
+                     ~(parse-tla (temporal-property->map temporal-property)))))
 
-        loopback-idx (-> result :trace-info :violation :state-number)
-        behavior (->> (:trace result)
-                      (mapv second))
-        trace-view {:behavior (->> behavior
-                                   (map-indexed (fn [idx v]
-                                                  (assoc v ::idx idx)))
-                                   vec)
-                    :loopback-idx loopback-idx
-                    :current-state (assoc (first behavior) ::idx 0)
-                    :debug (atom [])}
-        violated? (not (compiled-property trace-view))]
-    #_(def ^:dynamic *trace-view* trace-view)
-    (with-meta {:violated? violated?}
-      {:violated? violated?
-       :debug @(:debug trace-view)})))
+          loopback-idx (-> result :trace-info :violation :state-number)
+          behavior (->> (:trace result)
+                        (mapv second))
+          trace-view {:behavior (->> behavior
+                                     (map-indexed (fn [idx v]
+                                                    (assoc v ::idx idx)))
+                                     vec)
+                      :loopback-idx loopback-idx
+                      :current-state (assoc (first behavior) ::idx 0)
+                      :debug (atom [])}
+          violated? (not (compiled-property trace-view))]
+      #_(def ^:dynamic *trace :as-view* trace-view)
+      (with-meta {:violated? violated?}
+        {:violated? violated?
+         :debug @(:debug trace-view)}))))
 
 (defn check-temporal-properties
   "Given a result (the dereffed return from `r/run-model`) and the temporal properties
