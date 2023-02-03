@@ -13,21 +13,24 @@
 ;; => (4 3)
 
 (def global
-  {::q (r/one-of (range 10))
-   ::a (r/one-of (range 10))})
+  {::q (r/one-of (range 100))
+   ::a (r/one-of (range 100))})
 
 (rh/defchecker member-of
   [{::keys [a q]}]
-  (and (contains? #{1 4 3} a)
-       (contains? #{4 5 3} a)
-       (contains? #{7 8 q} a)))
+  (and (contains? (set [1 4 3]) a)
+       (contains? (set [4 5 3]) a)
+       (contains? (set [7 8 q]) a)))
 
 (comment
 
   (r/run-model global #{member-of} {#_ #_:debug? true
-                                    #_ #_:workers 1})
+                                    #_ #_:workers 1
+                                    :continue true})
+
+  ;; When you run above, you can see that it found the same `a` and `q`
+  ;; as found by core logic.
   (r/read-saved-data :recife/violation)
-  (r/halt!)
 
   ())
 
@@ -43,8 +46,7 @@
 ;;       - [x] Check traces
 ;;       - [ ] Use an action property for it, see
 ;;             https://github.com/tlaplus/tlaplus/issues/786#issuecomment-1407496531
-;;   - [ ] Create continuous mode
-;;   - [ ] Test that the output is the same as the core logic one
+;;   - [x] Test that the output is the same as the core logic one
 ;; - [-] Maybe can use core.logic for the traces?
 
 ;; Instead of looking for violations, you may be
