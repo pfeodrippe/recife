@@ -13,10 +13,23 @@
 ;; => (4 3)
 
 (def global
-  {})
+  {::q (r/one-of (range 10))
+   ::a (r/one-of (range 10))})
 
-(r/defproc try-read
-  (fn [{:keys [actor] :as db}]))
+(rh/defchecker member-of
+  [{::keys [a q]}]
+  (and (contains? #{1 4 3} a)
+       (contains? #{4 5 3} a)
+       (contains? #{7 8 q} a)))
+
+(comment
+
+  (r/run-model global #{member-of} {#_ #_:debug? true
+                                    #_ #_:workers 1})
+  (r/read-saved-data :recife/violation)
+  (r/halt!)
+
+  ())
 
 ;; TODO:
 ;; - [ ] Can we find multiple examples using TLC?
@@ -30,9 +43,9 @@
 ;;       - [x] Check traces
 ;;       - [ ] Use an action property for it, see
 ;;             https://github.com/tlaplus/tlaplus/issues/786#issuecomment-1407496531
-;;     - [ ] Do we have a way to know if a trace is "done" while
-;;           running the spec?
-;; - [ ] Maybe can use core.logic for the traces?
+;;   - [ ] Create continuous mode
+;;   - [ ] Test that the output is the same as the core logic one
+;; - [-] Maybe can use core.logic for the traces?
 
 ;; Instead of looking for violations, you may be
 ;; interested on the opposite, a trace example that satisfied some

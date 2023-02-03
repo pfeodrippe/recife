@@ -119,7 +119,8 @@
                     {:form ~(pr-str form)})
           (fn [{:keys ~(vec local-vars)
                 :as db#}]
-            (let [~(first global-vars) db#]
+            (let [~(first global-vars) db#
+                  ~'--db db#]
               ~form))]))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; Quantifiers and functions
@@ -312,31 +313,56 @@
          (eval '~@body)))))
 
 (defn -save-invariant-violation
-  [name]
+  [name db]
   (when (not (get-trace-value :recife/trace-violated?))
-    (let [current-state (tlc2.util.IdThread/getCurrentState)]
-      (r/save! :recife/violation
-               {:trace (->> (->> (tlc2.module.TLCExt/getTrace nil nil nil
-                                                              current-state
-                                                              nil 0 nil)
-                                 tla-edn-2.core/to-edn
-                                 (mapv :main-var))
-                            (map-indexed (fn [idx step] [idx step]))
-                            vec)
-                :type :invariant
-                :name name})
+    (let [current-state (tlc2.util.IdThread/getCurrentState)
+          violation {:trace (if (zero? (get-level))
+                              (->> [db]
+                                   (map-indexed (fn [idx step] [idx step]))
+                                   vec)
+                              (->> (->> (tlc2.module.TLCExt/getTrace nil nil nil
+                                                                     current-state
+                                                                     nil 0 nil)
+                                        tla-edn-2.core/to-edn
+                                        (mapv :main-var))
+                                   (map-indexed (fn [idx step] [idx step]))
+                                   vec))
+                     :type :invariant
+                     :name name}]
+      (r/save! :recife/violation violation)
       (set-trace-value! :recive/trace-violated? true)))
   false)
 
 (defmacro definvariant
+  "It checks that a predicate satisfies every found state."
   {:arglists '([name doc-string? [db] body])}
   [name & decl]
   (let [[doc-string params body] (parse-decl decl)]
-    `(r/-definvariant ~name
-       ~doc-string
-       (fn ~params
-         (or ~@body
-             (-save-invariant-violation (symbol ~(str *ns*) (str '~name))))))))
+    `(r/-definvariant
+      ~name
+      ~doc-string
+      (fn [~'--db]
+        (let [~(first params) ~'--db]
+          (or ~@body
+              (-save-invariant-violation (symbol ~(str *ns*) (str '~name))
+                                         ~'--db)))))))
+
+(defmacro defchecker
+  "Like `definvariant`, but it checks that a predicate is **not**
+  satisfied.
+
+  It can be used for finding examples for some condition."
+  {:arglists '([name doc-string? [db] body])}
+  [name & decl]
+  (let [[doc-string params body] (parse-decl decl)]
+    `(r/-definvariant
+      ~name
+      ~doc-string
+      (fn [~'--db]
+        (let [~(first params) ~'--db]
+          (or (not ~@body)
+              (-save-invariant-violation (symbol ~(str *ns*) (str '~name))
+                                         ~'--db)))))))
 
 (defmacro deffairness
   {:arglists '([name doc-string? [db] body])}

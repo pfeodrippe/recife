@@ -97,30 +97,36 @@
    (.rewind buf)
    nil))
 
+(def ^:private write-lock (Object.))
+
 (defn- buf-write
   ([edn]
    (buf-write @*buf edn))
   ([buf edn]
    (buf-write buf edn {}))
   ([^java.nio.DirectCharBufferS buf edn {:keys [_offset]}]
-   (let [arr (.toCharArray (if edn
-                             (str (pr-str edn) "\n")
-                             (str (char 0))))]
-     (.put buf arr)
-     #_(if offset
-       (.put buf arr offset (alength arr))
-       (.put buf arr)))
-   true))
+   (locking write-lock
+     (let [arr (.toCharArray (if edn
+                               (str (pr-str edn) "\n")
+                               (str (char 0))))]
+       (.put buf arr)
+       #_(if offset
+           (.put buf arr offset (alength arr))
+           (.put buf arr)))
+     true)))
 
 (def ^:private *saved (atom []))
 
+(def ^:private flush-lock (Object.))
+
 (defn flush!
   []
-  (buf-write nil)
-  (buf-rewind)
-  (buf-write 1)
-  (buf-rewind)
-  (reset! *saved []))
+  (locking flush-lock
+    (buf-write nil)
+    (buf-rewind)
+    (buf-write 1)
+    (buf-rewind)
+    (reset! *saved [])))
 
 (defn- -save!
   [v]
