@@ -946,19 +946,6 @@
       :recife.operator/type :invariant
       :doc-string doc-string})))
 
-(defn checker
-  [identifier expr]
-  (let [op (eval
-            `(spec/defop ~(symbol (str (custom-munge identifier) "2")) {:module "spec"}
-               [^Value ~'main-var]
-               (process-config-operator (complement ~expr) ~'main-var)))]
-    {:identifier (symbol (custom-munge identifier))
-     :op-ns (-> op meta :op-ns)
-     :identifier-2 (str (symbol (str (custom-munge identifier) "2")) "(_main_var) == _main_var = _main_var")
-     :form (str (symbol (str (custom-munge identifier) "2"))
-                "(main_var)")
-     :recife.operator/type :invariant}))
-
 (defn state-constraint
   [identifier expr]
   (let [op (eval
@@ -1270,7 +1257,10 @@
                                        (mapcat (fn [{:keys [:recife/fairness-map]}]
                                                  (:identifiers fairness-map)))
                                        (str/join "\n\n"))
-                              "")]
+                              "")
+        formatted-next-form (if (seq (:form next))
+                              (:form next)
+                              "FALSE")]
     (int/i "
 -------------------------------- MODULE #{spec-name} --------------------------------
 
@@ -1300,7 +1290,7 @@ __init ==
 #{formatted-operators}
 
 #{(:identifier next)} ==
-   #{(:form next)}
+   #{formatted-next-form}
 
 Init == __init
 
@@ -2056,10 +2046,12 @@ VIEW
          properties (filter #(= (type %) ::Property) components)
          action-properties (filter #(= (type %) ::ActionProperty) components)
          fairness (filter #(= (type %) ::Fairness) components)
+         procs (->> processes
+                    (mapv :procs)
+                    (apply merge))
          db-init (merge init-global-state
-                        {::procs (->> processes
-                                      (mapv :procs)
-                                      (apply merge))})
+                        (when (seq procs)
+                          {::procs procs}))
          next' (tla ::next
                     (->> processes
                          (mapv (fn [{:keys [:steps-keys :procs]}]

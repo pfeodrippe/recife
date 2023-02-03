@@ -9,6 +9,7 @@
            recife.helpers/defproperty clojure.core/defn
            recife.helpers/deffairness clojure.core/defn
            recife.helpers/definvariant clojure.core/defn
+           recife.helpers/defchecker clojure.core/defn
            recife.helpers/defconstraint clojure.core/defn
            recife.helpers/defaction-constraint clojure.core/defn
            recife.helpers/defaction-property clojure.core/defn
