@@ -2,11 +2,13 @@
   (:require
    [clojure.math.combinatorics :as comb]
    [recife.core :as r]
-   [tla-edn-2.core :as tla-edn])
+   [tla-edn-2.core :as tla-edn]
+   recife.records)
   (:import
    (tlc2 TLCGlobals)
    (tlc2.util IdThread)
-   (recife RecifeEdnValue)))
+   (recife RecifeEdnValue)
+   (recife.records RecifeProc)))
 
 (set! *warn-on-reflection* true)
 (set! *unchecked-math* false)
@@ -221,9 +223,10 @@
   "Invoke process step."
   [proc body]
   (let [proc' (eval proc)]
-    (when-not (= (type proc') ::r/Proc)
+    (when-not (= (type proc') RecifeProc)
       (throw (ex-info "First argument of `call` should be a proc (return of `recife.core/defproc`)"
-                      {:non-proc proc})))
+                      {:type (type proc')
+                       :non-proc proc'})))
     (into [:or]
           (for [step-key (:steps-keys proc')]
             `(for-all [~'self (keys (:procs ~proc))]
@@ -260,15 +263,7 @@
 (defmacro defproperty
   {:arglists '([name doc-string? [db] body])}
   [name & decl]
-  (let [[_doc-string params body] (parse-decl decl)
-        #_ #_body (list
-                   (concat
-                    (cons `or*
-                          body)
-                    (list `(boolean (println :aaaa)))
-                    #_(list (list 'eval (list '-save-temporal-property-violation
-                                              (list 'symbol (str *ns*)
-                                                    (str (quote name))))))))]
+  (let [[_doc-string params body] (parse-decl decl)]
     `(r/-defproperty ~name
        (binding [*env* (quote ~(add-global-vars
                                 (mapv (fn [p#] `(quote ~p#))

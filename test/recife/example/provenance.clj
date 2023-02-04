@@ -6,109 +6,107 @@
    [clojure.core.logic :as l]
    [clojure.core.logic.fd :as fd]))
 
-;; Simple member example.
-(comment
-
-  (l/run* [q]
-    (l/fresh [a]
-      (l/membero a [1 4 3])
-      (l/membero a [4 5 3])
-      (l/membero a [7 8 q])))
-  ;; => (4 3)
-
-  ())
-
-(def member-global
-  {::q (r/one-of (range 100))
-   ::a (r/one-of (range 100))})
-
-(rh/defchecker member-of
-  [{::keys [a q]}]
-  (and (contains? (set [1 4 3]) a)
-       (contains? (set [4 5 3]) a)
-       (contains? (set [7 8 q]) a)))
-
-(comment
-
-  (r/run-model member-global #{member-of} {#_ #_:debug? true
-                                           #_ #_:workers 1
-                                           :continue true})
-
-  ;; When you run above, you can see that it has found the same `a` and `q`
-  ;; as found by core logic.
-  ;; Violations are stored at `:recife/violation` so you don't need to wait
-  ;; until the end of the run, they are saved whilt the model is running.
-  (r/read-saved-data :recife/violation)
-
-  ())
-
-;; Denomination sums from https://blog.taylorwood.io/2018/05/10/clojure-logic.html.
-(comment
-
-  (defn productsumo [vars dens sum]
-    (l/fresh [vhead vtail dhead dtail product run-sum]
-      (l/conde
-       [(l/emptyo vars) (l/== sum 0)]
-       [(l/conso vhead vtail vars)
-        (l/conso dhead dtail dens)
-        (fd/* vhead dhead product)
-        (fd/+ product run-sum sum)
-        (productsumo vtail dtail run-sum)])))
-
-  (defn change [amount denoms]
-    (let [dens (sort > denoms)
-          vars (repeatedly (count dens) l/lvar)]
-      (l/run* [q]
-        ;; we want a map from denominations to their quantities
-        (l/== q (zipmap dens vars))
-        ;; prune problem space...
-        ;; every var/quantity must be 0 <= n <= amount
-        (l/everyg #(fd/in % (fd/interval 0 amount)) vars)
-        ;; the real work
-        (productsumo vars dens amount))))
-
-  (change 14 #{1 2 5 10})
-
-  ())
-
-(def den-global
-  {::amount 14
-   ::denoms (->> #{1 2 5 10}
-                 (mapv (fn [value]
-                         [value (r/one-of (range 20))]))
-                 (into {}))})
-
-(rh/defchecker check-amount
-  [{::keys [amount denoms]}]
-  (= amount
-     (->> denoms
-          (reduce (fn [acc [value times]]
-                    (+ acc (* value times)))
-                  0))))
-
-(comment
-
-  (r/run-model den-global #{check-amount} {:continue true})
-
-  (r/read-saved-data :recife/violation)
-
-  ())
-
 ;; TODO:
-;; - [x] Can we find multiple examples using TLC?
-;;   - [x] Save violations
-;;   - [x] Action property
-;;   - [x] Invariant
-;;   - [x] Check property violation using Clojure so we can find the correct
-;;         `defproperty`
-;;     - [x] Compile rh functions to clojure when requested
-;;     - [x] Check traces
-;;   - [-] Temporal property
-;;     - [-] Use an action property for it, see
-;;           https://github.com/tlaplus/tlaplus/issues/786#issuecomment-1407496531
-;;   - [x] Test that the output is the same as the core logic one
-;; - [-] Maybe can use core.logic for the traces?
+;; - [ ] Employer
+;;   - [ ] Model invoice to the portal website
+;;   - [ ] Model partner id being set at worker for an employer
+;; - [ ] Member
+;;   - [ ] Member signs up for a payment method
 
-;; Instead of looking for violations, you may be
-;; interested on the opposite, a example that satisfies some
-;; arbitrary condition.
+(def global
+  {::id 0})
+
+(def ^:private choose-employer
+  (comp keys ::employers))
+
+(r/defproc add-employer
+  (fn [{::keys [id] :as db}]
+    (-> db
+        (update ::id inc)
+        (update ::employers assoc
+                id {:id id}))))
+
+(r/defproc add-parent-employer
+  {[::set-parent-employer
+    {:parent choose-employer
+     :child choose-employer}]
+   (fn [{::keys [employers] :keys [parent child] :as db}]
+     (when (and (not= parent child)
+                (not (:parent (get employers child)))
+                (not (:parent (get employers parent)))
+                (not (contains? (set (mapv :parent (vals employers)))
+                                child)))
+       (-> db
+           (update-in [::employers child] assoc
+                      :parent parent))))})
+
+(r/defproc invoice
+  {[::admin-uploads-invoice
+    {:employer choose-employer}]
+   (fn [{::keys [id] :keys [employer] :as db}]
+     (when employer
+       (-> db
+           (assoc :choosen-employer employer)
+           (update ::id inc)
+           (update-in [::employers employer :invoices-uploaded]
+                      conj id)
+           (r/goto ::system-inserts-invoice))))
+
+   ::system-inserts-invoice
+   (fn [{::keys [employers] :keys [choosen-employer] :as db}]
+     (-> db
+         (update-in [::employers choosen-employer :invoices]
+                    concat (get-in employers [choosen-employer :invoices-uploaded]))
+         (assoc-in [::employers choosen-employer :invoices-uploaded] [])
+         (r/goto ::admin-uploads-invoice)))})
+
+(rh/defchecker check
+  [{::keys [employers]}]
+  (some (comp seq :invoices)
+        (vals employers)))
+
+(rh/definvariant no-grandparent
+  [{::keys [employers]}]
+  (not (some #(-> (:parent %) employers :parent)
+             (vals employers))))
+
+(rh/definvariant no-cyclical-parent
+  [{::keys [employers]}]
+  (not (some #(= (-> (:parent %) employers :parent)
+                 (:id %))
+             (vals employers))))
+
+(rh/defconstraint constraint
+  [{::keys [employers]}]
+  (<= (count employers) 3))
+
+(comment
+
+  (r/run-model global #{add-employer add-parent-employer invoice
+                        check
+                        no-grandparent no-cyclical-parent
+                        constraint}
+               {:trace-example? true})
+
+  (r/get-result)
+  (r/halt!)
+
+  (->> (r/get-result)
+       r/states-from-result
+       r/random-traces-from-states
+       #_(mapv #(mapv last %))
+       #_(mapv last)
+       #_(mapv ::employers))
+
+  ;; You can use a proc as a function as if you were simulating a trace,
+  ;; this is just a convenience so you can emulate some known scenario to harden
+  ;; your code.
+  ;; You can only call procs that have one operator (one step).
+  (-> (add-employer global)
+      add-employer
+      add-employer
+      ;; You can also pass extra args (which represent local variables or
+      ;; non-deterministic ones),
+      (add-parent-employer {:parent 1 :child 2}))
+
+  ())

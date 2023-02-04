@@ -22,7 +22,8 @@
    [taoensso.tufte :as tufte :refer [defnp p defnp-]]
    [tla-edn-2.core :as tla-edn]
    [tla-edn.spec :as spec]
-   recife.class.recife-edn-value)
+   recife.class.recife-edn-value
+   recife.records)
   (:import
    (java.io File)
    (lambdaisland.deep_diff2.diff_impl Mismatch Deletion Insertion)
@@ -30,7 +31,8 @@
    (tlc2.value.impl Value StringValue ModelValue RecordValue FcnRcdValue IntValue
                     TupleValue SetEnumValue BoolValue IntervalValue)
    (util UniqueString)
-   (recife RecifeEdnValue)))
+   (recife RecifeEdnValue)
+   (recife.records RecifeProc)))
 
 (set! *warn-on-reflection* false)
 #_(set! *warn-on-reflection* true)
@@ -848,6 +850,7 @@
                                (-> opts meta :fair+)) :recife.fairness/strongly-fair)
         :recife/fairness-map (some->> (or (-> expr meta :fairness) (-> opts meta :fairness))
                                       (temporal-property (keyword (str (symbol identifier) "-fairness"))))
+        :expr expr
         :form (parse [:if [:raw "recife_check_extra_args(_main_var)"]
                       [:and
                        [:raw (format "recife_check_pc(_main_var, self, %s)"
@@ -1655,12 +1658,17 @@ VIEW
                                                      #_(when-let [ch-buf (some-> @r.buf/*client-channel .buf)]
                                                          (println "Remaining data size in buffer:" (count ch-buf)))
                                                      (r.buf/flush!)
+                                                     (when state-writer
+                                                       (.close state-writer))
                                                      (when-not @*closed-properly?
                                                        (println "\n---- Closing child Recife process ----\n")
                                                        (let [pstats @@u/pd]
                                                          (when (:stats pstats)
                                                            (println (str "\n\n" (tufte/format-pstats pstats)))))
-                                                       (println {:unfinished? true})))))
+                                                       (prn
+                                                        (-> {:unfinished? true}
+                                                            (medley/assoc-some :recife/transit-states-file-path
+                                                                               (:file-path state-writer))))))))
             _ (do (p* ::process
                       (doto ^tlc2.TLC tlc
                         .process))
@@ -2039,7 +2047,7 @@ VIEW
   ([init-global-state components opts]
    (schema/explain-humanized schema/RunModelComponents components "Invalid components")
    (let [components (set (flatten (seq components)))
-         processes (filter #(= (type %) ::Proc) components)
+         processes (filter #(= (type %) RecifeProc) components)
          invariants (filter #(= (type %) ::Invariant) components)
          constraints (filter #(= (type %) ::Constraint) components)
          action-constraints (filter #(= (type %) ::ActionConstraint) components)
@@ -2148,29 +2156,29 @@ VIEW
              params# {:procs procs#
                       :local local-variables#}]
          (schema/explain-humanized schema/DefProc ['~name params# steps#] "Invalid `defproc` args")
-         ^{:type ::Proc}
-         {:name keywordized-name#
-          :steps-keys (->> steps#
-                           keys
-                           (mapv #(if (vector? %)
-                                    ;; If it's a vector, we are only interested
-                                    ;; in the identifier.
-                                    (first %)
-                                    %)))
-          :procs (->> (:procs params#)
-                      (mapv (fn [proc#]
-                              [proc# (:local params#)]))
-                      (into {}))
-          :operators (->> steps#
-                          (mapv #(let [[k# opts#] (if (vector? (key %))
-                                                    [(first (key %))
-                                                     (or (second (key %)) {})]
-                                                    [(key %)
-                                                     {}])]
-                                   (reg k#
-                                     (with-meta opts#
-                                       ~(meta name))
-                                     (val %)))))}))))
+         (recife.records/map->RecifeProc
+          {:name keywordized-name#
+           :steps-keys (->> steps#
+                            keys
+                            (mapv #(if (vector? %)
+                                     ;; If it's a vector, we are only interested
+                                     ;; in the identifier.
+                                     (first %)
+                                     %)))
+           :procs (->> (:procs params#)
+                       (mapv (fn [proc#]
+                               [proc# (:local params#)]))
+                       (into {}))
+           :operators (->> steps#
+                           (mapv #(let [[k# opts#] (if (vector? (key %))
+                                                     [(first (key %))
+                                                      (or (second (key %)) {})]
+                                                     [(key %)
+                                                      {}])]
+                                    (reg k#
+                                      (with-meta opts#
+                                        ~(meta name))
+                                      (val %)))))})))))
 
 (defmacro -definvariant
   [name & opts]
