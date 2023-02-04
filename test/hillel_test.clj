@@ -362,51 +362,50 @@
                               ch5-server-3/reader
                               ch5-server-3/bounded-queue}
                             default-options)]
-    (is (= {:trace
-            [[0
-              {:recife.core/procs
-               {:writer {:pc :hillel.ch5-server-3/write}
-                :reader {:pc :hillel.ch5-server-3/read}}
-               :server/queue []}]
-             [1
-              {:recife.core/procs
-               {:writer {:pc :hillel.ch5-server-3/write}
-                :reader {:pc :hillel.ch5-server-3/read}}
-               :server/queue [:msg]
-               :recife/metadata
-               {:context [:hillel.ch5-server-3/write {:self :writer}]}}]
-             [2
-              {:recife.core/procs
-               {:writer {:pc :hillel.ch5-server-3/write}
-                :reader {:pc :hillel.ch5-server-3/read}}
-               :server/queue [:msg :msg]
-               :recife/metadata
-               {:context [:hillel.ch5-server-3/write {:self :writer}]}}]
-             [3
-              {:recife.core/procs
-               {:writer {:pc :hillel.ch5-server-3/write}
-                :reader
-                {:pc :hillel.ch5-server-3/notify-failure
-                 :current-message :msg}}
-               :server/queue [:msg]
-               :recife/metadata
-               {:context
-                [:hillel.ch5-server-3/read
-                 {:notify-failure? true :self :reader}]}}]
-             [4
-              {:recife.core/procs
-               {:writer {:pc :hillel.ch5-server-3/write}
-                :reader
-                {:pc :hillel.ch5-server-3/notify-failure
-                 :current-message :msg}}
-               :server/queue [:msg :msg]
-               :recife/metadata
-               {:context [:hillel.ch5-server-3/write {:self :writer}]}}]]
-            :trace-info {:violation {:type :deadlock}}
-            :distinct-states 14
-            :generated-states 20
-            :seed 1
-            :fp 0}
+    (is (= '{:trace
+             [[0
+               {:server/queue []
+                :recife.core/procs
+                {:reader {:pc :hillel.ch5-server-3/read}
+                 :writer {:pc :hillel.ch5-server-3/write}}}]
+              [1
+               {:server/queue [:msg]
+                :recife.core/procs
+                {:reader {:pc :hillel.ch5-server-3/read}
+                 :writer {:pc :hillel.ch5-server-3/write}}
+                :recife/metadata
+                {:context [:hillel.ch5-server-3/write {:self :writer}]}}]
+              [2
+               {:server/queue ()
+                :recife.core/procs
+                {:reader
+                 {:pc :hillel.ch5-server-3/notify-failure :current-message :msg}
+                 :writer {:pc :hillel.ch5-server-3/write}}
+                :recife/metadata
+                {:context
+                 [:hillel.ch5-server-3/read
+                  {:self :reader :notify-failure? true}]}}]
+              [3
+               {:server/queue (:msg)
+                :recife.core/procs
+                {:reader
+                 {:pc :hillel.ch5-server-3/notify-failure :current-message :msg}
+                 :writer {:pc :hillel.ch5-server-3/write}}
+                :recife/metadata
+                {:context [:hillel.ch5-server-3/write {:self :writer}]}}]
+              [4
+               {:server/queue (:msg :msg)
+                :recife.core/procs
+                {:reader
+                 {:pc :hillel.ch5-server-3/notify-failure :current-message :msg}
+                 :writer {:pc :hillel.ch5-server-3/write}}
+                :recife/metadata
+                {:context [:hillel.ch5-server-3/write {:self :writer}]}}]]
+             :trace-info {:violation {:type :deadlock}}
+             :distinct-states 18
+             :generated-states 27
+             :seed 1
+             :fp 0}
            result))
     (simulate-assert result)))
 
