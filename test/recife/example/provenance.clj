@@ -1,10 +1,7 @@
 (ns recife.example.provenance
   (:require
-   [clojure.set :as set]
    [recife.core :as r]
-   [recife.helpers :as rh]
-   [clojure.core.logic :as l]
-   [clojure.core.logic.fd :as fd]))
+   [recife.helpers :as rh]))
 
 ;; TODO:
 ;; - [ ] Employer
@@ -86,7 +83,7 @@
                         check
                         no-grandparent no-cyclical-parent
                         constraint}
-               {:trace-example? true})
+               {:trace-example true})
 
   (r/get-result)
   (r/halt!)

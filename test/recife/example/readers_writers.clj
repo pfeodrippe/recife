@@ -158,7 +158,7 @@
                         safety fairness
                         eventually-actor-is-reader eventually-actor-is-writer
                         eventually-actor-is-not-a-reader eventually-actor-is-not-a-writer}
-               {#_ #_:trace-example? true
+               {#_ #_:trace-example true
                 #_ #_:workers 1
                 #_ #_:debug? true})
 

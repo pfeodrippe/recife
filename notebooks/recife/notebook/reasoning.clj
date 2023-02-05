@@ -14,9 +14,9 @@
 ;; like Java, Ruby or Python. This time the gap is even bigger, TLA+
 ;; is not a language that you use to build systems, but it's a
 ;; language you use for thinking about these systems, it's a
-;; specification. You will find concepts like
-;; ◊xref{:doc/non-determinism}, ◊xref{:doc/temporal-properties} or
-;; traces that you don't usually find in our usual day-to-day jobs.
+;; specification. You will find concepts like non-determinism or
+;; temporal porperty traces that we don't usually need to deal with in
+;; our day-to-day jobs.
 
 ;; While TLA+ is the language, there is also TLC, which is the system
 ;; that makes TLA+ waste cycles in our computers. And, fortunately,

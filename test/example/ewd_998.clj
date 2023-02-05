@@ -143,7 +143,7 @@
                 {:no-deadlock true
                  :async true
                  #_ #_:workers 1
-                 #_ #_:trace-example? true
+                 #_ #_:trace-example true
                  :depth -1
                  #_ #_:debug? true}
                 (rh/with-features feature-flags

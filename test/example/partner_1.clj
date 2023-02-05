@@ -131,7 +131,7 @@
     @(r/run-model global
                   #{initial-request partner-server
                     webhook no-partner-history-duplicates}
-                  {:trace-example? true}))
+                  {:trace-example true}))
 
   (ra/visualize-result result)
   (-> result

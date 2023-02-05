@@ -1516,7 +1516,7 @@ VIEW
 
 (defn random-traces-from-states
   ([states]
-   (random-traces-from-states states 10))
+   (random-traces-from-states states 1))
   ([states max-number-of-paths]
    (if (< max-number-of-paths 1)
      []
@@ -1587,6 +1587,12 @@ VIEW
                       (assoc paths' (count paths') [[state nil]])
                       (inc counter))))))))))
 
+(defn random-traces-from-result
+  ([result]
+   (random-traces-from-result result 1))
+  ([result n]
+   (random-traces-from-states (states-from-result result) n)))
+
 (defn tlc-result-handler
   "This function is a implementation detail, you should not use it.
   It handles the TLC object and its result, generating the output we see when
@@ -1642,11 +1648,11 @@ VIEW
                 (r.buf/start-client-loop!)
                 (r.buf/set-buf (r.buf/buf-create {:file (io/file channel-path)
                                                   :truncate true})))
-            state-writer (when (or (:dump-states? opts)
+            state-writer (when (or (:dump-states opts)
                                    ;; If we want to show a trace example (if no
                                    ;; violation is found), then we have to
                                    ;; generate the states file.
-                                   (:trace-example? opts))
+                                   (:trace-example opts))
                            (let [file-path (.getAbsolutePath (File/createTempFile "transit-output" ".msgpack"))
                                  os (io/output-stream file-path)
                                  state-writer (->FileStateWriter (t/writer os :msgpack) os (atom {}) file-path)]
@@ -1654,21 +1660,26 @@ VIEW
                              state-writer))
             *closed-properly? (atom false)
             _ (.addShutdownHook (Runtime/getRuntime)
-                                (Thread. ^Runnable (fn []
-                                                     #_(when-let [ch-buf (some-> @r.buf/*client-channel .buf)]
-                                                         (println "Remaining data size in buffer:" (count ch-buf)))
-                                                     (r.buf/flush!)
-                                                     (when state-writer
-                                                       (.close state-writer))
-                                                     (when-not @*closed-properly?
-                                                       (println "\n---- Closing child Recife process ----\n")
-                                                       (let [pstats @@u/pd]
-                                                         (when (:stats pstats)
-                                                           (println (str "\n\n" (tufte/format-pstats pstats)))))
-                                                       (prn
-                                                        (-> {:unfinished? true}
-                                                            (medley/assoc-some :recife/transit-states-file-path
-                                                                               (:file-path state-writer))))))))
+                                (Thread. ^Runnable
+                                         (fn []
+                                           (r.buf/flush!)
+                                           (when state-writer
+                                             (.close state-writer))
+                                           (when-not @*closed-properly?
+                                             (println "\n---- Closing child Recife process ----\n")
+                                             (let [pstats @@u/pd]
+                                               (when (:stats pstats)
+                                                 (println (str "\n\n" (tufte/format-pstats pstats)))))
+                                             (prn
+                                              (merge
+                                               (-> {:unfinished? true}
+                                                   (medley/assoc-some :recife/transit-states-file-path
+                                                                      (:file-path state-writer)))
+                                               {:trace (when (:trace-example opts)
+                                                         (-> (:file-path state-writer)
+                                                             states-from-file
+                                                             random-traces-from-states
+                                                             rand-nth))}))))))
             _ (do (p* ::process
                       (doto ^tlc2.TLC tlc
                         .process))
@@ -1744,11 +1755,14 @@ VIEW
               (def simulator simulator))
 
         (-> {:trace (cond
-                      (and (nil? (some-> ^tlc2.tool.AbstractChecker tlc2.TLCGlobals/mainChecker .theFPSet .size))
+                      (and (nil? (some-> ^tlc2.tool.AbstractChecker
+                                         tlc2.TLCGlobals/mainChecker
+                                         .theFPSet
+                                         .size))
                            (nil? simulator))
                       :error
 
-                      (and (= trace :ok) (:trace-example? opts))
+                      (and (= trace :ok) (:trace-example opts))
                       (-> (:file-path state-writer)
                           states-from-file
                           random-traces-from-states
@@ -1756,8 +1770,8 @@ VIEW
 
                       :else
                       trace)
-             :trace-info (if (and (nil? info) (:trace-example? opts))
-                           {:trace-example? true}
+             :trace-info (if (and (nil? info) (:trace-example opts))
+                           {:trace-example true}
                            info)
              :distinct-states (some-> tlc2.TLCGlobals/mainChecker .theFPSet .size)
              :generated-states (some-> tlc2.TLCGlobals/mainChecker .getStatesGenerated)
@@ -1838,7 +1852,7 @@ VIEW
                                                continue
                                                ;; Below opts are used in the child
                                                ;; process.
-                                               trace-example? dump-states?]
+                                               trace-example dump-states]
                                         :as opts
                                         :or {workers :auto
                                              async true}}]
