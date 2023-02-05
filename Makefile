@@ -1,12 +1,12 @@
-clj_cmd = env clj
+clj_cmd = env clojure
 
 .PHONY: build
 build:
 	mkdir -p target
 	rm -rf classes
 	mkdir -p classes
-	clj -e "(compile 'recife.class)"
-	$(clj_cmd) -X:depstar uberjar :jar target/recife.jar :sync-pom true :version '"0.9.0"' :exclude '["clojure/.*", "lambdaisland/.*", "medley/.*", "alandipert/.*", "metosin/.*", "quil/.*", "tlc2/.*", "com/.*", "javax/.*", "org/.*", "pcal/.*", "tla2sany/.*", "tla2tex/.*", "util/.*", "malli/.*", "jogamp/.*", "natives/.*", "processing/.*", "cljsjs/.*", "icon/.*", "fipp/.*", "edamame/.*", "javassist/.*", "arrudeia/.*"]' :compile-ns '[recife.class]'
+	clojure -e "(compile 'recife.class)"
+	$(clj_cmd) -X:depstar uberjar :jar target/recife.jar :sync-pom true :version '"0.10.0"' :exclude '["clojure/.*", "lambdaisland/.*", "medley/.*", "alandipert/.*", "metosin/.*", "quil/.*", "tlc2/.*", "com/.*", "javax/.*", "org/.*", "pcal/.*", "tla2sany/.*", "tla2tex/.*", "util/.*", "malli/.*", "jogamp/.*", "natives/.*", "processing/.*", "cljsjs/.*", "icon/.*", "fipp/.*", "edamame/.*", "javassist/.*", "arrudeia/.*"]' :compile-ns '[recife.class]'
 
 .PHONY: deploy
 deploy:
@@ -14,7 +14,7 @@ deploy:
 
 .PHONY: test
 test:
-	clj -M:test
+	clojure -M:test
 
 .PHONY: start-components
 start-components:
