@@ -115,7 +115,7 @@
   (def result
     @(r/run-model model/global #{model/wire model/invariant} {:fp 6
                                                               :seed -3669946775118883845
-                                                              :dump-states? true}))
+                                                              :dump-states true}))
 
   (let [init (fn [initial-global-state] (reset! balances initial-global-state))
         implementation-mapping

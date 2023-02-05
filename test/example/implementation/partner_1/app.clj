@@ -343,7 +343,7 @@
                     model/webhook
                     model/no-partner-history-duplicates
                     model/all-companies-will-have-an-id}
-                  {:trace-example? true}))
+                  {:trace-example true}))
 
   ;; We cannot guarantee that the implementation is a refinement of the model,
   ;; but we can say that it satisfies the model. One way to generate a counterexample

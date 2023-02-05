@@ -4,8 +4,9 @@
 
 ;; ◊page-name{guide layout}
 
-;; It's a rip-off of the beautiful
-;; ◊link{https://practicaltypography.com}. We just happen to use
+;; The UI design of this guide is a rip-off of the beautiful
+;; ◊link{https://practicaltypography.com}{Practical Typograhy book by
+;; Butterick}. We just happen to use
 ;; ◊link{https://github.com/nextjournal/clerk}{Clerk} to build this
 ;; doc.
 

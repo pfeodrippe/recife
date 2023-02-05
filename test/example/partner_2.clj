@@ -149,7 +149,7 @@
                   #{initial-request partner-server
                     webhook no-partner-history-duplicates
                     all-companies-will-have-an-id}
-                  {:trace-example? true}))
+                  {:trace-example true}))
 
   ;; With these functions you can see the timeline diff (`:-` or `:+`) to see
   ;; what changed. `r/print-timeline-diff` prints the output to the STDOUT (REPL)
