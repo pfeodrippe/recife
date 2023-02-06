@@ -40,6 +40,23 @@
 (set! *unchecked-math* false)
 #_(set! *unchecked-math* :warn-on-boxed)
 
+(def ^{:arglists (:arglists (meta #'r.buf/save!))}
+  save!
+  "Save data that can be fetched in real time, it can be used for statistics."
+  r.buf/save!)
+
+(def ^{:arglists (:arglists (meta #'r.buf/read-contents))}
+  read-saved-data
+  "Read saved data, see `save!`."
+  r.buf/read-contents)
+
+(defn read-saved-data-if-new-content
+  "Reads saved data if there is new content, otherwise, returns `nil`.
+  See `save!`."
+  []
+  (when (r.buf/has-new-contents?)
+    (r.buf/read-contents)))
+
 (defn- custom-munge
   [v]
   (str/replace (munge v) #"\." "___"))
@@ -1993,7 +2010,10 @@ VIEW
                                     ;; Tell the user which temporal properties are violated,
                                     ;; this still needs lots of testing!
                                     (assoc-in [:experimental :violated-temporal-properties]
-                                              (rt/check-temporal-properties edn (::components opts))))
+                                              (rt/check-temporal-properties edn (::components opts)))
+
+                                    true
+                                    (with-meta {:type ::RecifeResponse}))
                                   (println (-> @output last))))
                               (catch Exception _
                                 (println (-> @output last))))))))
@@ -2059,39 +2079,42 @@ VIEW
   ([init-global-state components]
    (run-model init-global-state components {}))
   ([init-global-state components opts]
-   (schema/explain-humanized schema/RunModelComponents components "Invalid components")
-   (let [components (set (flatten (seq components)))
-         processes (filter #(= (type %) RecifeProc) components)
-         invariants (filter #(= (type %) ::Invariant) components)
-         constraints (filter #(= (type %) ::Constraint) components)
-         action-constraints (filter #(= (type %) ::ActionConstraint) components)
-         properties (filter #(= (type %) ::Property) components)
-         action-properties (filter #(= (type %) ::ActionProperty) components)
-         fairness (filter #(= (type %) ::Fairness) components)
-         procs (->> processes
-                    (mapv :procs)
-                    (apply merge))
-         db-init (merge init-global-state
-                        (when (seq procs)
-                          {::procs procs}))
-         next' (tla ::next
-                    (->> processes
-                         (mapv (fn [{:keys [:steps-keys :procs]}]
-                                 [:exists {'self (set (keys procs))}
-                                  (into [:or]
-                                        (->> steps-keys
-                                             sort
-                                             (mapv #(vector % 'self))))]))
-                         (cons :or)
-                         vec))
-         operators (set (concat (mapcat :operators processes)
-                                (map :operator invariants)
-                                (map :operator constraints)
-                                (map :operator action-constraints)
-                                (map :operator properties)
-                                (map :operator action-properties)
-                                (map :operator fairness)))]
-     (run-model* db-init next' operators (assoc opts ::components components)))))
+   (if (System/getProperty "RECIFE_OPTS_FILE_PATH")
+     (delay nil)
+     (do
+       (schema/explain-humanized schema/RunModelComponents components "Invalid components")
+       (let [components (set (flatten (seq components)))
+             processes (filter #(= (type %) RecifeProc) components)
+             invariants (filter #(= (type %) ::Invariant) components)
+             constraints (filter #(= (type %) ::Constraint) components)
+             action-constraints (filter #(= (type %) ::ActionConstraint) components)
+             properties (filter #(= (type %) ::Property) components)
+             action-properties (filter #(= (type %) ::ActionProperty) components)
+             fairness (filter #(= (type %) ::Fairness) components)
+             procs (->> processes
+                        (mapv :procs)
+                        (apply merge))
+             db-init (merge init-global-state
+                            (when (seq procs)
+                              {::procs procs}))
+             next' (tla ::next
+                        (->> processes
+                             (mapv (fn [{:keys [:steps-keys :procs]}]
+                                     [:exists {'self (set (keys procs))}
+                                      (into [:or]
+                                            (->> steps-keys
+                                                 sort
+                                                 (mapv #(vector % 'self))))]))
+                             (cons :or)
+                             vec))
+             operators (set (concat (mapcat :operators processes)
+                                    (map :operator invariants)
+                                    (map :operator constraints)
+                                    (map :operator action-constraints)
+                                    (map :operator properties)
+                                    (map :operator action-properties)
+                                    (map :operator fairness)))]
+         (run-model* db-init next' operators (assoc opts ::components components)))))))
 
 (defmacro defproc
   "Defines a process and its multiple instances (`:procs`).
@@ -2256,23 +2279,6 @@ VIEW
         :constraint f#
         :operator (action-constraint name# f#)})))
 
-(def ^{:arglists (:arglists (meta #'r.buf/save!))}
-  save!
-  "Save data that can be fetched in real time, it can be used for statistics."
-  r.buf/save!)
-
-(def ^{:arglists (:arglists (meta #'r.buf/read-contents))}
-  read-saved-data
-  "Read saved data, see `save!`."
-  r.buf/read-contents)
-
-(defn read-saved-data-if-new-content
-  "Reads saved data if there is new content, otherwise, returns `nil`.
-  See `save!`."
-  []
-  (when (r.buf/has-new-contents?)
-    (r.buf/read-contents)))
-
 (comment
 
   ;; TODO (from 2022-12-17):
@@ -2315,6 +2321,7 @@ VIEW
   ;; - [ ] Add `["-lncheck" "final"]` by default
   ;; - [ ] Check if it's possible to do refinement
   ;;   - https://hillelwayne.com/post/refinement/#fnref:scope
+  ;; - [ ] Visualize Recife state machine
 
   ())
 
