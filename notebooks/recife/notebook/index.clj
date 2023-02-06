@@ -84,5 +84,6 @@
   ;; - [ ] Fix flickering on phone
   ;;   -  [ ] Try to use the unbundled version of Clerk
   ;; - [ ] Copy code chunk to clipboard
+  ;; - [ ] Add some emacs highlighting for ◊?
 
   ())

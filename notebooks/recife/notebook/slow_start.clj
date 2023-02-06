@@ -1,4 +1,4 @@
-;; ◊page-name[{:subtitle "Gimme code"}]{🏃🏽‍♀️slow start}
+;; ◊page-name[{:subtitle "Gimme code"}]{slow start}
 
 ;; If you didn't already, see the ◊xref{:doc/reasoning} for this
 ;; library.
@@ -13,11 +13,10 @@
 ;; ◊note{Get Recife on
 ;; ◊link{https://clojars.org/pfeodrippe/recife}{clojars}}
 
-;; First, require some namespaces that we will use in our code.
+;; First, require some Recife namespaces.
 (ns recife.notebook.slow-start
   {:nextjournal.clerk/visibility {:result :hide}
-   :clerk/name "slow start"
-   #_ #_:nextjournal.clerk/no-cache true}
+   :clerk/name "slow start"}
   (:require
    [recife.core :as r]
    [recife.helpers :as rh]
@@ -83,17 +82,17 @@
 
 #_(comment
 
-  ;; This will return an asynchronous process that you can `@` (deref).
-  (r/run-model global #{tick-v1} {:trace-example true})
+    ;; This will return an asynchronous process that you can `@` (deref).
+    (r/run-model global #{tick-v1} {:trace-example true})
 
-  ;; Halt will stop the process AND deref. You will need it, otherwise
-  ;; the clock will just keep running and running.
-  (r/halt!)
+    ;; Halt will stop the process AND deref. You will need it, otherwise
+    ;; the clock will just keep running and running.
+    (r/halt!)
 
-  ;; You can get the last result using this
-  (r/get-result)
+    ;; You can get the last result using this
+    (r/get-result)
 
-  ())
+    ())
 
 ;; ◊title{Constraining}
 
@@ -113,17 +112,16 @@
   [{::keys [hour]}]
   (<= hour 23))
 
-#_^{:nextjournal.clerk/visibility {:result :show :code :hide}}
+^{:nextjournal.clerk/visibility {:result :show :code :show}}
 (rc/example
- @(r/run-model global #{tick-v1 disallow-after-23}
-               {:trace-example true}))
+  @(r/run-model global #{tick-v1 disallow-after-23}
+                {:trace-example true}))
 
 (comment
 
   ;; TODO:
   ;; - [ ] See how to present async stuff
   ;;   - [ ] Maybe using an atom?
-  ;;   - [ ] Show when it has started
   ;; - [ ] Work on visualizing this trace first as this one is finite
 
   ;; Remember, you can also deref the respoinse if you want.
@@ -148,8 +146,12 @@
   ;;       model run start time
   ;; - [ ] Visualize trace in Clerk
   ;;   - [x] Create `recife.clerk`
-  ;;   - [ ] `r/run-model` should act differently when running from Clerk
-  ;;     - [ ] Maybe get things from cache?
+  ;;   - [x] `r/run-model` should act differently when running from Clerk
+  ;;     - Wrapping it using `rc/example` should do what we expect
+  ;;   - [ ] Check the visualization
+  ;;     - [ ] Create  `rc/run-model` so we can have some defaults for
+  ;;           `r/run-model`
+  ;;     - [ ] Create viewer for `rc/run-model`
   ;;   - [ ] We could show random examples in Clerk if
   ;;        `:trace-example` is activated. This should be feasible by
   ;;        using `r/save!`
