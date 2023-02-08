@@ -16,11 +16,11 @@
 (defmacro with-recife
   [& body]
   (when (not (System/getProperty "RECIFE_OPTS_FILE_PATH"))
-    `(do (require '[com.pfeodrippe.tooling.clerk.util :as tool.clerk.util])
-         (require '[nextjournal.clerk :as clerk])
-         (require '[nextjournal.clerk.viewer :as v])
-         (require '[recife.core :as r])
-         ~@body)))
+    (require '[com.pfeodrippe.tooling.clerk.util :as tool.clerk.util])
+    (require '[nextjournal.clerk :as clerk])
+    (require '[nextjournal.clerk.viewer :as v])
+    (require '[recife.core :as r])
+    `(do ~@body)))
 
 (defmacro example
   [& body]

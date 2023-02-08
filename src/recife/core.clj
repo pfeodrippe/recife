@@ -1979,6 +1979,16 @@ VIEW
              output (atom [])
              t0 (System/nanoTime)
              *destroyed? (atom false)
+             output-streaming (future
+                                (with-open [rdr (io/reader (:out result))]
+                                  (binding [*in* rdr]
+                                    (loop []
+                                      (when-let [line (read-line)]
+                                        ;; If it's a EDN hashmap, do not print it.
+                                        (when-let [last-line (last @output)]
+                                          (println last-line))
+                                        (swap! output conj line)
+                                        (recur))))))
              process (RecifeModel.
                       (reify
                         java.io.Closeable
@@ -1989,6 +1999,7 @@ VIEW
                             (p/sh (format "kill -15 %s" (.pid (:proc result))))
                             (when use-buffer
                               (r.buf/stop-sync-loop!))
+                            @output-streaming
                             (println (format "\n\n------- Recife process destroyed after %s seconds ------\n\n"
                                              (Math/round (/ (- (System/nanoTime) t0) 1E9))))))
 
@@ -2000,6 +2011,7 @@ VIEW
                           (when use-buffer
                             (r.buf/stop-sync-loop!))
                           ;; Throw exception or return EDN result.
+                          @output-streaming
                           (if (.exists (io/as-file exception-filename))
                             (throw (deserialize-obj exception-filename))
                             (try
@@ -2016,18 +2028,7 @@ VIEW
                                     (with-meta {:type ::RecifeResponse}))
                                   (println (-> @output last))))
                               (catch Exception _
-                                (println (-> @output last))))))))
-             _output-streaming (future
-                                 (with-open [rdr (io/reader (:out result))]
-                                   (binding [*in* rdr]
-                                     (loop []
-                                       (when-let [line (read-line)]
-                                         ;; If it's a EDN hashmap, do not print it.
-                                         (when-let [last-line (last @output)]
-                                           (println last-line))
-                                         (swap! output conj line)
-                                         (recur)))))
-                                 @process)]
+                                (println (-> @output last))))))))]
          (reset! *current-model-run process)
          ;; Read line by line so we can stream the output to the user.
          (if async
