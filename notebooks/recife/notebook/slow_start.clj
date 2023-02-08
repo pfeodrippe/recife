@@ -112,10 +112,20 @@
   [{::keys [hour]}]
   (<= hour 23))
 
-^{:nextjournal.clerk/visibility {:result :show :code :show}}
+#_^{:nextjournal.clerk/visibility {:result :show :code :hide}}
 (rc/example
  @(r/run-model global #{tick-v1 disallow-after-23}
                {:trace-example true}))
+
+(require '[hillel.ch6-threads-3 :as ch6-threads-3])
+
+^{:nextjournal.clerk/visibility {:result :show :code :hide}}
+(rc/example
+ @(r/run-model ch6-threads-3/global
+                  #{ch6-threads-3/thread
+                    ch6-threads-3/at-most-one-critical
+                    ch6-threads-3/no-livelocks})
+ #_(r/get-result))
 
 (comment
 
@@ -151,6 +161,14 @@
   ;;   - [x] Check the visualization
   ;;     - [x] Create viewer for Recife
   ;;   - [x] Show node info
+  ;;   - [x] Chek why ch6-threads-3 is not working
+  ;;     - There was a race condition where the output streaming was
+  ;;       ending after the response was returned
+  ;;   - [ ] Show violation
+  ;;     - [ ] Invariant
+  ;;     - [ ] Example
+  ;;     - [ ] Back to state
+  ;;     - [ ] Violated temporal property
   ;;   - [ ] We could show random examples in Clerk if
   ;;        `:trace-example` is activated. This should be feasible by
   ;;        using `r/save!`
