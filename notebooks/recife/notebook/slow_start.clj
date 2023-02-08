@@ -114,8 +114,8 @@
 
 ^{:nextjournal.clerk/visibility {:result :show :code :show}}
 (rc/example
-  @(r/run-model global #{tick-v1 disallow-after-23}
-                {:trace-example true}))
+ @(r/run-model global #{tick-v1 disallow-after-23}
+               {:trace-example true}))
 
 (comment
 
@@ -148,15 +148,14 @@
   ;;   - [x] Create `recife.clerk`
   ;;   - [x] `r/run-model` should act differently when running from Clerk
   ;;     - Wrapping it using `rc/example` should do what we expect
-  ;;   - [ ] Check the visualization
-  ;;     - [ ] Create  `rc/run-model` so we can have some defaults for
-  ;;           `r/run-model`
-  ;;     - [ ] Create viewer for `rc/run-model`
+  ;;   - [x] Check the visualization
+  ;;     - [x] Create viewer for Recife
+  ;;   - [x] Show node info
   ;;   - [ ] We could show random examples in Clerk if
   ;;        `:trace-example` is activated. This should be feasible by
   ;;        using `r/save!`
   ;;     - Even for incomplete traces, it may be useful to show
-  ;;       something in the screen (fast feedback)
+  ;;       something in the screen (for fast feedback)
   ;; - [ ] Clock runs forever
   ;;   - [ ] How to visualize this in Clerk?
   ;;   - [ ] Add constraint
