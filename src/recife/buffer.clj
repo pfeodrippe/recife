@@ -128,7 +128,7 @@
     (buf-rewind)
     (reset! *saved [])))
 
-(defn- -save!
+(defn -save!
   [v]
   (locking lock
     (try
@@ -242,6 +242,16 @@ run Recife using `:generate`.
    (if (= bucket :all)
      @*contents
      (get @*contents bucket))))
+
+(defn watch!
+  "`f` is a function which is triggered when the bucket contents change,
+  this function receives only the new state (1 argument)."
+  [bucket f]
+  (add-watch *contents bucket
+             (fn [_key _ref old-state new-state]
+               (when (not= (get old-state bucket)
+                           (get new-state bucket))
+                 (f (get new-state bucket))))))
 
 (defn has-new-contents?
   []
