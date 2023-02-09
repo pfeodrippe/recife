@@ -11,6 +11,7 @@
    [nextjournal.clerk :as-alias clerk]
    [nextjournal.clerk.config :as clerk.config]
    [nextjournal.clerk.viewer :as-alias v]
+   [recife.buffer :as-alias r.buf]
    [recife.core :as-alias r]))
 
 (defmacro with-recife
@@ -19,8 +20,14 @@
     (require '[com.pfeodrippe.tooling.clerk.util :as tool.clerk.util])
     (require '[nextjournal.clerk :as clerk])
     (require '[nextjournal.clerk.viewer :as v])
+    (require '[recife.buffer :as r.buf])
     (require '[recife.core :as r])
     `(do ~@body)))
+
+(with-recife
+  (r.buf/watch! ::r/status
+                (fn [_status]
+                  (clerk/recompute!))))
 
 (defmacro example
   [& body]
@@ -32,9 +39,9 @@
                ~(mapv (fn [x#] `'~x#) body)
                ~(vec body))))))
 
-(def recife-viewer
+(def recife-response-viewer
   (with-recife
-    {:name ::recife-viewer
+    {:name ::recife-response-viewer
      :pred #(= (type %) ::r/RecifeResponse)
      :transform-fn (comp clerk/mark-presented
                          (clerk/update-val
@@ -119,11 +126,42 @@
                                                        (str "</pre>")))))
                                     graph)))}])))])))}))
 
+(def recife-model-viewer
+  (with-recife
+    {:name ::recife-model-viewer
+     :pred #(= (type %) recife.core.RecifeModel)
+     :transform-fn (comp clerk/mark-presented
+                         (clerk/update-val
+                          (fn [result]
+                            ;; Update trace elements so they contains the
+                            ;; pretty-printed version that we can use for the
+                            ;; node tooltip.
+                            (update result :trace
+                                    (fn [trace]
+                                      (if (not (sequential? trace))
+                                        trace
+                                        (mapv (fn [[idx state]]
+                                                [idx (assoc state :printed
+                                                            (with-out-str
+                                                              (pp/pprint
+                                                               (dissoc state
+                                                                       ::r/procs
+                                                                       :recife/metadata))))])
+                                              trace)))))))
+     :render-fn
+     '(fn [value]
+        (v/html
+         (when value
+           [:div value])))}))
+
 (with-recife
   (tool.clerk.util/add-global-viewers!
-   [recife-viewer]))
+   [recife-response-viewer
+    recife-model-viewer]))
 
 (comment
+
+  (clerk/recompute!)
 
   (do
     (def value

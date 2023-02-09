@@ -20,7 +20,8 @@
   (:require
    [recife.core :as r]
    [recife.helpers :as rh]
-   [recife.clerk :as rc]))
+   [recife.clerk :as rc]
+   [recife.model :as rm]))
 
 ;; ◊note{We are using Clerk to render this notebook, which
 ;; you can find
@@ -119,13 +120,16 @@
 
 (require '[hillel.ch6-threads-3 :as ch6-threads-3])
 
-^{:nextjournal.clerk/visibility {:result :show :code :hide}}
+#_^{:nextjournal.clerk/visibility {:result :show :code :hide}}
 (rc/example
  @(r/run-model ch6-threads-3/global
                   #{ch6-threads-3/thread
                     ch6-threads-3/at-most-one-critical
-                    ch6-threads-3/no-livelocks})
- #_(r/get-result))
+                    ch6-threads-3/no-livelocks}))
+
+^{:nextjournal.clerk/visibility {:result :show :code :show}
+  :nextjournal.clerk/no-cache true}
+(rm/model-state)
 
 (comment
 
@@ -134,11 +138,11 @@
   ;;   - [ ] Maybe using an atom?
   ;; - [ ] Work on visualizing this trace first as this one is finite
 
-  ;; Remember, you can also deref the respoinse if you want.
+  ;; Remember, you can also deref the response if you want.
   ;; The run should finish now and we should be shown an `:ok`,
   ;; meaning that no violation was found (as we are not verifying
   ;; anything yet!).
-  @(r/run-model global #{tick-v1 disallow-after-23})
+  (r/run-model global #{tick-v1 disallow-after-23})
 
   ;; You can always use `:trace-example` to have a random trace
   ;; example if there are no violations (as it's the case here).
@@ -164,6 +168,10 @@
   ;;   - [x] Chek why ch6-threads-3 is not working
   ;;     - There was a race condition where the output streaming was
   ;;       ending after the response was returned
+  ;;   - [ ] Make loading async
+  ;;     - [ ] Initial
+  ;;     - [ ] Running
+  ;;     - [ ] Final result
   ;;   - [ ] Show violation
   ;;     - [ ] Invariant
   ;;     - [ ] Example
