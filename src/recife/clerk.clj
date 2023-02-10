@@ -12,7 +12,8 @@
    [nextjournal.clerk.config :as clerk.config]
    [nextjournal.clerk.viewer :as-alias v]
    [recife.buffer :as-alias r.buf]
-   [recife.core :as-alias r]))
+   [recife.core :as-alias r]
+   [recife.model :as-alias rm]))
 
 (defmacro with-recife
   [& body]
@@ -22,11 +23,13 @@
     (require '[nextjournal.clerk.viewer :as v])
     (require '[recife.buffer :as r.buf])
     (require '[recife.core :as r])
+    (require '[recife.model :as rm])
     `(do ~@body)))
 
 (with-recife
   (r.buf/watch! ::r/status
-                (fn [_status]
+                (fn [status]
+                  #_(println :>>>recompute-status status)
                   (clerk/recompute!))))
 
 (defmacro example
@@ -35,96 +38,183 @@
     `(with-recife
        (clerk/with-viewer v/examples-viewer
          (mapv (fn [form# val#]
-                 {:form form# :val val#})
+                 {:form form#
+                  :val val#})
                ~(mapv (fn [x#] `'~x#) body)
                ~(vec body))))))
+
+(def -main-viewer
+  (with-recife
+    {:transform-fn
+     (v/update-val
+      (fn [examples]
+        (mapv (partial v/with-viewer v/example-viewer) examples)))
+
+     :render-fn
+     '(fn [examples opts]
+        (into [:div.border-l-2.border-slate-300.pl-4
+               [:div.uppercase.tracking-wider.text-xs.font-sans.text-slate-500.mt-4.mb-2
+                "Recife"]]
+              (nextjournal.clerk.render/inspect-children opts) examples))}))
+
+(defonce model-lock (Object.))
+
+(defmacro -run-model
+  [form & body]
+  (when clerk.config/*in-clerk*
+    `(with-recife
+       (clerk/with-viewer -main-viewer
+         [{:form '~form
+           :val (do ~@body)}]))))
+
+(defonce *cache (atom {}))
+
+#_(clerk/recompute!)
+
+(defn -run-delayed
+  [id global components opts]
+  (with-recife
+    (let [*state (atom {:id id
+                        :model nil})
+          my-run (with-meta {:id id
+                             :*state *state
+                             :model
+                             (future
+                               ;; We are sleeping so we don't have race
+                               ;; conditions between `show!` and `recompute!`,
+                               ;; see https://github.com/nextjournal/clerk/issues/414.
+                               (Thread/sleep 1000)
+                               (locking model-lock
+                                 (let [model (r/run-model global components opts)]
+                                   #_(println :>>>id (:id model))
+                                   (try
+                                     model
+                                     (finally
+                                       (swap! *state assoc :model model)
+                                       (while (not= (:status (rm/model-state model))
+                                                    :done)
+                                         (Thread/sleep 100))))))
+                               #_(println :>>FINISHING id))}
+                   {:type ::clerk-model})]
+      (swap! *cache assoc id my-run)
+      my-run)))
+
+(defmacro run-model
+  "A wrapper over `recife.core/run-model` so we can present
+  thins with Clerk.
+
+  Process is cached using `id`."
+  ([id global components]
+   `(run-model ~id ~global ~components nil))
+  ([id global components opts]
+   `(-run-model
+     ~(concat '(r/run-model)
+              (if opts
+                (drop 2 &form)
+                (drop-last (drop 2 &form))))
+     (or (get @*cache ~id)
+         (-run-delayed ~id ~global ~components ~opts)))))
+
+(defn- adapt-result
+  [result]
+  ;; Update trace elements so they contains the
+  ;; pretty-printed version that we can use for the
+  ;; node tooltip.
+  (update result :trace
+          (fn [trace]
+            (if (not (sequential? trace))
+              trace
+              (mapv (fn [[idx state]]
+                      [idx (assoc state :printed
+                                  (with-out-str
+                                    (pp/pprint
+                                     (dissoc state
+                                             ::r/procs
+                                             :recife/metadata))))])
+                    trace)))))
+
+(def ^:private render-response
+  '(defn render-response
+     [value]
+     (v/html
+      (when value
+        [v/with-d3-require {:package ["elgrapho"]}
+         (fn [elgrapho]
+           (if (not (sequential? (:trace value)))
+             [:div "No violations found"]
+             (let [trace (:trace value)
+                   model {:nodes
+                          (->> trace
+                               (mapv (fn [[idx state]]
+                                       {:x (+ 0 (* 0.1M idx))
+                                        :y (+ 0 (* -0.1M idx))
+                                        :group idx
+                                        :label (if (= idx 0)
+                                                 "0 - INITIAL"
+                                                 (str idx
+                                                      " - "
+                                                      (-> (:recife/metadata state)
+                                                          :context
+                                                          first
+                                                          name)))}))
+                               vec)
+
+                          :edges
+                          (->> trace
+                               (partition 2 1)
+                               (mapv (fn [[[idx-0 state-0]
+                                           [idx-1 state-1]]]
+                                       {:from idx-0
+                                        :to idx-1})))}
+                   build-graph
+                   (fn [el]
+                     (new elgrapho
+                          (clj->js
+                           {:model (-> model
+                                       clj->js
+                                       ((-> elgrapho
+                                            .-layouts
+                                            .-ForceDirected
+                                            #_.-Hairball
+                                            #_.-Cluster
+                                            #_.-Chord)))
+                            :container el
+                            :width 700
+                            :height 700
+                            ;; Disable animations at startup so we don't bounce
+                            ;; when zooming in.
+                            :animations false
+                            #_ #_:arrows true
+                            #_ #_:glowBlend 0.2})))]
+               [:div {:ref (fn [el]
+                             (when el
+                               (let [graph (build-graph el)]
+                                 ;; Zoom out a little bit so we have room for the
+                                 ;; nodes.
+                                 (.zoomToPoint graph 0 0
+                                               (/ 1 1.1)
+                                               (/ 1 1.1))
+                                 ;; Enable animations again after startup.
+                                 (set! (.-animations graph) true)
+                                 (set! (.-tooltipTemplate graph)
+                                       (fn [idx el]
+                                         (set! (.-innerHTML el)
+                                               (str "<pre>\n"
+                                                    (:printed (last (get trace idx)))
+                                                    (str "</pre>")))))
+                                 graph)))}])))]))))
+
 
 (def recife-response-viewer
   (with-recife
     {:name ::recife-response-viewer
      :pred #(= (type %) ::r/RecifeResponse)
      :transform-fn (comp clerk/mark-presented
-                         (clerk/update-val
-                          (fn [result]
-                            ;; Update trace elements so they contains the
-                            ;; pretty-printed version that we can use for the
-                            ;; node tooltip.
-                            (update result :trace
-                                    (fn [trace]
-                                      (if (not (sequential? trace))
-                                        trace
-                                        (mapv (fn [[idx state]]
-                                                [idx (assoc state :printed
-                                                            (with-out-str
-                                                              (pp/pprint
-                                                               (dissoc state
-                                                                       ::r/procs
-                                                                       :recife/metadata))))])
-                                              trace)))))))
-     :render-fn
-     '(fn [value]
-        (v/html
-         (when value
-           [v/with-d3-require {:package ["elgrapho"]}
-            (fn [elgrapho]
-              (if (not (sequential? (:trace value)))
-                [:div "No violation found =D"]
-                (let [trace (:trace value)
-                      model {:nodes
-                             (->> trace
-                                  (mapv (fn [[idx state]]
-                                          {:x (+ 0 (* 0.1M idx))
-                                           :y (+ 0 (* -0.1M idx))
-                                           :group idx
-                                           :label (if (= idx 0)
-                                                    "0 - INITIAL"
-                                                    (str idx
-                                                         " - "
-                                                         (-> (:recife/metadata state)
-                                                             :context
-                                                             first
-                                                             name)))}))
-                                  vec)
-
-                             :edges
-                             (->> trace
-                                  (partition 2 1)
-                                  (mapv (fn [[[idx-0 state-0]
-                                              [idx-1 state-1]]]
-                                          {:from idx-0
-                                           :to idx-1})))}
-                      build-graph
-                      (fn [el]
-                        (new elgrapho
-                             (clj->js
-                              {:model (-> model
-                                          clj->js
-                                          ((-> elgrapho
-                                               .-layouts
-                                               .-ForceDirected
-                                               #_.-Hairball
-                                               #_.-Cluster
-                                               #_.-Chord)))
-                               :container el
-                               :width 700
-                               :height 700
-                               #_ #_:arrows true
-                               #_ #_:glowBlend 0.2})))]
-                  [:div {:ref (fn [el]
-                                (when el
-                                  (let [graph (build-graph el)]
-                                    ;; Zoom out a little bit so we have room for the
-                                    ;; nodes.
-                                    (.zoomToPoint graph 0 0
-                                                  (/ 1 1.1)
-                                                  (/ 1 1.1))
-                                    (set! (.-tooltipTemplate graph)
-                                          (fn [idx el]
-                                            (set! (.-innerHTML el)
-                                                  (str "<pre>\n"
-                                                       (:printed (last (get trace idx)))
-                                                       (str "</pre>")))))
-                                    graph)))}])))])))}))
+                         (clerk/update-val adapt-result))
+     :render-fn (list 'do
+                      render-response
+                      '(fn [value]
+                         (render-response value)))}))
 
 (def recife-model-viewer
   (with-recife
@@ -132,32 +222,54 @@
      :pred #(= (type %) recife.core.RecifeModel)
      :transform-fn (comp clerk/mark-presented
                          (clerk/update-val
-                          (fn [result]
-                            ;; Update trace elements so they contains the
-                            ;; pretty-printed version that we can use for the
-                            ;; node tooltip.
-                            (update result :trace
-                                    (fn [trace]
-                                      (if (not (sequential? trace))
-                                        trace
-                                        (mapv (fn [[idx state]]
-                                                [idx (assoc state :printed
-                                                            (with-out-str
-                                                              (pp/pprint
-                                                               (dissoc state
-                                                                       ::r/procs
-                                                                       :recife/metadata))))])
-                                              trace)))))))
+                          (fn [value]
+                            (let [{:keys [status] :as model-state}
+                                  (rm/model-state value)]
+                              (if (= status :done)
+                                (adapt-result (r/get-result value))
+                                model-state)))))
      :render-fn
-     '(fn [value]
-        (v/html
-         (when value
-           [:div value])))}))
+     (list 'do
+           render-response
+           '(fn [value]
+              (when value
+                (if (:status value)
+                  (v/html
+                   [:div (:status value)])
+                  (render-response value)))))}))
+
+(def recife-model-clerk-viewer
+  (with-recife
+    {:name ::clerk-model-viewer
+     :pred #(= (type %) ::clerk-model)
+     :transform-fn (comp clerk/mark-presented
+                         (clerk/update-val
+                          (fn [{:keys [*state]}]
+                            #_(println :>>STATE @*state)
+                            (let [{:keys [model]} @*state]
+                              (if model
+                                (let [{:keys [status] :as model-state}
+                                      (rm/model-state model)]
+                                  #_(println :>>>>STATUS (:id model) status)
+                                  (if (= status :done)
+                                    (adapt-result (r/get-result model))
+                                    model-state))
+                                {:status :waiting})))))
+     :render-fn
+     (list 'do
+           render-response
+           '(fn [value opts]
+              (when value
+                (if (:status value)
+                  (v/html
+                   [:div (:status value)])
+                  (render-response value)))))}))
 
 (with-recife
   (tool.clerk.util/add-global-viewers!
    [recife-response-viewer
-    recife-model-viewer]))
+    recife-model-viewer
+    recife-model-clerk-viewer]))
 
 (comment
 
