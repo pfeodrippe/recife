@@ -1661,16 +1661,15 @@ VIEW
                                     :error-messages (str/split (first objects) #"\n")})
 
                            (swap! recorder-atom update :others conj
-                                  [code objects])))))]
+                                  [code objects])))))
+        ;; Read opts file from JVM property.
+        {::keys [id] :as opts}
+        (some-> (System/getProperty "RECIFE_OPTS_FILE_PATH") slurp edn/read-string)]
     (try
       (let [tlc (do (MP/setRecorder recorder)
                     (tlc-runner))
-            ;; Read opts file from JVM property.
-            {::keys [id] :as opts}
-            (some-> (System/getProperty "RECIFE_OPTS_FILE_PATH") slurp edn/read-string)
-
             _ (when-let [channel-path (::channel-file-path opts)]
-                (println "Creating channel path at" channel-path)
+                #_(println "Creating channel path at" channel-path)
                 (r.buf/start-client-loop!)
                 (r.buf/set-buf (r.buf/buf-create {:file (io/file channel-path)
                                                   :truncate true})))
@@ -1705,12 +1704,12 @@ VIEW
                                                          (-> (:file-path state-writer)
                                                              states-from-file
                                                              random-traces-from-states
-                                                             rand-nth))}))))))
+                                                             rand-nth))}))
+                                             (System/exit 0)))))
             _ (save-and-flush! ::status [id :running])
             _ (do (p* ::process
                       (doto ^tlc2.TLC tlc
                         .process))
-                  (save-and-flush! ::status [id :done])
                   (r.buf/flush!)
                   (reset! *closed-properly? true)
                   (let [pstats @@u/pd]
@@ -1819,11 +1818,15 @@ VIEW
          :distinct-states (some-> tlc2.TLCGlobals/mainChecker .theFPSet .size)
          :generated-states (some-> tlc2.TLCGlobals/mainChecker .getStatesGenerated)})
       (finally
-        (MP/unsubscribeRecorder recorder)))))
+        (MP/unsubscribeRecorder recorder)
+        (save-and-flush! ::status [id :done])))))
 
 (defn tlc-result-printer-handler
   [tlc-runner]
-  (prn (tlc-result-handler tlc-runner)))
+  (try
+    (prn (tlc-result-handler tlc-runner))
+    (finally
+      (System/exit 0))))
 
 ;; We create a record just so we can use `simple-dispatch`.
 (defrecord RecifeModel [id *state v]
@@ -2008,41 +2011,49 @@ VIEW
              output (atom [])
              t0 (System/nanoTime)
              *destroyed? (atom false)
-             deref-result (fn []
-                            ;; Wait until the process finishes.
-                            @result
-                            (reset! *destroyed? true)
-                            (when use-buffer
-                              (r.buf/stop-sync-loop!))
-                            ;; Throw exception or return EDN result.
-                            (if (.exists (io/as-file exception-filename))
-                              (throw (deserialize-obj exception-filename))
-                              (try
-                                (let [edn (-> @output last edn/read-string)]
-                                  (if (map? edn)
-                                    (cond-> edn
-                                      (= (-> edn :trace-info :violation :type) :back-to-state)
-                                      ;; Tell the user which temporal properties are violated,
-                                      ;; this still needs lots of testing!
-                                      (assoc-in [:experimental :violated-temporal-properties]
-                                                (rt/check-temporal-properties edn (::components opts)))
+             *streaming-finished? (atom false)
+             -deref-result (memoize
+                            (fn []
+                              ;; Wait until the process finishes.
+                              @result
+                              (reset! *destroyed? true)
+                              (when use-buffer
+                                (r.buf/stop-sync-loop!))
+                              (while (not @*streaming-finished?))
+                              ;; Throw exception or return EDN result.
+                              (if (.exists (io/as-file exception-filename))
+                                (throw (deserialize-obj exception-filename))
+                                (try
+                                  (let [edn (-> @output last edn/read-string)]
+                                    (if (map? edn)
+                                      (cond-> edn
+                                        (= (-> edn :trace-info :violation :type) :back-to-state)
+                                        ;; Tell the user which temporal properties are violated,
+                                        ;; this still needs lots of testing!
+                                        (assoc-in [:experimental :violated-temporal-properties]
+                                                  (rt/check-temporal-properties edn (::components opts)))
 
-                                      true
-                                      (with-meta {:type ::RecifeResponse}))
-                                    (println (-> @output last))))
-                                (catch Exception _
-                                  (println (-> @output last))))))
-             output-streaming (future
-                                (with-open [rdr (io/reader (:out result))]
-                                  (binding [*in* rdr]
-                                    (loop []
-                                      (when-let [line (read-line)]
-                                        ;; If it's a EDN hashmap, do not print it.
-                                        (when-let [last-line (last @output)]
-                                          (println last-line))
-                                        (swap! output conj line)
-                                        (recur)))
-                                    (deref-result))))
+                                        true
+                                        (with-meta {:type ::RecifeResponse}))
+                                      (println (-> @output last))))
+                                  (catch Exception _
+                                    (println (-> @output last)))))))
+             lock (gensym)
+             deref-result (memoize (fn []
+                                     (locking lock
+                                       (-deref-result))))
+             _output-streaming (future
+                                 (with-open [rdr (io/reader (:out result))]
+                                   (binding [*in* rdr]
+                                     (loop [line (read-line)]
+                                       (when line
+                                         ;; If it's a EDN hashmap, do not print it.
+                                         (when-let [last-line (last @output)]
+                                           (println last-line))
+                                         (swap! output conj line)
+                                         (recur (read-line))))))
+                                 (reset! *streaming-finished? true)
+                                 (deref-result))
              process (RecifeModel.
                       id (atom {})
                       (reify
@@ -2054,7 +2065,7 @@ VIEW
                             (p/sh (format "kill -15 %s" (.pid (:proc result))))
                             (when use-buffer
                               (r.buf/stop-sync-loop!))
-                            @output-streaming
+                            #_@output-streaming
                             (println (format "\n\n------- Recife process destroyed after %s seconds ------\n\n"
                                              (Math/round (/ (- (System/nanoTime)
                                                                t0)
@@ -2062,7 +2073,7 @@ VIEW
 
                         clojure.lang.IDeref
                         (deref [_]
-                          @output-streaming
+                          #_@output-streaming
                           (deref-result))))]
          (reset! *current-model-run process)
          ;; Read line by line so we can stream the output to the user.

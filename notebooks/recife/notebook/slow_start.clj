@@ -113,23 +113,17 @@
   [{::keys [hour]}]
   (<= hour 23))
 
-#_^{:nextjournal.clerk/visibility {:result :show :code :hide}}
-(rc/example
- @(r/run-model global #{tick-v1 disallow-after-23}
-               {:trace-example true}))
+^{:nextjournal.clerk/visibility {:result :show :code :hide}}
+(rc/run-model ::ex-141 global #{tick-v1 disallow-after-23}
+              {:trace-example true})
 
 (require '[hillel.ch6-threads-3 :as ch6-threads-3])
 
-#_^{:nextjournal.clerk/visibility {:result :show :code :hide}}
-(rc/example
- @(r/run-model ch6-threads-3/global
-                  #{ch6-threads-3/thread
-                    ch6-threads-3/at-most-one-critical
-                    ch6-threads-3/no-livelocks}))
-
-^{:nextjournal.clerk/visibility {:result :show :code :show}
-  :nextjournal.clerk/no-cache true}
-(rm/model-state)
+^{:nextjournal.clerk/visibility {:result :show :code :hide}}
+(rc/run-model ::ef-36 ch6-threads-3/global
+              #{ch6-threads-3/thread
+                ch6-threads-3/at-most-one-critical
+                ch6-threads-3/no-livelocks})
 
 (comment
 
@@ -154,6 +148,12 @@
 ^{:nextjournal.clerk/visibility {:code :hide :result :hide}}
 (comment
 
+  (r/run-model
+   ch6-threads-3/global
+   #{ch6-threads-3/thread
+     ch6-threads-3/no-livelocks
+     ch6-threads-3/at-most-one-critical})
+
   ;; TODO:
   ;; - [x] Return trace example when halting
   ;; - [x] Find a way to require Clerk without interfering with the
@@ -168,15 +168,23 @@
   ;;   - [x] Chek why ch6-threads-3 is not working
   ;;     - There was a race condition where the output streaming was
   ;;       ending after the response was returned
-  ;;   - [ ] Make loading async
-  ;;     - [ ] Initial
-  ;;     - [ ] Running
-  ;;     - [ ] Final result
+  ;;   - [x] Make loading async
+  ;;     - [x] Initial
+  ;;     - [x] Running
+  ;;     - [x] Final result
+  ;;   - [x] Make queue in the background so specs can run from the
+  ;;         top to the bottom
+  ;;   - [x] Fix no trace violations for ch6-threads-3
+  ;;   - [x] Fix showing only `blocked` and `running`, but not `waiting`
+  ;;   - [ ] Check async with build
   ;;   - [ ] Show violation
+  ;;     - [ ] Create custom viewer for examples
   ;;     - [ ] Invariant
   ;;     - [ ] Example
   ;;     - [ ] Back to state
   ;;     - [ ] Violated temporal property
+  ;;   - [ ] Show how many seconds ago the run was if the user clicks on a
+  ;;         `i` icon
   ;;   - [ ] We could show random examples in Clerk if
   ;;        `:trace-example` is activated. This should be feasible by
   ;;        using `r/save!`

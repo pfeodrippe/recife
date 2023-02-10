@@ -184,10 +184,15 @@ run Recife using `:generate`.
        (loop [v (buf-read-next-line)]
          (when v
            (swap! *contents (fn [contents]
-                              (let [[bucket value] v]
-                                (if (contains? contents bucket)
-                                  (update contents bucket conj value)
-                                  (update contents bucket (comp vec conj) value)))))
+                              (try
+                                (let [[bucket value] v]
+                                  (if (contains? contents bucket)
+                                    (update contents bucket conj value)
+                                    (update contents bucket (comp vec conj) value)))
+                                (catch Exception _ex
+                                  #_(println ::bad-value v)
+                                  contents
+                                  #_(throw ex)))))
            (recur (buf-read-next-line))))
        (when (seq @*contents)
          (reset! *new-contents? true))
