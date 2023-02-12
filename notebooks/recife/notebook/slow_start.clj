@@ -110,13 +110,13 @@
   (<= hour 23))
 
 ^{:nextjournal.clerk/visibility {:result :show :code :hide}}
-(rc/run-model ::ex-142 global #{tick-v1 disallow-after-23}
+(rc/run-model ::ex-157 global #{tick-v1 disallow-after-23}
               {:trace-example true})
 
 (require '[hillel.ch6-threads-3 :as ch6-threads-3])
 
 ^{:nextjournal.clerk/visibility {:result :show :code :hide}}
-(rc/run-model ::ef-36 ch6-threads-3/global
+(rc/run-model ::ef-37 ch6-threads-3/global
               #{ch6-threads-3/thread
                 ch6-threads-3/at-most-one-critical
                 ch6-threads-3/no-livelocks})
@@ -173,19 +173,14 @@
   ;;   - [x] Fix no trace violations for ch6-threads-3
   ;;   - [x] Fix showing only `blocked` and `running`, but not `waiting`
   ;;   - [x] Check async with build
-  ;;   - [ ] Show violation
-  ;;     - [ ] Create custom viewer for examples
-  ;;     - [ ] Invariant
-  ;;     - [ ] Example
-  ;;     - [ ] Back to state
-  ;;     - [ ] Violated temporal property
-  ;;   - [ ] Show how many seconds ago the run was if the user clicks on a
-  ;;         `i` icon
-  ;;   - [ ] We could show random examples in Clerk if
-  ;;        `:trace-example` is activated. This should be feasible by
-  ;;        using `r/save!`
-  ;;     - Even for incomplete traces, it may be useful to show
-  ;;       something in the screen (for fast feedback)
+  ;;   - [x] Show trace info
+  ;;     - [x] Example
+  ;;     - [x] Create custom viewer for examples
+  ;;     - [x] Invariant
+  ;;     - [x] Back to state
+  ;;     - [x] Add loopback on the graph
+  ;;     - [x] Violated temporal property
+  ;;   - [x] Fix intermediary state presentation (waiting/running)
   ;; - [ ] Clock runs forever
   ;;   - [ ] How to visualize this in Clerk?
   ;;   - [ ] Add constraint
@@ -197,6 +192,14 @@
   ;; - [ ] Infinitely often, clock arrives at some time
   ;; - [ ] In another notebook, explain the trace output
   ;; - [ ] Be able to show docstring for a var
+  ;; - [ ] Add the option of the user seeing the raw data in table format
+  ;; - [ ] Show how many seconds ago the run was if the user clicks on a
+  ;;       `i` icon (also number of states and related info)
+  ;; - [ ] We could show random examples in Clerk if
+  ;;      `:trace-example` is activated. This should be feasible by
+  ;;      using `r/save!`
+  ;;   - Even for incomplete traces, it may be useful to show
+  ;;     something in the screen (for fast feedback)
 
   ;; TODO:
   ;; - [ ] Fix code identation on mobile
