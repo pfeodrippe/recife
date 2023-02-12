@@ -45,17 +45,34 @@
                ~(mapv (fn [x#] `'~x#) body)
                ~(vec body))))))
 
+(def ^:private ident-viewer
+  (with-recife
+    {:transform-fn
+     (fn [wrapped-value]
+       (-> wrapped-value
+           clerk/mark-preserve-keys
+           (update-in [:nextjournal/value :form] clerk/code)))
+
+     :render-fn
+     '(fn [{:keys [form val]} opts]
+        [:div
+         {:class "py-[7px]"}
+         [:div [:div.bg-slate-100.px-2.rounded
+                (nextjournal.clerk.render/inspect-presented opts form)]]
+         [:div.flex.mt-1
+          (nextjournal.clerk.render/inspect-presented opts val)]])}))
+
 (def -main-viewer
   (with-recife
     {:transform-fn
      (v/update-val
       (fn [example]
-        (mapv (partial v/with-viewer v/example-viewer) [example])))
+        (mapv (partial v/with-viewer ident-viewer) [example])))
 
      :render-fn
      '(fn [examples opts]
         (into [:div.border-l-2.border-slate-300.pl-4
-               [:div.uppercase.tracking-wider.text-xs.font-sans.text-slate-500.mt-4.mb-2
+               [:div.uppercase.tracking-wider.text-xs.font-sans.text-blue-500.mt-4.mb-2
                 "Recife"]]
               (nextjournal.clerk.render/inspect-children opts)
               examples))}))
@@ -71,8 +88,6 @@
           :val (do ~@body)}))))
 
 (defonce *cache (atom {}))
-
-#_(clerk/recompute!)
 
 (defn -run-delayed
   [id cache-key global components opts]
@@ -120,38 +135,47 @@
               (if opts
                 (drop 2 &form)
                 (drop-last (drop 2 &form))))
-     (let [cache-key# {~id [~(drop 2 &form) ~global ~opts]}]
+     (let [cache-key# {~id [(quote ~(drop 2 &form)) ~global ~opts]}]
        (or (get @*cache cache-key#)
            (-run-delayed ~id cache-key# ~global ~components ~opts))))))
 
 (defn- adapt-result
-  [result]
+  [{:keys [trace-info] :as result}]
   ;; Update trace elements so they contains the
   ;; pretty-printed version that we can use for the
   ;; node tooltip.
-  (update result :trace
-          (fn [trace]
-            (if (not (sequential? trace))
-              trace
-              (mapv (fn [[idx state]]
-                      [idx (assoc state :printed
-                                  (with-out-str
-                                    (pp/pprint
-                                     (dissoc state
-                                             ::r/procs
-                                             :recife/metadata))))])
-                    trace)))))
+  (-> result
+      (update :trace
+              (fn [trace]
+                (if (not (sequential? trace))
+                  trace
+                  (mapv (fn [[idx state]]
+                          [idx (assoc state :printed
+                                      (with-out-str
+                                        (pp/pprint
+                                         (dissoc state
+                                                 ::r/procs
+                                                 :recife/metadata))))])
+                        trace))))
+      #_(assoc :trace-info-code (v/code trace-info))))
 
 (def ^:private render-response
   '(defn render-response
-     [value]
+     [{:keys [trace trace-info trace-info-code experimental]
+       :as value}
+      opts]
      (v/html
       (when value
         [v/with-d3-require {:package ["elgrapho"]}
          (fn [elgrapho]
-           (if (not (sequential? (:trace value)))
-             [:div "No violations found"]
-             (let [trace (:trace value)
+           (if (not (sequential? trace))
+             [:div
+              [:br]
+              [:div.mt-5.bg-green-100.p-2
+               [:span.text-green-500.mr-3
+                "✔"]
+               [:span "No violations found"]]]
+             (let [{:keys [violation]} trace-info
                    model {:nodes
                           (->> trace
                                (mapv (fn [[idx state]]
@@ -169,12 +193,15 @@
                                vec)
 
                           :edges
-                          (->> trace
-                               (partition 2 1)
-                               (mapv (fn [[[idx-0 state-0]
-                                           [idx-1 state-1]]]
-                                       {:from idx-0
-                                        :to idx-1})))}
+                          (cond-> (->> trace
+                                       (partition 2 1)
+                                       (mapv (fn [[[idx-0 state-0]
+                                                   [idx-1 state-1]]]
+                                               {:from idx-0
+                                                :to idx-1})))
+                            (= (:type violation) :back-to-state)
+                            (conj {:from (dec (count trace))
+                                   :to (:state-number violation)}))}
                    build-graph
                    (fn [el]
                      (new elgrapho
@@ -183,8 +210,8 @@
                                        clj->js
                                        ((-> elgrapho
                                             .-layouts
-                                            .-ForceDirected
-                                            #_.-Hairball
+                                            #_.-ForceDirected
+                                            .-Hairball
                                             #_.-Cluster
                                             #_.-Chord)))
                             :container el
@@ -193,26 +220,54 @@
                             ;; Disable animations at startup so we don't bounce
                             ;; when zooming in.
                             :animations false
-                            #_ #_:arrows true
+                            :arrows true
                             #_ #_:glowBlend 0.2})))]
-               [:div {:ref (fn [el]
-                             (when el
-                               (let [graph (build-graph el)]
-                                 ;; Zoom out a little bit so we have room for the
-                                 ;; nodes.
-                                 (.zoomToPoint graph 0 0
-                                               (/ 1 1.1)
-                                               (/ 1 1.1))
-                                 ;; Enable animations again after startup.
-                                 (set! (.-animations graph) true)
-                                 (set! (.-tooltipTemplate graph)
-                                       (fn [idx el]
-                                         (set! (.-innerHTML el)
-                                               (str "<pre>\n"
-                                                    (:printed (last (get trace idx)))
-                                                    (str "</pre>")))))
-                                 graph)))}])))]))))
-
+               [:div.mt-5
+                (if (:trace-example trace-info)
+                  [:div.bg-green-100.rounded-md.p-5
+                   [:span.text-green-500.mr-3
+                    "✔"]
+                   [:span "No violations found (trace below is a valid one)"]]
+                  [:div.bg-red-100.p-5
+                   [:div.mb-2
+                    [:span.text-red-500.mr-3 "⚠"]
+                    [:span "Violation found"]]
+                   [:div
+                    [:div.mb (if (= (:type violation) :back-to-state)
+                               (str "The system can be stuck in a loop, starting on state number "
+                                    (:state-number violation)
+                                    ", that will violate the following temporal  properties:")
+                               (str "The following invariant was violated:"))]
+                    (if (= (:type violation) :back-to-state)
+                      (into [:ul]
+                            (->> (:violated-temporal-properties experimental)
+                                 (filter (comp :violated? val))
+                                 (mapv first)
+                                 (mapv #(v/code (str "#'" (symbol %))))
+                                 (mapv (comp (partial vector :li)
+                                             nextjournal.clerk.render/inspect))))
+                      (into [:ul]
+                            (->> [(:name violation)]
+                                 (mapv #(v/code (str "#'" (symbol %))))
+                                 (mapv (comp (partial vector :li)
+                                             nextjournal.clerk.render/inspect)))))]])
+                [:div {:ref (fn [el]
+                              (when el
+                                (let [graph (build-graph el)]
+                                  ;; Zoom out a little bit so we have room for the
+                                  ;; nodes.
+                                  (.zoomToPoint graph 0 0
+                                                (/ 1 1.1)
+                                                (/ 1 1.1))
+                                  ;; Enable animations again after startup.
+                                  (set! (.-animations graph) true)
+                                  (set! (.-tooltipTemplate graph)
+                                        (fn [idx el]
+                                          (set! (.-innerHTML el)
+                                                (str "<pre>\n"
+                                                     (:printed (last (get trace idx)))
+                                                     (str "</pre>")))))
+                                  graph)))}]])))]))))
 
 (def recife-response-viewer
   (with-recife
@@ -224,6 +279,20 @@
                       render-response
                       '(fn [value]
                          (render-response value)))}))
+
+(def ^:private model-render-fn
+  (list 'do
+        render-response
+        '(fn [value]
+           (when value
+             (if (:status value)
+               [:div.bg-gray-100.p-5.mt-2.w-full
+                (if (= (:status value) :running)
+                    [:div.animate-pulse
+                     "⚙ Running"]
+                    [:div.animate-pulse
+                     "⌛ Waiting"])]
+               (render-response value))))))
 
 (def recife-model-viewer
   (with-recife
@@ -237,15 +306,7 @@
                               (if (= status :done)
                                 (adapt-result (r/get-result value))
                                 model-state)))))
-     :render-fn
-     (list 'do
-           render-response
-           '(fn [value]
-              (when value
-                (if (:status value)
-                  (v/html
-                   [:div (:status value)])
-                  (render-response value)))))}))
+     :render-fn model-render-fn}))
 
 (def recife-model-clerk-viewer
   (with-recife
@@ -264,15 +325,7 @@
                                     (adapt-result (r/get-result model))
                                     model-state))
                                 {:status :waiting})))))
-     :render-fn
-     (list 'do
-           render-response
-           '(fn [value opts]
-              (when value
-                (if (:status value)
-                  (v/html
-                   [:div (:status value)])
-                  (render-response value)))))}))
+     :render-fn model-render-fn}))
 
 (with-recife
   (tool.clerk.util/add-global-viewers!
@@ -280,258 +333,271 @@
     recife-model-viewer
     recife-model-clerk-viewer]))
 
+(with-recife
+  (clerk/recompute!))
+
 (comment
 
   (clerk/recompute!)
 
   (do
     (def value
-      {:trace
-       [[0
-         {:recife.notebook.slow-start/hour 0,
-          :recife.core/procs
-          #:recife.notebook.slow-start{:tick-v1
-                                       {:pc
-                                        :recife.notebook.slow-start/tick-v1}}}]
-        [1
-         {:recife.notebook.slow-start/hour 1,
-          :recife.core/procs
-          #:recife.notebook.slow-start{:tick-v1
-                                       {:pc
-                                        :recife.notebook.slow-start/tick-v1}},
-          :recife/metadata
-          {:context
-           [:recife.notebook.slow-start/tick-v1
-            {:self :recife.notebook.slow-start/tick-v1}]}}]
-        [2
-         {:recife.notebook.slow-start/hour 2,
-          :recife.core/procs
-          #:recife.notebook.slow-start{:tick-v1
-                                       {:pc
-                                        :recife.notebook.slow-start/tick-v1}},
-          :recife/metadata
-          {:context
-           [:recife.notebook.slow-start/tick-v1
-            {:self :recife.notebook.slow-start/tick-v1}]}}]
-        [3
-         {:recife.notebook.slow-start/hour 3,
-          :recife.core/procs
-          #:recife.notebook.slow-start{:tick-v1
-                                       {:pc
-                                        :recife.notebook.slow-start/tick-v1}},
-          :recife/metadata
-          {:context
-           [:recife.notebook.slow-start/tick-v1
-            {:self :recife.notebook.slow-start/tick-v1}]}}]
-        [4
-         {:recife.notebook.slow-start/hour 4,
-          :recife.core/procs
-          #:recife.notebook.slow-start{:tick-v1
-                                       {:pc
-                                        :recife.notebook.slow-start/tick-v1}},
-          :recife/metadata
-          {:context
-           [:recife.notebook.slow-start/tick-v1
-            {:self :recife.notebook.slow-start/tick-v1}]}}]
-        [5
-         {:recife.notebook.slow-start/hour 5,
-          :recife.core/procs
-          #:recife.notebook.slow-start{:tick-v1
-                                       {:pc
-                                        :recife.notebook.slow-start/tick-v1}},
-          :recife/metadata
-          {:context
-           [:recife.notebook.slow-start/tick-v1
-            {:self :recife.notebook.slow-start/tick-v1}]}}]
-        [6
-         {:recife.notebook.slow-start/hour 6,
-          :recife.core/procs
-          #:recife.notebook.slow-start{:tick-v1
-                                       {:pc
-                                        :recife.notebook.slow-start/tick-v1}},
-          :recife/metadata
-          {:context
-           [:recife.notebook.slow-start/tick-v1
-            {:self :recife.notebook.slow-start/tick-v1}]}}]
-        [7
-         {:recife.notebook.slow-start/hour 7,
-          :recife.core/procs
-          #:recife.notebook.slow-start{:tick-v1
-                                       {:pc
-                                        :recife.notebook.slow-start/tick-v1}},
-          :recife/metadata
-          {:context
-           [:recife.notebook.slow-start/tick-v1
-            {:self :recife.notebook.slow-start/tick-v1}]}}]
-        [8
-         {:recife.notebook.slow-start/hour 8,
-          :recife.core/procs
-          #:recife.notebook.slow-start{:tick-v1
-                                       {:pc
-                                        :recife.notebook.slow-start/tick-v1}},
-          :recife/metadata
-          {:context
-           [:recife.notebook.slow-start/tick-v1
-            {:self :recife.notebook.slow-start/tick-v1}]}}]
-        [9
-         {:recife.notebook.slow-start/hour 9,
-          :recife.core/procs
-          #:recife.notebook.slow-start{:tick-v1
-                                       {:pc
-                                        :recife.notebook.slow-start/tick-v1}},
-          :recife/metadata
-          {:context
-           [:recife.notebook.slow-start/tick-v1
-            {:self :recife.notebook.slow-start/tick-v1}]}}]
-        [10
-         {:recife.notebook.slow-start/hour 10,
-          :recife.core/procs
-          #:recife.notebook.slow-start{:tick-v1
-                                       {:pc
-                                        :recife.notebook.slow-start/tick-v1}},
-          :recife/metadata
-          {:context
-           [:recife.notebook.slow-start/tick-v1
-            {:self :recife.notebook.slow-start/tick-v1}]}}]
-        [11
-         {:recife.notebook.slow-start/hour 11,
-          :recife.core/procs
-          #:recife.notebook.slow-start{:tick-v1
-                                       {:pc
-                                        :recife.notebook.slow-start/tick-v1}},
-          :recife/metadata
-          {:context
-           [:recife.notebook.slow-start/tick-v1
-            {:self :recife.notebook.slow-start/tick-v1}]}}]
-        [12
-         {:recife.notebook.slow-start/hour 12,
-          :recife.core/procs
-          #:recife.notebook.slow-start{:tick-v1
-                                       {:pc
-                                        :recife.notebook.slow-start/tick-v1}},
-          :recife/metadata
-          {:context
-           [:recife.notebook.slow-start/tick-v1
-            {:self :recife.notebook.slow-start/tick-v1}]}}]
-        [13
-         {:recife.notebook.slow-start/hour 13,
-          :recife.core/procs
-          #:recife.notebook.slow-start{:tick-v1
-                                       {:pc
-                                        :recife.notebook.slow-start/tick-v1}},
-          :recife/metadata
-          {:context
-           [:recife.notebook.slow-start/tick-v1
-            {:self :recife.notebook.slow-start/tick-v1}]}}]
-        [14
-         {:recife.notebook.slow-start/hour 14,
-          :recife.core/procs
-          #:recife.notebook.slow-start{:tick-v1
-                                       {:pc
-                                        :recife.notebook.slow-start/tick-v1}},
-          :recife/metadata
-          {:context
-           [:recife.notebook.slow-start/tick-v1
-            {:self :recife.notebook.slow-start/tick-v1}]}}]
-        [15
-         {:recife.notebook.slow-start/hour 15,
-          :recife.core/procs
-          #:recife.notebook.slow-start{:tick-v1
-                                       {:pc
-                                        :recife.notebook.slow-start/tick-v1}},
-          :recife/metadata
-          {:context
-           [:recife.notebook.slow-start/tick-v1
-            {:self :recife.notebook.slow-start/tick-v1}]}}]
-        [16
-         {:recife.notebook.slow-start/hour 16,
-          :recife.core/procs
-          #:recife.notebook.slow-start{:tick-v1
-                                       {:pc
-                                        :recife.notebook.slow-start/tick-v1}},
-          :recife/metadata
-          {:context
-           [:recife.notebook.slow-start/tick-v1
-            {:self :recife.notebook.slow-start/tick-v1}]}}]
-        [17
-         {:recife.notebook.slow-start/hour 17,
-          :recife.core/procs
-          #:recife.notebook.slow-start{:tick-v1
-                                       {:pc
-                                        :recife.notebook.slow-start/tick-v1}},
-          :recife/metadata
-          {:context
-           [:recife.notebook.slow-start/tick-v1
-            {:self :recife.notebook.slow-start/tick-v1}]}}]
-        [18
-         {:recife.notebook.slow-start/hour 18,
-          :recife.core/procs
-          #:recife.notebook.slow-start{:tick-v1
-                                       {:pc
-                                        :recife.notebook.slow-start/tick-v1}},
-          :recife/metadata
-          {:context
-           [:recife.notebook.slow-start/tick-v1
-            {:self :recife.notebook.slow-start/tick-v1}]}}]
-        [19
-         {:recife.notebook.slow-start/hour 19,
-          :recife.core/procs
-          #:recife.notebook.slow-start{:tick-v1
-                                       {:pc
-                                        :recife.notebook.slow-start/tick-v1}},
-          :recife/metadata
-          {:context
-           [:recife.notebook.slow-start/tick-v1
-            {:self :recife.notebook.slow-start/tick-v1}]}}]
-        [20
-         {:recife.notebook.slow-start/hour 20,
-          :recife.core/procs
-          #:recife.notebook.slow-start{:tick-v1
-                                       {:pc
-                                        :recife.notebook.slow-start/tick-v1}},
-          :recife/metadata
-          {:context
-           [:recife.notebook.slow-start/tick-v1
-            {:self :recife.notebook.slow-start/tick-v1}]}}]
-        [21
-         {:recife.notebook.slow-start/hour 21,
-          :recife.core/procs
-          #:recife.notebook.slow-start{:tick-v1
-                                       {:pc
-                                        :recife.notebook.slow-start/tick-v1}},
-          :recife/metadata
-          {:context
-           [:recife.notebook.slow-start/tick-v1
-            {:self :recife.notebook.slow-start/tick-v1}]}}]
-        [22
-         {:recife.notebook.slow-start/hour 22,
-          :recife.core/procs
-          #:recife.notebook.slow-start{:tick-v1
-                                       {:pc
-                                        :recife.notebook.slow-start/tick-v1}},
-          :recife/metadata
-          {:context
-           [:recife.notebook.slow-start/tick-v1
-            {:self :recife.notebook.slow-start/tick-v1}]}}]
-        [23
-         {:recife.notebook.slow-start/hour 23,
-          :recife.core/procs
-          #:recife.notebook.slow-start{:tick-v1
-                                       {:pc
-                                        :recife.notebook.slow-start/tick-v1}},
-          :recife/metadata
-          {:context
-           [:recife.notebook.slow-start/tick-v1
-            {:self :recife.notebook.slow-start/tick-v1}]}}]],
-       :trace-info {:trace-example true},
-       :distinct-states 24,
-       :generated-states 25,
-       :seed -1603827235550408286,
-       :fp 25,
-       :recife/transit-states-file-path
-       "/var/folders/6r/vx4stgxd5yg6pbv_t_b2wttw0000gp/T/transit-output17294373035229478550.msgpack"})
+      (r/get-result)
+      #_{:trace
+         [[0
+           {:recife.notebook.slow-start/hour 0,
+            :recife.core/procs
+            #:recife.notebook.slow-start{:tick-v1
+                                         {:pc
+                                          :recife.notebook.slow-start/tick-v1}}}]
+          [1
+           {:recife.notebook.slow-start/hour 1,
+            :recife.core/procs
+            #:recife.notebook.slow-start{:tick-v1
+                                         {:pc
+                                          :recife.notebook.slow-start/tick-v1}},
+            :recife/metadata
+            {:context
+             [:recife.notebook.slow-start/tick-v1
+              {:self :recife.notebook.slow-start/tick-v1}]}}]
+          [2
+           {:recife.notebook.slow-start/hour 2,
+            :recife.core/procs
+            #:recife.notebook.slow-start{:tick-v1
+                                         {:pc
+                                          :recife.notebook.slow-start/tick-v1}},
+            :recife/metadata
+            {:context
+             [:recife.notebook.slow-start/tick-v1
+              {:self :recife.notebook.slow-start/tick-v1}]}}]
+          [3
+           {:recife.notebook.slow-start/hour 3,
+            :recife.core/procs
+            #:recife.notebook.slow-start{:tick-v1
+                                         {:pc
+                                          :recife.notebook.slow-start/tick-v1}},
+            :recife/metadata
+            {:context
+             [:recife.notebook.slow-start/tick-v1
+              {:self :recife.notebook.slow-start/tick-v1}]}}]
+          [4
+           {:recife.notebook.slow-start/hour 4,
+            :recife.core/procs
+            #:recife.notebook.slow-start{:tick-v1
+                                         {:pc
+                                          :recife.notebook.slow-start/tick-v1}},
+            :recife/metadata
+            {:context
+             [:recife.notebook.slow-start/tick-v1
+              {:self :recife.notebook.slow-start/tick-v1}]}}]
+          [5
+           {:recife.notebook.slow-start/hour 5,
+            :recife.core/procs
+            #:recife.notebook.slow-start{:tick-v1
+                                         {:pc
+                                          :recife.notebook.slow-start/tick-v1}},
+            :recife/metadata
+            {:context
+             [:recife.notebook.slow-start/tick-v1
+              {:self :recife.notebook.slow-start/tick-v1}]}}]
+          [6
+           {:recife.notebook.slow-start/hour 6,
+            :recife.core/procs
+            #:recife.notebook.slow-start{:tick-v1
+                                         {:pc
+                                          :recife.notebook.slow-start/tick-v1}},
+            :recife/metadata
+            {:context
+             [:recife.notebook.slow-start/tick-v1
+              {:self :recife.notebook.slow-start/tick-v1}]}}]
+          [7
+           {:recife.notebook.slow-start/hour 7,
+            :recife.core/procs
+            #:recife.notebook.slow-start{:tick-v1
+                                         {:pc
+                                          :recife.notebook.slow-start/tick-v1}},
+            :recife/metadata
+            {:context
+             [:recife.notebook.slow-start/tick-v1
+              {:self :recife.notebook.slow-start/tick-v1}]}}]
+          [8
+           {:recife.notebook.slow-start/hour 8,
+            :recife.core/procs
+            #:recife.notebook.slow-start{:tick-v1
+                                         {:pc
+                                          :recife.notebook.slow-start/tick-v1}},
+            :recife/metadata
+            {:context
+             [:recife.notebook.slow-start/tick-v1
+              {:self :recife.notebook.slow-start/tick-v1}]}}]
+          [9
+           {:recife.notebook.slow-start/hour 9,
+            :recife.core/procs
+            #:recife.notebook.slow-start{:tick-v1
+                                         {:pc
+                                          :recife.notebook.slow-start/tick-v1}},
+            :recife/metadata
+            {:context
+             [:recife.notebook.slow-start/tick-v1
+              {:self :recife.notebook.slow-start/tick-v1}]}}]
+          [10
+           {:recife.notebook.slow-start/hour 10,
+            :recife.core/procs
+            #:recife.notebook.slow-start{:tick-v1
+                                         {:pc
+                                          :recife.notebook.slow-start/tick-v1}},
+            :recife/metadata
+            {:context
+             [:recife.notebook.slow-start/tick-v1
+              {:self :recife.notebook.slow-start/tick-v1}]}}]
+          [11
+           {:recife.notebook.slow-start/hour 11,
+            :recife.core/procs
+            #:recife.notebook.slow-start{:tick-v1
+                                         {:pc
+                                          :recife.notebook.slow-start/tick-v1}},
+            :recife/metadata
+            {:context
+             [:recife.notebook.slow-start/tick-v1
+              {:self :recife.notebook.slow-start/tick-v1}]}}]
+          [12
+           {:recife.notebook.slow-start/hour 12,
+            :recife.core/procs
+            #:recife.notebook.slow-start{:tick-v1
+                                         {:pc
+                                          :recife.notebook.slow-start/tick-v1}},
+            :recife/metadata
+            {:context
+             [:recife.notebook.slow-start/tick-v1
+              {:self :recife.notebook.slow-start/tick-v1}]}}]
+          [13
+           {:recife.notebook.slow-start/hour 13,
+            :recife.core/procs
+            #:recife.notebook.slow-start{:tick-v1
+                                         {:pc
+                                          :recife.notebook.slow-start/tick-v1}},
+            :recife/metadata
+            {:context
+             [:recife.notebook.slow-start/tick-v1
+              {:self :recife.notebook.slow-start/tick-v1}]}}]
+          [14
+           {:recife.notebook.slow-start/hour 14,
+            :recife.core/procs
+            #:recife.notebook.slow-start{:tick-v1
+                                         {:pc
+                                          :recife.notebook.slow-start/tick-v1}},
+            :recife/metadata
+            {:context
+             [:recife.notebook.slow-start/tick-v1
+              {:self :recife.notebook.slow-start/tick-v1}]}}]
+          [15
+           {:recife.notebook.slow-start/hour 15,
+            :recife.core/procs
+            #:recife.notebook.slow-start{:tick-v1
+                                         {:pc
+                                          :recife.notebook.slow-start/tick-v1}},
+            :recife/metadata
+            {:context
+             [:recife.notebook.slow-start/tick-v1
+              {:self :recife.notebook.slow-start/tick-v1}]}}]
+          [16
+           {:recife.notebook.slow-start/hour 16,
+            :recife.core/procs
+            #:recife.notebook.slow-start{:tick-v1
+                                         {:pc
+                                          :recife.notebook.slow-start/tick-v1}},
+            :recife/metadata
+            {:context
+             [:recife.notebook.slow-start/tick-v1
+              {:self :recife.notebook.slow-start/tick-v1}]}}]
+          [17
+           {:recife.notebook.slow-start/hour 17,
+            :recife.core/procs
+            #:recife.notebook.slow-start{:tick-v1
+                                         {:pc
+                                          :recife.notebook.slow-start/tick-v1}},
+            :recife/metadata
+            {:context
+             [:recife.notebook.slow-start/tick-v1
+              {:self :recife.notebook.slow-start/tick-v1}]}}]
+          [18
+           {:recife.notebook.slow-start/hour 18,
+            :recife.core/procs
+            #:recife.notebook.slow-start{:tick-v1
+                                         {:pc
+                                          :recife.notebook.slow-start/tick-v1}},
+            :recife/metadata
+            {:context
+             [:recife.notebook.slow-start/tick-v1
+              {:self :recife.notebook.slow-start/tick-v1}]}}]
+          [19
+           {:recife.notebook.slow-start/hour 19,
+            :recife.core/procs
+            #:recife.notebook.slow-start{:tick-v1
+                                         {:pc
+                                          :recife.notebook.slow-start/tick-v1}},
+            :recife/metadata
+            {:context
+             [:recife.notebook.slow-start/tick-v1
+              {:self :recife.notebook.slow-start/tick-v1}]}}]
+          [20
+           {:recife.notebook.slow-start/hour 20,
+            :recife.core/procs
+            #:recife.notebook.slow-start{:tick-v1
+                                         {:pc
+                                          :recife.notebook.slow-start/tick-v1}},
+            :recife/metadata
+            {:context
+             [:recife.notebook.slow-start/tick-v1
+              {:self :recife.notebook.slow-start/tick-v1}]}}]
+          [21
+           {:recife.notebook.slow-start/hour 21,
+            :recife.core/procs
+            #:recife.notebook.slow-start{:tick-v1
+                                         {:pc
+                                          :recife.notebook.slow-start/tick-v1}},
+            :recife/metadata
+            {:context
+             [:recife.notebook.slow-start/tick-v1
+              {:self :recife.notebook.slow-start/tick-v1}]}}]
+          [22
+           {:recife.notebook.slow-start/hour 22,
+            :recife.core/procs
+            #:recife.notebook.slow-start{:tick-v1
+                                         {:pc
+                                          :recife.notebook.slow-start/tick-v1}},
+            :recife/metadata
+            {:context
+             [:recife.notebook.slow-start/tick-v1
+              {:self :recife.notebook.slow-start/tick-v1}]}}]
+          [23
+           {:recife.notebook.slow-start/hour 23,
+            :recife.core/procs
+            #:recife.notebook.slow-start{:tick-v1
+                                         {:pc
+                                          :recife.notebook.slow-start/tick-v1}},
+            :recife/metadata
+            {:context
+             [:recife.notebook.slow-start/tick-v1
+              {:self :recife.notebook.slow-start/tick-v1}]}}]],
+         :trace-info {:trace-example true},
+         :distinct-states 24,
+         :generated-states 25,
+         :seed -1603827235550408286,
+         :fp 25,
+         :recife/transit-states-file-path
+         "/var/folders/6r/vx4stgxd5yg6pbv_t_b2wttw0000gp/T/transit-output17294373035229478550.msgpack"})
 
     (def trace
-      (:trace value)))
+      (:trace value))
+
+    (def trace-info
+      (:trace-info value))
+
+    (def violation
+      (:violation (:trace-info value)))
+
+    (def experimental
+      (:experimental value)))
 
   ())
