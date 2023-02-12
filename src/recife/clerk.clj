@@ -49,15 +49,16 @@
   (with-recife
     {:transform-fn
      (v/update-val
-      (fn [examples]
-        (mapv (partial v/with-viewer v/example-viewer) examples)))
+      (fn [example]
+        (mapv (partial v/with-viewer v/example-viewer) [example])))
 
      :render-fn
      '(fn [examples opts]
         (into [:div.border-l-2.border-slate-300.pl-4
                [:div.uppercase.tracking-wider.text-xs.font-sans.text-slate-500.mt-4.mb-2
                 "Recife"]]
-              (nextjournal.clerk.render/inspect-children opts) examples))}))
+              (nextjournal.clerk.render/inspect-children opts)
+              examples))}))
 
 (defonce model-lock (Object.))
 
@@ -66,19 +67,19 @@
   (when clerk.config/*in-clerk*
     `(with-recife
        (clerk/with-viewer -main-viewer
-         [{:form '~form
-           :val (do ~@body)}]))))
+         {:form '~form
+          :val (do ~@body)}))))
 
 (defonce *cache (atom {}))
 
 #_(clerk/recompute!)
 
 (defn -run-delayed
-  [id global components opts]
+  [id cache-key global components opts]
   (with-recife
     (if (tool.clerk/build?)
       (let [model @(r/run-model global components opts)]
-        (swap! *cache assoc id model)
+        (swap! *cache assoc cache-key model)
         model)
       (let [*state (atom {:id id
                           :model nil})
@@ -102,14 +103,15 @@
                                            (Thread/sleep 100))))))
                                  #_(println :>>FINISHING id))}
                      {:type ::clerk-model})]
-        (swap! *cache assoc id my-run)
+        (swap! *cache assoc cache-key my-run)
         my-run))))
 
 (defmacro run-model
   "A wrapper over `recife.core/run-model` so we can present
   thins with Clerk.
 
-  Process is cached using `id`."
+  Process is cached using `id` + some simple heuristics over the other
+  arguments."
   ([id global components]
    `(run-model ~id ~global ~components nil))
   ([id global components opts]
@@ -118,8 +120,9 @@
               (if opts
                 (drop 2 &form)
                 (drop-last (drop 2 &form))))
-     (or (get @*cache ~id)
-         (-run-delayed ~id ~global ~components ~opts)))))
+     (let [cache-key# {~id [~(drop 2 &form) ~global ~opts]}]
+       (or (get @*cache cache-key#)
+           (-run-delayed ~id cache-key# ~global ~components ~opts))))))
 
 (defn- adapt-result
   [result]
