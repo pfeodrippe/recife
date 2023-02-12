@@ -30,7 +30,6 @@
 ;; We will define a specification, and we need some data to act
 ;; upon. Following Clojure conventions, everything we will need to deal
 ;; with is defined in a simple map.
-
 (def global
   {::hour 0})
 
@@ -45,7 +44,6 @@
 
 ;; We then need some way of changing this state, a Clojure function
 ;; should do it for us. State is changed in a immutable way.
-
 (defn update-clock-1
   [db]
   (update db ::hour inc))
@@ -53,7 +51,6 @@
 ;; This function receives a map and returns a map, ◊code{db} contains
 ;; the key ◊code{::hour}. We can give this function to the first (and
 ;; most important) Recife operator we will know, ◊code{defproc}.
-
 (r/defproc tick-v1 update-clock-1)
 
 ;; We can also inline the function, it's more convenient to have everything
@@ -113,7 +110,7 @@
   (<= hour 23))
 
 ^{:nextjournal.clerk/visibility {:result :show :code :hide}}
-(rc/run-model ::ex-141 global #{tick-v1 disallow-after-23}
+(rc/run-model ::ex-142 global #{tick-v1 disallow-after-23}
               {:trace-example true})
 
 (require '[hillel.ch6-threads-3 :as ch6-threads-3])
