@@ -14,7 +14,8 @@
    [nextjournal.clerk.viewer :as-alias v]
    [recife.buffer :as-alias r.buf]
    [recife.core :as-alias r]
-   [recife.model :as-alias rm]))
+   [recife.model :as-alias rm]
+   [recife.helpers :as rh]))
 
 (defmacro with-recife
   [& body]
@@ -89,6 +90,10 @@
 
 (defonce *cache (atom {}))
 
+(rh/defconstraint finite-trace
+  [_]
+  (<= (rh/get-level) 1000))
+
 (defn -run-delayed
   [id cache-key global components opts]
   (with-recife
@@ -137,7 +142,13 @@
                 (drop-last (drop 2 &form))))
      (let [cache-key# {~id [(quote ~(drop 2 &form)) ~global ~opts]}]
        (or (get @*cache cache-key#)
-           (-run-delayed ~id cache-key# ~global ~components ~opts))))))
+           (-run-delayed ~id cache-key#
+                         ~global
+                         (set (conj ~components
+                                    ;; Add constraint so we can always have
+                                    ;; finite traces
+                                    finite-trace))
+                         ~opts))))))
 
 (defn- adapt-result
   [{:keys [trace-info] :as result}]
