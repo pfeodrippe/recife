@@ -1,7 +1,7 @@
 ;; ◊page-name[{:subtitle "Gimme code"}]{slow start}
 
 ;; If you didn't already, see the ◊xref{:doc/reasoning} for this
-;; library.
+;; project.
 
 ;; For this non-quick start, we will be dealing with a simple clock, this should be
 ;; a small sample of the functionality that you will find in Recife. Other notebooks
@@ -18,10 +18,9 @@
   {:nextjournal.clerk/visibility {:result :hide}
    :clerk/name "slow start"}
   (:require
-   [recife.core :as r]
-   [recife.helpers :as rh]
    [recife.clerk :as rc]
-   [recife.model :as rm]))
+   [recife.core :as r]
+   [recife.helpers :as rh]))
 
 ;; ◊note{We are using Clerk to render this notebook, which
 ;; you can find
@@ -176,7 +175,7 @@
   ;;         top to the bottom
   ;;   - [x] Fix no trace violations for ch6-threads-3
   ;;   - [x] Fix showing only `blocked` and `running`, but not `waiting`
-  ;;   - [ ] Check async with build
+  ;;   - [x] Check async with build
   ;;   - [ ] Show violation
   ;;     - [ ] Create custom viewer for examples
   ;;     - [ ] Invariant

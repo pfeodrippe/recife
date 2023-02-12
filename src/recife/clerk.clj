@@ -7,6 +7,7 @@
   time for a Recife model run."
   (:require
    [clojure.pprint :as pp]
+   [com.pfeodrippe.tooling.clerk :as-alias tool.clerk]
    [com.pfeodrippe.tooling.clerk.util :as-alias tool.clerk.util]
    [nextjournal.clerk :as-alias clerk]
    [nextjournal.clerk.config :as clerk.config]
@@ -18,6 +19,7 @@
 (defmacro with-recife
   [& body]
   (when (not (System/getProperty "RECIFE_OPTS_FILE_PATH"))
+    (require '[com.pfeodrippe.tooling.clerk :as tool.clerk])
     (require '[com.pfeodrippe.tooling.clerk.util :as tool.clerk.util])
     (require '[nextjournal.clerk :as clerk])
     (require '[nextjournal.clerk.viewer :as v])
@@ -74,30 +76,34 @@
 (defn -run-delayed
   [id global components opts]
   (with-recife
-    (let [*state (atom {:id id
-                        :model nil})
-          my-run (with-meta {:id id
-                             :*state *state
-                             :model
-                             (future
-                               ;; We are sleeping so we don't have race
-                               ;; conditions between `show!` and `recompute!`,
-                               ;; see https://github.com/nextjournal/clerk/issues/414.
-                               (Thread/sleep 1000)
-                               (locking model-lock
-                                 (let [model (r/run-model global components opts)]
-                                   #_(println :>>>id (:id model))
-                                   (try
-                                     model
-                                     (finally
-                                       (swap! *state assoc :model model)
-                                       (while (not= (:status (rm/model-state model))
-                                                    :done)
-                                         (Thread/sleep 100))))))
-                               #_(println :>>FINISHING id))}
-                   {:type ::clerk-model})]
-      (swap! *cache assoc id my-run)
-      my-run)))
+    (if (tool.clerk/build?)
+      (let [model @(r/run-model global components opts)]
+        (swap! *cache assoc id model)
+        model)
+      (let [*state (atom {:id id
+                          :model nil})
+            my-run (with-meta {:id id
+                               :*state *state
+                               :model
+                               (future
+                                 ;; We are sleeping so we don't have race
+                                 ;; conditions between `show!` and `recompute!`,
+                                 ;; see https://github.com/nextjournal/clerk/issues/414.
+                                 (Thread/sleep 1000)
+                                 (locking model-lock
+                                   (let [model (r/run-model global components opts)]
+                                     #_(println :>>>id (:id model))
+                                     (try
+                                       model
+                                       (finally
+                                         (swap! *state assoc :model model)
+                                         (while (not= (:status (rm/model-state model))
+                                                      :done)
+                                           (Thread/sleep 100))))))
+                                 #_(println :>>FINISHING id))}
+                     {:type ::clerk-model})]
+        (swap! *cache assoc id my-run)
+        my-run))))
 
 (defmacro run-model
   "A wrapper over `recife.core/run-model` so we can present
