@@ -55,6 +55,8 @@
   ;; - [x] Fix responsiveness
   ;; - [ ] Slow start
   ;; - [ ] Quick start
+  ;; - [ ] Model clerk race condition
+  ;;   - https://github.com/nextjournal/clerk/issues/414
   ;; - [ ] Initial states
   ;;   - [ ] One of
   ;; - [ ] Proc

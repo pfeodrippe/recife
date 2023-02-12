@@ -77,19 +77,26 @@
 
 ;; ◊title{Running our first specification}
 
-#_(comment
+(comment
 
-    ;; This will return an asynchronous process that you can `@` (deref).
-    (r/run-model global #{tick-v1} {:trace-example true})
+  ;; This will return an asynchronous process that you can `@` (deref).
+  (r/run-model global #{tick-v1} {:trace-example true})
 
-    ;; Halt will stop the process AND deref. You will need it, otherwise
-    ;; the clock will just keep running and running.
-    (r/halt!)
+  ;; Halt will stop the process AND deref. You will need it, otherwise
+  ;; the clock will just keep running and running.
+  (r/halt!)
 
-    ;; You can get the last result using this
-    (r/get-result)
+  ;; You can get the last result using this.
+  (r/get-result)
 
-    ())
+  ())
+
+^{:nextjournal.clerk/visibility {:result :show :code :hide}}
+(rc/run-model :infinite global #{tick-v1} {:trace-example true})
+
+;; Oh my, I can't read this trace, what's happening?
+
+;; TBD
 
 ;; ◊title{Constraining}
 
@@ -110,13 +117,13 @@
   (<= hour 23))
 
 ^{:nextjournal.clerk/visibility {:result :show :code :hide}}
-(rc/run-model ::ex-157 global #{tick-v1 disallow-after-23}
+(rc/run-model ::ex-163 global #{tick-v1 disallow-after-23}
               {:trace-example true})
 
 (require '[hillel.ch6-threads-3 :as ch6-threads-3])
 
 ^{:nextjournal.clerk/visibility {:result :show :code :hide}}
-(rc/run-model ::ef-37 ch6-threads-3/global
+(rc/run-model ::ef-38 ch6-threads-3/global
               #{ch6-threads-3/thread
                 ch6-threads-3/at-most-one-critical
                 ch6-threads-3/no-livelocks})
@@ -180,10 +187,11 @@
   ;;     - [x] Back to state
   ;;     - [x] Add loopback on the graph
   ;;     - [x] Violated temporal property
+  ;;     - [ ] Stuttering
   ;;   - [x] Fix intermediary state presentation (waiting/running)
-  ;; - [ ] Clock runs forever
-  ;;   - [ ] How to visualize this in Clerk?
-  ;;   - [ ] Add constraint
+  ;; - [x] Clock runs forever
+  ;;   - [x] How to visualize this in Clerk?
+  ;;   - [x] Add constraint
   ;;     - Will be removed later
   ;; - [ ] Invariant for checking that hour does not pass from 23
   ;; - [ ] defchecker
