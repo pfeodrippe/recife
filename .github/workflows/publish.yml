@@ -25,6 +25,7 @@ jobs:
 
       - name: Release
         run: |
+          make build
           clojure -A:dev -X recife.notebook.index/build!
           mkdir -p docs
           cp public/build/index.html docs/index.html
