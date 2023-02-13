@@ -92,7 +92,7 @@
 
 (rh/defconstraint finite-trace
   [_]
-  (<= (rh/get-level) 1000))
+  (<= (rh/get-level) 200))
 
 (defn -run-delayed
   [id cache-key global components opts]
@@ -187,6 +187,7 @@
                 "✔"]
                [:span "No violations found"]]]
              (let [{:keys [violation]} trace-info
+                   stuttering? (= (:type violation) :stuttering)
                    model {:nodes
                           (->> trace
                                (mapv (fn [[idx state]]
@@ -200,7 +201,12 @@
                                                       (-> (:recife/metadata state)
                                                           :context
                                                           first
-                                                          name)))}))
+                                                          name)
+                                                      (if (and stuttering?
+                                                               (= (dec (count trace))
+                                                                  idx))
+                                                        " -- STUTTERING"
+                                                        "")))}))
                                vec)
 
                           :edges
@@ -244,12 +250,26 @@
                     [:span.text-red-500.mr-3 "⚠"]
                     [:span "Violation found"]]
                    [:div
-                    [:div.mb (if (= (:type violation) :back-to-state)
-                               (str "The system can be stuck in a loop, starting on state number "
-                                    (:state-number violation)
-                                    ", that will violate the following temporal  properties:")
-                               (str "The following invariant was violated:"))]
-                    (if (= (:type violation) :back-to-state)
+                    [:div
+                     (cond
+                       (= (:type violation) :back-to-state)
+                       (str "The system can be stuck in a loop, starting on state number "
+                            (:state-number violation)
+                            ", that will violate the following temporal  properties:")
+
+                       stuttering?
+                       [:span
+                        (str "The system is allowed to stop (stutter) at any time "
+                             "if there is nothing saying that it cannot stop, you should "
+                             "define a ")
+                        [:a {:href "https://www.hillelwayne.com/post/fairness/"}
+                         "fair "]
+                        [:span "action."]]
+
+                       :else
+                       (str "The following invariant was violated:"))]
+                    (cond
+                      (= (:type violation) :back-to-state)
                       (into [:ul]
                             (->> (:violated-temporal-properties experimental)
                                  (filter (comp :violated? val))
@@ -257,6 +277,8 @@
                                  (mapv #(v/code (str "#'" (symbol %))))
                                  (mapv (comp (partial vector :li)
                                              nextjournal.clerk.render/inspect))))
+
+                      (= (:type violation) :invariant)
                       (into [:ul]
                             (->> [(:name violation)]
                                  (mapv #(v/code (str "#'" (symbol %))))
