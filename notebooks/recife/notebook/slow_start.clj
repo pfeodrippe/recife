@@ -123,7 +123,7 @@
 (require '[hillel.ch6-threads-3 :as ch6-threads-3])
 
 ^{:nextjournal.clerk/visibility {:result :show :code :hide}}
-(rc/run-model ::ef-38 ch6-threads-3/global
+(rc/run-model ::ef-41 ch6-threads-3/global
               #{ch6-threads-3/thread
                 ch6-threads-3/at-most-one-critical
                 ch6-threads-3/no-livelocks})
@@ -187,13 +187,13 @@
   ;;     - [x] Back to state
   ;;     - [x] Add loopback on the graph
   ;;     - [x] Violated temporal property
-  ;;     - [ ] Stuttering
+  ;;     - [x] Stuttering
   ;;   - [x] Fix intermediary state presentation (waiting/running)
   ;; - [x] Clock runs forever
   ;;   - [x] How to visualize this in Clerk?
   ;;   - [x] Add constraint
   ;;     - Will be removed later
-  ;; - [ ] Invariant for checking that hour does not pass from 23
+  ;; - [x] Invariant for checking that hour does not pass from 23
   ;; - [ ] defchecker
   ;; - [ ] Two processes try to alter the clock
   ;; - [ ] Eventually, clock arrives at some time
