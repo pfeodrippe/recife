@@ -37,7 +37,7 @@
      :or {browse true}}]
    (let [exec! #(clerk/build! {:paths ["notebooks/**"]
                                :index "notebooks/recife/notebook/index.clj"
-                               :bundle true
+                               #_ #_:bundle true
                                :browse %})]
      (when-not browse (exec! false))
      (exec! browse))))
