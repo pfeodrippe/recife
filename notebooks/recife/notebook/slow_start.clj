@@ -213,6 +213,6 @@
   ;; TODO:
   ;; - [x] Fix code identation on mobile
   ;; - [x] Fix notes on mobile
-  ;; - [ ] See how to render without bundling
+  ;; - [x] Render without bundling
 
   ())
