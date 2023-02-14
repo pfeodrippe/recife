@@ -92,7 +92,7 @@
 
 (rh/defconstraint finite-trace
   [_]
-  (<= (rh/get-level) 200))
+  (<= (rh/get-level) 100))
 
 (defn -run-delayed
   [id cache-key global components opts]
@@ -176,116 +176,165 @@
        :as value}
       opts]
      (v/html
-      (when value
-        [v/with-d3-require {:package ["elgrapho"]}
-         (fn [elgrapho]
-           (if (not (sequential? trace))
-             [:div
-              [:br]
-              [:div.mt-5.bg-green-100.p-2
-               [:span.text-green-500.mr-3
-                "✔"]
-               [:span "No violations found"]]]
-             (let [{:keys [violation]} trace-info
-                   stuttering? (= (:type violation) :stuttering)
-                   model {:nodes
-                          (->> trace
-                               (mapv (fn [[idx state]]
-                                       {:x (+ 0 (* 0.1M idx))
-                                        :y (+ 0 (* -0.1M idx))
-                                        :group idx
-                                        :label (if (= idx 0)
-                                                 "0 - INITIAL"
-                                                 (str idx
-                                                      " - "
-                                                      (-> (:recife/metadata state)
-                                                          :context
-                                                          first
-                                                          name)
-                                                      (if (and stuttering?
-                                                               (= (dec (count trace))
-                                                                  idx))
-                                                        " -- STUTTERING"
-                                                        "")))}))
-                               vec)
+      [v/with-d3-require {:package ["mermaid@8.14/dist/mermaid.js"]}
+       (fn [mermaid]
+         (when value
+           [v/with-d3-require {:package ["elgrapho"]}
+            (fn [elgrapho]
+              (if (not (sequential? trace))
+                [:div
+                 [:br]
+                 [:div.mt-5.bg-green-100.p-2
+                  [:span.text-green-500.mr-3
+                   "✔"]
+                  [:span "No violations found"]]]
+                (let [reg #".*android|.*Android.*|.*webOs.*|.*Android.*|.*iPhone.*"
+                      mobile? (or (re-matches reg (str js/navigator.userAgent))
+                                  (re-matches reg (str js/navigator.vendor))
+                                  (re-matches reg (str js/window.opera)))
+                      {:keys [violation]} trace-info
+                      stuttering? (= (:type violation) :stuttering)
+                      model {:nodes
+                             (->> trace
+                                  (mapv (fn [[idx state]]
+                                          {:x (+ 0 (* 0.1M idx))
+                                           :y (+ 0 (* -0.1M idx))
+                                           :group idx
+                                           :label (if (= idx 0)
+                                                    "0 - INITIAL"
+                                                    (str idx
+                                                         " - "
+                                                         (-> (:recife/metadata state)
+                                                             :context
+                                                             first
+                                                             name)
+                                                         (if (and stuttering?
+                                                                  (= (dec (count trace))
+                                                                     idx))
+                                                           " -- CRASH!"
+                                                           "")))}))
+                                  vec)
 
-                          :edges
-                          (cond-> (->> trace
-                                       (partition 2 1)
-                                       (mapv (fn [[[idx-0 state-0]
-                                                   [idx-1 state-1]]]
-                                               {:from idx-0
-                                                :to idx-1})))
-                            (= (:type violation) :back-to-state)
-                            (conj {:from (dec (count trace))
-                                   :to (:state-number violation)}))}
-                   build-graph
-                   (fn [el]
-                     (new elgrapho
-                          (clj->js
-                           {:model (-> model
-                                       clj->js
-                                       ((-> elgrapho
-                                            .-layouts
-                                            #_.-ForceDirected
-                                            .-Hairball
-                                            #_.-Cluster
-                                            #_.-Chord)))
-                            :container el
-                            :width 700
-                            :height 700
-                            ;; Disable animations at startup so we don't bounce
-                            ;; when zooming in.
-                            :animations false
-                            :arrows true
-                            #_ #_:glowBlend 0.2})))]
-               [:div.mt-5
-                (if (:trace-example trace-info)
-                  [:div.bg-green-100.rounded-md.p-5
-                   [:span.text-green-500.mr-3
-                    "✔"]
-                   [:span "No violations found (trace below is a valid one)"]]
-                  [:div.bg-red-100.p-5
-                   [:div.mb-2
-                    [:span.text-red-500.mr-3 "⚠"]
-                    [:span "Violation found"]]
-                   [:div
-                    [:div
-                     (cond
-                       (= (:type violation) :back-to-state)
-                       (str "The system can be stuck in a loop, starting on state number "
-                            (:state-number violation)
-                            ", that will violate the following temporal  properties:")
+                             :edges
+                             (cond-> (->> trace
+                                          (partition 2 1)
+                                          (mapv (fn [[[idx-0 state-0]
+                                                      [idx-1 state-1]]]
+                                                  {:from idx-0
+                                                   :to idx-1})))
+                               (= (:type violation) :back-to-state)
+                               (conj {:from (dec (count trace))
+                                      :to (:state-number violation)}))}
+                      build-graph
+                      (fn [el]
+                        (new elgrapho
+                             (clj->js
+                              {:model (-> model
+                                          clj->js
+                                          ((-> elgrapho
+                                               .-layouts
+                                               #_.-ForceDirected
+                                               .-Hairball
+                                               #_.-Cluster
+                                               #_.-Chord)))
+                               :container el
+                               :width 700
+                               :height 700
+                               ;; Disable animations at startup so we don't bounce
+                               ;; when zooming in.
+                               :animations false
+                               :arrows true
+                               #_ #_:glowBlend 0.2})))
 
-                       stuttering?
-                       [:span
-                        (str "The system is allowed to stop (stutter) at any time "
-                             "if there is nothing saying that it cannot stop, you should "
-                             "define a ")
-                        [:a {:href "https://www.hillelwayne.com/post/fairness/"}
-                         "fair "]
-                        [:span "action."]]
+                      build-mermaid
+                      (fn [el]
+                        (when el
+                          (set! (.-innerHTML el) "")
+                          (let [max-per-line 6
+                                group->node (->> (:nodes model)
+                                                 (mapv
+                                                  (fn [m]
+                                                    (update m :label
+                                                            #(-> (clojure.string/replace
+                                                                  % #" " "")
+                                                                 (clojure.string/replace
+                                                                  #"-" "_")))))
+                                                 (mapv (juxt :group identity))
+                                                 (into (sorted-map)))
+                                render
+                                (fn [start-idx]
+                                  (.render
+                                   mermaid
+                                   (str (gensym))
+                                   (str "stateDiagram-v2"
+                                        "\n"
+                                        "direction LR"
+                                        "\n"
+                                        (->> (mapv (fn [{:keys [from to]}]
+                                                     (str "  "
+                                                          (:label (group->node from))
+                                                          " --> "
+                                                          (:label (group->node to))))
+                                                   (:edges model))
+                                             (drop start-idx)
+                                             (take max-per-line)
+                                             (clojure.string/join "\n"))
+                                        "\n")
+                                   #(set! (.-innerHTML el) (str (.-innerHTML el) %))))]
+                            (loop [start-idx 0]
+                              (when (< start-idx (count trace))
+                                (render start-idx)
+                                (recur (+ start-idx (inc max-per-line))))))))]
+                  [:div.mt-5
+                   (if (:trace-example trace-info)
+                     [:div.bg-green-100.rounded-md.p-5
+                      [:span.text-green-500.mr-3
+                       "✔"]
+                      [:span "No violations found (trace below is a valid one)"]]
+                     [:div.bg-red-100.p-5
+                      [:div.mb-2
+                       [:span.text-red-500.mr-3 "⚠"]
+                       [:span "Violation found"]]
+                      [:div
+                       [:div
+                        (cond
+                          (= (:type violation) :back-to-state)
+                          (str "The system can be stuck in a loop, starting on state number "
+                               (:state-number violation)
+                               ", that will violate the following temporal  properties:")
 
-                       :else
-                       (str "The following invariant was violated:"))]
-                    (cond
-                      (= (:type violation) :back-to-state)
-                      (into [:ul]
-                            (->> (:violated-temporal-properties experimental)
-                                 (filter (comp :violated? val))
-                                 (mapv first)
-                                 (mapv #(v/code (str "#'" (symbol %))))
-                                 (mapv (comp (partial vector :li)
-                                             nextjournal.clerk.render/inspect))))
+                          stuttering?
+                          [:span
+                           (str "The system is allowed to stop (stutter) at any time "
+                                "if there is nothing saying that it cannot stop, you should "
+                                "define a ")
+                           [:a {:href "https://www.hillelwayne.com/post/fairness/"}
+                            "fair "]
+                           [:span "action."]]
 
-                      (= (:type violation) :invariant)
-                      (into [:ul]
-                            (->> [(:name violation)]
-                                 (mapv #(v/code (str "#'" (symbol %))))
-                                 (mapv (comp (partial vector :li)
-                                             nextjournal.clerk.render/inspect)))))]])
-                [:div {:ref (fn [el]
-                              (when el
+                          :else
+                          (str "The following invariant was violated:"))]
+                       (cond
+                         (= (:type violation) :back-to-state)
+                         (into [:ul]
+                               (->> (:violated-temporal-properties experimental)
+                                    (filter (comp :violated? val))
+                                    (mapv first)
+                                    (mapv #(v/code (str "#'" (symbol %))))
+                                    (mapv (comp (partial vector :li)
+                                                nextjournal.clerk.render/inspect))))
+
+                         (= (:type violation) :invariant)
+                         (into [:ul]
+                               (->> [(:name violation)]
+                                    (mapv #(v/code (str "#'" (symbol %))))
+                                    (mapv (comp (partial vector :li)
+                                                nextjournal.clerk.render/inspect)))))]])
+                   [:div {:ref
+                          (fn [el]
+                            (when el
+                              (if mobile?
+                                (build-mermaid el)
                                 (let [graph (build-graph el)]
                                   ;; Zoom out a little bit so we have room for the
                                   ;; nodes.
@@ -300,7 +349,7 @@
                                                 (str "<pre>\n"
                                                      (:printed (last (get trace idx)))
                                                      (str "</pre>")))))
-                                  graph)))}]])))]))))
+                                  graph))))}]])))]))])))
 
 (def recife-response-viewer
   (with-recife
@@ -629,6 +678,9 @@
 
     (def violation
       (:violation (:trace-info value)))
+
+    (def stuttering?
+      (= (:type violation) :stuttering))
 
     (def experimental
       (:experimental value)))

@@ -11,7 +11,7 @@
 ;; ◊title{Setting things up}
 
 ;; ◊note{Get Recife on
-;; ◊link{https://clojars.org/pfeodrippe/recife}{clojars}}
+;; ◊link{https://clojars.org/pfeodrippe/recife}{clojars}.}
 
 ;; First, require some Recife namespaces.
 (ns recife.notebook.slow-start
@@ -25,7 +25,7 @@
 ;; ◊note{We are using Clerk to render this notebook, which
 ;; you can find
 ;; ◊link{https://github.com/pfeodrippe/recife/blob/master/notebooks/recife/notebook/slow_start.clj}{
-;; here}}
+;; here}.}
 
 ;; We will define a specification, and we need some data to act
 ;; upon. Following Clojure conventions, everything we will need to deal
@@ -60,7 +60,7 @@
     (update db ::hour inc)))
 
 ;; ◊note{A trace is a sequence of states, a trace can also be called a
-;; behavior}
+;; behavior.}
 
 ;; ◊code{defproc} defines a process that will be used in Recife's
 ;; runtime. This is the only way that we can use to change state, the
@@ -101,7 +101,7 @@
 ;; ◊title{Constraining}
 
 ;; ◊note{We will handle it better later, but for now let's just
-;; constraint the states}
+;; constraint the states.}
 
 ;; Let's define a constraint. ◊code{defconstraint} receives a map, but
 ;; this time we are not interested in changing the state, but we would
@@ -194,6 +194,7 @@
   ;;   - [x] Add constraint
   ;;     - Will be removed later
   ;; - [x] Invariant for checking that hour does not pass from 23
+  ;; - [x] Fix mobile rendering
   ;; - [ ] defchecker
   ;; - [ ] Two processes try to alter the clock
   ;; - [ ] Eventually, clock arrives at some time
@@ -210,7 +211,7 @@
   ;;     something in the screen (for fast feedback)
 
   ;; TODO:
-  ;; - [ ] Fix code identation on mobile
-  ;; - [ ] Fix notes on mobile
+  ;; - [x] Fix code identation on mobile
+  ;; - [x] Fix notes on mobile
 
   ())
