@@ -130,25 +130,29 @@
   "A wrapper over `recife.core/run-model` so we can present
   thins with Clerk.
 
-  Process is cached using `id` + some simple heuristics over the other
-  arguments."
-  ([id global components]
-   `(run-model ~id ~global ~components nil))
-  ([id global components opts]
+  Process is cached using form metadata `:recife.clerk/id` + some simple
+  heuristics over the other arguments."
+  ([global components]
+   `(run-model ~global ~components nil ~(meta &form)))
+  ([global components opts]
+   `(run-model ~global ~components ~opts ~(meta &form)))
+  ([global components opts form-meta]
    `(-run-model
      ~(concat '(r/run-model)
               (if opts
-                (drop 2 &form)
-                (drop-last (drop 2 &form))))
-     (let [cache-key# {~id [(quote ~(drop 2 &form)) ~global ~opts]}]
+                (drop-last (drop 1 &form))
+                (drop-last (drop-last (drop 1 &form)))))
+     (let [id# (::id ~form-meta)
+           cache-key# {id# [(quote ~(drop-last &form)) ~global ~opts]}]
        (or (get @*cache cache-key#)
-           (-run-delayed ~id cache-key#
+           (-run-delayed id# cache-key#
                          ~global
                          (set (conj ~components
                                     ;; Add constraint so we can always have
                                     ;; finite traces
                                     finite-trace))
-                         ~opts))))))
+                         (merge {:trace-example true}
+                                ~opts)))))))
 
 (defn- adapt-result
   [{:keys [trace-info] :as result}]
@@ -176,7 +180,7 @@
        :as value}
       opts]
      (v/html
-      [v/with-d3-require {:package ["mermaid@8.14/dist/mermaid.js"]}
+      [v/with-d3-require {:package ["mermaid@9.4.0/dist/mermaid.js"]}
        (fn [mermaid]
          (when value
            [v/with-d3-require {:package ["elgrapho"]}
@@ -191,7 +195,8 @@
                 (let [reg #".*android|.*Android.*|.*webOs.*|.*Android.*|.*iPhone.*"
                       mobile? (or (re-matches reg (str js/navigator.userAgent))
                                   (re-matches reg (str js/navigator.vendor))
-                                  (re-matches reg (str js/window.opera)))
+                                  (re-matches reg (str js/window.opera))
+                                  #_true)
                       {:keys [violation]} trace-info
                       stuttering? (= (:type violation) :stuttering)
                       model {:nodes
@@ -261,25 +266,31 @@
                                                                   #"-" "_")))))
                                                  (mapv (juxt :group identity))
                                                  (into (sorted-map)))
+                                render-label (fn [group]
+                                               (if (zero? group)
+                                                 "[*]"
+                                                 (str (:label (group->node group))
+                                                      ":::_white")))
                                 render
                                 (fn [start-idx]
                                   (.render
                                    mermaid
                                    (str (gensym))
-                                   (str "stateDiagram-v2"
-                                        "\n"
-                                        "direction LR"
-                                        "\n"
-                                        (->> (mapv (fn [{:keys [from to]}]
-                                                     (str "  "
-                                                          (:label (group->node from))
-                                                          " --> "
-                                                          (:label (group->node to))))
-                                                   (:edges model))
-                                             (drop start-idx)
-                                             (take max-per-line)
+                                   (str (->> ["stateDiagram-v2"
+                                              "direction LR"
+                                              "classDef _white fill:white"]
                                              (clojure.string/join "\n"))
-                                        "\n")
+                                    "\n"
+                                    (->> (mapv (fn [{:keys [from to]}]
+                                                 (str "  "
+                                                      (render-label from)
+                                                      " --> "
+                                                      (render-label to)))
+                                               (:edges model))
+                                         (drop start-idx)
+                                         (take max-per-line)
+                                         (clojure.string/join "\n"))
+                                    "\n")
                                    #(set! (.-innerHTML el) (str (.-innerHTML el) %))))]
                             (loop [start-idx 0]
                               (when (< start-idx (count trace))
@@ -313,7 +324,9 @@
                            [:span "action."]]
 
                           :else
-                          (str "The following invariant was violated:"))]
+                          (str "The following invariant was violated by step "
+                               (dec (count trace))
+                               ":"))]
                        (cond
                          (= (:type violation) :back-to-state)
                          (into [:ul]
@@ -330,26 +343,31 @@
                                     (mapv #(v/code (str "#'" (symbol %))))
                                     (mapv (comp (partial vector :li)
                                                 nextjournal.clerk.render/inspect)))))]])
-                   [:div {:ref
-                          (fn [el]
-                            (when el
-                              (if mobile?
-                                (build-mermaid el)
-                                (let [graph (build-graph el)]
-                                  ;; Zoom out a little bit so we have room for the
-                                  ;; nodes.
-                                  (.zoomToPoint graph 0 0
-                                                (/ 1 1.1)
-                                                (/ 1 1.1))
-                                  ;; Enable animations again after startup.
-                                  (set! (.-animations graph) true)
-                                  (set! (.-tooltipTemplate graph)
-                                        (fn [idx el]
-                                          (set! (.-innerHTML el)
-                                                (str "<pre>\n"
-                                                     (:printed (last (get trace idx)))
-                                                     (str "</pre>")))))
-                                  graph))))}]])))]))])))
+                   [:div.mt-3
+                    {:ref
+                     (fn [el]
+                       (when el
+                         (if mobile?
+                           (build-mermaid el)
+                           (let [graph (build-graph el)]
+                             ;; Zoom out a little bit so we have room for the
+                             ;; nodes.
+                             (.zoomToPoint graph 0 0
+                                           (/ 1 1.1)
+                                           (/ 1 1.1))
+                             ;; Enable animations again after startup.
+                             (set! (.-animations graph) true)
+                             (set! (.-tooltipTemplate graph)
+                                   (fn [idx el]
+                                     (set! (.-innerHTML el)
+                                           (str "<pre>\n"
+                                                (str "Step " idx
+                                                     "\n"
+                                                     "--------"
+                                                     "\n"
+                                                     (:printed (last (get trace idx))))
+                                                (str "</pre>")))))
+                             graph))))}]])))]))])))
 
 (def recife-response-viewer
   (with-recife

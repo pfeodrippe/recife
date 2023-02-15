@@ -1,19 +1,18 @@
 ;; ◊page-name[{:subtitle "Gimme code"}]{slow start}
 
-;; If you didn't already, see the ◊xref{:doc/reasoning} for this
-;; project.
+;; Hi, I will be starting a series of articles about Recife, this is the
+;; first one. Check the ◊xref{:doc/reasoning} for this project.
 
-;; For this non-quick start, we will be dealing with a simple clock, this should be
-;; a small sample of the functionality that you will find in Recife. Other notebooks
-;; in this guide will go further into the tooling and and concepts you
-;; find here.
+;; In this non-quick start, we will be dealing with a simple clock,
+;; this should cover some features that you will find in Recife. Other
+;; notebooks from this guide will go deeper into these and other
+;; Recife/Temporal Logic (TLA+) concepts.
 
 ;; ◊title{Setting things up}
 
 ;; ◊note{Get Recife on
 ;; ◊link{https://clojars.org/pfeodrippe/recife}{clojars}.}
 
-;; First, require some Recife namespaces.
 (ns recife.notebook.slow-start
   {:nextjournal.clerk/visibility {:result :hide}
    :clerk/name "slow start"}
@@ -22,49 +21,32 @@
    [recife.core :as r]
    [recife.helpers :as rh]))
 
-;; ◊note{We are using Clerk to render this notebook, which
-;; you can find
-;; ◊link{https://github.com/pfeodrippe/recife/blob/master/notebooks/recife/notebook/slow_start.clj}{
-;; here}.}
-
-;; We will define a specification, and we need some data to act
-;; upon. Following Clojure conventions, everything we will need to deal
-;; with is defined in a simple map.
+;; We want to define a specification, and a specification needs some
+;; state.
 (def global
   {::hour 0})
 
-;; ◊code{global} contains only the ◊code{::hour} ◊em{variable}, this represents
-;; a state that we ◊em{can} change and that Recife knows how to
-;; deal with.
+;; ◊code{global} represents the ◊em{initial} state of the
+;; specification.
 
-;; All keywords of this map should be namespaced so we can
-;; differentiate it from local variables in our processes, you will
-;; understand better why this is needed when we start to work with
-;; multiple processes.
-
-;; We then need some way of changing this state, a Clojure function
-;; should do it for us. State is changed in a immutable way.
+;; ◊note{Receive a state, return a (possibly modified) state.}
 (defn update-clock-1
   [db]
   (update db ::hour inc))
 
-;; This function receives a map and returns a map, ◊code{db} contains
-;; the key ◊code{::hour}. We can give this function to the first (and
-;; most important) Recife operator we will know, ◊code{defproc}.
-(r/defproc tick-v1 update-clock-1)
+;; Leveraging the simplicty of Clojure, the entire state we have to
+;; deal with is a map, we modify the specification state by
+;; returning another map.
 
-;; We can also inline the function, it's more convenient to have everything
-;; in one place.
-(r/defproc tick-v1
-  (fn [db]
-    (update db ::hour inc)))
+;; We are able to use ◊code{update-clock-v1} in the
+;; first Recife operator we will meet, ◊code{defproc}.
+(r/defproc tick-v1 update-clock-1)
 
 ;; ◊note{A trace is a sequence of states, a trace can also be called a
 ;; behavior.}
 
 ;; ◊code{defproc} defines a process that will be used in Recife's
-;; runtime. This is the only way that we can use to change state, the
-;; state changes will build a trace that Recife can analyze.
+;; runtime.
 
 ;; ◊code{tick-v1} can be invoked like a Clojure function and it should do
 ;; what we expect.
@@ -75,87 +57,142 @@
      tick-v1
      tick-v1))
 
-;; ◊title{Running our first specification}
+;; We can also inline a anonymous function if we want, there is nothing special
+;; about it.
+(r/defproc tick-v1
+  (fn [db]
+    (update db ::hour inc)))
+
+;; ◊title{Running the specification}
+
+;; For running a Recife specification, we use ◊code{r/run-model}, as
+;; arguments, it receives the initial state, the components and some
+;; optional args.
 
 (comment
 
   ;; This will return an asynchronous process that you can `@` (deref).
   (r/run-model global #{tick-v1} {:trace-example true})
 
-  ;; Halt will stop the process AND deref. You will need it, otherwise
-  ;; the clock will just keep running and running.
+  ;; Halt will stop the process AND deref. You will need to use it, otherwise
+  ;; the clock will just keep running and running (it's unbounded!).
   (r/halt!)
 
-  ;; You can get the last result using this.
+  ;; You can also get the last result using this.
   (r/get-result)
 
   ())
 
-^{:nextjournal.clerk/visibility {:result :show :code :hide}}
-(rc/run-model :infinite global #{tick-v1} {:trace-example true})
+;; We don't want just to present static code like this, the main
+;; motivation for this guide is to make Recife (and TLA+) concepts
+;; easier to digest, so a custom trace visualizer was built for it
+;; that we can use here. You will be able to follow the words without
+;; having to start a REPL on your own (although it would be beneficial
+;; if you do so, this article is a
+;; ◊link{https://github.com/pfeodrippe/recife/blob/master/notebooks/recife/notebook/slow_start.clj}{Clerk
+;; notebook}, which means that you can run it, modify it, break
+;; it... it's just a Clojure namespace).
 
-;; Oh my, I can't read this trace, what's happening?
+;; Let's see our clock in action.
 
-;; TBD
+;; ◊note{◊code{:trace-example} means that the output of `r/run-model` will
+;; return a trace example if no violation is found.}
 
-;; ◊title{Constraining}
+^{:nextjournal.clerk/visibility {:result :show :code :hide}
+  ::rc/id ::infinite}
+(rc/run-model global #{tick-v1})
 
-;; ◊note{We will handle it better later, but for now let's just
-;; constraint the states.}
+;; ◊note{The trace visualizer is bounded.}
 
-;; Let's define a constraint. ◊code{defconstraint} receives a map, but
-;; this time we are not interested in changing the state, but we would
-;; like to constrain the states we want the model to care about. If
-;; there are one or more constraints, and for every state found, Recife
-;; will check if it satisfies the constraint, if not, then it's thrown
-;; out.
+;; ◊code{::hour} is always incremented by 1 (which it's expected),
+;; but we have lots of steps (really, infinite) because there is
+;; nothing saying when we should stop, we will solve this in the next
+;; section.
 
-;; In this case, we are saying that we don't care about hours after
-;; 23.
-(rh/defconstraint disallow-after-23
+;; ◊note{If you are in a mobile device, the trace is uglier and hover
+;; doesn't work, check this article in a computer if possible.}
+
+;; The first thing to notice is the trace format,
+;; the step label consists of the step index followed by the ◊em{operator}
+;; that led to that step. A proc can contain multiple
+;; operators, and, in this case, we have a proc with only one operator
+;; (◊code{tick-v1} is also the name of the operator).
+
+;; If you are in a computer, you are able to hover your cursor on
+;; each step and check the corresponding state.
+
+;; ◊title{Constraining the possible states}
+
+;; ◊note{◊code{rh/defconstraint} does ◊em{not} receive a function,
+;; it's more akin to ◊code{defn}.}
+
+;; For defining a constraint, we use ◊code{rh/defconstraint}, it
+;; receives ◊code{db}, but, this time, we are not interested in
+;; modifying the state, we now return a boolean and, for every state
+;; found, Recife will check if it satisfies the constraint (truthy
+;; value), if it doesn't, then the state is thrown out.
+
+;; We will say that we don't care about any hours past 25.
+(rh/defconstraint disallow-after-25
   [{::keys [hour]}]
-  (<= hour 23))
+  (<= hour 25))
 
-^{:nextjournal.clerk/visibility {:result :show :code :hide}}
-(rc/run-model ::ex-163 global #{tick-v1 disallow-after-23}
-              {:trace-example true})
-
-(require '[hillel.ch6-threads-3 :as ch6-threads-3])
-
-^{:nextjournal.clerk/visibility {:result :show :code :hide}}
-(rc/run-model ::ef-41 ch6-threads-3/global
-              #{ch6-threads-3/thread
-                ch6-threads-3/at-most-one-critical
-                ch6-threads-3/no-livelocks})
+;; Then we add the constraint into our model run.
 
 (comment
-
-  ;; TODO:
-  ;; - [ ] See how to present async stuff
-  ;;   - [ ] Maybe using an atom?
-  ;; - [ ] Work on visualizing this trace first as this one is finite
 
   ;; Remember, you can also deref the response if you want.
   ;; The run should finish now and we should be shown an `:ok`,
   ;; meaning that no violation was found (as we are not verifying
   ;; anything yet!).
-  (r/run-model global #{tick-v1 disallow-after-23})
+  (r/run-model global #{tick-v1 disallow-after-25})
 
   ;; You can always use `:trace-example` to have a random trace
   ;; example if there are no violations (as it's the case here).
-  @(r/run-model global #{tick-v1 disallow-after-23}
+  @(r/run-model global #{tick-v1 disallow-after-25}
                 {:trace-example true})
 
   ())
 
+^{:nextjournal.clerk/visibility {:result :show :code :hide}
+  ::rc/id ::disallowed}
+(rc/run-model global #{tick-v1 disallow-after-25})
+
+;; But we still have something weird here as hour 25 does not make
+;; much sense (in our clock), how can we make the specification tell
+;; us about that?
+
+;; ◊title{Checking the spec}
+
+;; While in constraining we are able to say which states we don't
+;; care about, in validation we want to say what's a good state looks
+;; like and be warned if something is bad.
+
+;; ◊note{A violation happen when some state is invalid.}
+
+;; The simplest way of doing this in Recife is writing an invariant
+;; with ◊code{rh/definvariant}. Just like ◊code{rh/defconstraint},
+;; this macro receives a state and returns a boolean indicating if
+;; there is some ◊em{violation}.
+
+(rh/definvariant no-hour-after-23
+  [{::keys [hour]}]
+  (<= hour 23))
+
+^{:nextjournal.clerk/visibility {:result :show :code :hide}
+  ::rc/id ::first-invariant}
+(rc/run-model global #{tick-v1 disallow-after-25 no-hour-after-23})
+
+;;  🥳 Our first violation!!
+
+;; I'm pretty sure you have some idea on how to fix that.
+
+;; ◊title{Fixing the violation}
+
+
+
 ^{:nextjournal.clerk/visibility {:code :hide :result :hide}}
 (comment
-
-  (r/run-model
-   ch6-threads-3/global
-   #{ch6-threads-3/thread
-     ch6-threads-3/no-livelocks
-     ch6-threads-3/at-most-one-critical})
 
   ;; TODO:
   ;; - [x] Return trace example when halting
@@ -193,8 +230,8 @@
   ;;   - [x] How to visualize this in Clerk?
   ;;   - [x] Add constraint
   ;;     - Will be removed later
-  ;; - [x] Invariant for checking that hour does not pass from 23
   ;; - [x] Fix mobile rendering
+  ;; - [ ] Invariant for checking that hour does not pass of 23
   ;; - [ ] defchecker
   ;; - [ ] Two processes try to alter the clock
   ;; - [ ] Eventually, clock arrives at some time
@@ -214,5 +251,13 @@
   ;; - [x] Fix code identation on mobile
   ;; - [x] Fix notes on mobile
   ;; - [x] Render without bundling
+  ;; - [-] Diminish font size
+  ;;   - No, we are fine with it
+  ;; - [ ] Can we add grammar check?
+
+  ;; ◊note{We are using Clerk to render this notebook, which
+  ;; you can find
+  ;; ◊link{https://github.com/pfeodrippe/recife/blob/master/notebooks/recife/notebook/slow_start.clj}{
+  ;; here}.}
 
   ())
