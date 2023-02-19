@@ -337,6 +337,7 @@
   ;; - [x] Render without bundling
   ;; - [-] Diminish font size
   ;;   - No, we are fine with it
+  ;; - [ ] Fix font for unbundled build
   ;; - [ ] Can we add grammar check?
 
   ())
