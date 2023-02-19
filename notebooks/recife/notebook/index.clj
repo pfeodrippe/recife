@@ -19,8 +19,9 @@
 
 (tool.clerk/view-index
  [{:title "Intro"
-   :pages [:doc/reasoning
-           :doc/slow-start]}
+   :pages [:doc/reasoning]}
+  {:title "Learn"
+   :pages [:doc/slow-start]}
   #_{:title "Concepts"
    :pages [:doc/non-determinism]}
   {:title "Appendix"

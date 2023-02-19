@@ -1,4 +1,4 @@
-;; ◊page-name[{:subtitle "Gimme code"}]{slow start}
+;; ◊page-name[{:subtitle "Learn on your own time"}]{slow start}
 
 ;; Hi, I will be starting a series of articles about Recife, this is the
 ;; first one. Check the ◊xref{:doc/reasoning} for this project.
@@ -168,7 +168,7 @@
 ;; care about, in validation we want to say what's a good state looks
 ;; like and be warned if something is bad.
 
-;; ◊note{A violation happen when some state is invalid.}
+;; ◊note{A violation happens when some state is invalid.}
 
 ;; The simplest way of doing this in Recife is writing an invariant
 ;; with ◊code{rh/definvariant}. Just like ◊code{rh/defconstraint},
@@ -189,14 +189,20 @@
 
 ;; ◊title{Fixing the spec violation}
 
-;; Let's create a proc to replace the one we have been using so
-;; far.
+;; Let's define a new proc with a fix that will replace the previous
+;; one.
 
 ;; ◊note{Note that ◊code{rh/definvariant} and ◊code{rh/defconstraint}
 ;; receive a ◊code{defn}-like body, while ◊code{r/defproc} receives a
 ;; function, we will see the reason for this in the future.}
 (r/defproc tick-v2
   (fn [{::keys [hour] :as db}]
+    ;; Now we can return `nil`, what happens in this case?
+    ;; When we return `nil` in a proc operator, we are saying to the
+    ;; Recife runtime that the state won't change, it will stay the
+    ;; same, it's equivalent to just return `db` itself, but it helps
+    ;; to create guards like the below one.
+    ;; Basically, this is `defproc`'s nil punning.
     (when (<= hour 22)
       (update db ::hour inc))))
 
@@ -205,16 +211,67 @@
 (rc/run-model global #{tick-v2 disallow-after-25 no-hour-after-23})
 
 ;; Hunn... this is unexpected. We are having another type of violation
-;; here, a ◊em{deadlock}. This means that there is no way to advance to a new
-;; state in this trace and the proc is not marked as complete (see the
-;; error message above to see how to fix it).
+;; here, a ◊em{deadlock}. This means that there is no way to advance
+;; to a new state in this trace and that there are remaining proc that
+;; are not marked as complete (see the error message above to see how
+;; to fix it).
+
+;; ◊note{Only disable deadlock if it's really needed.}
 
 ;; For this simple clock example, we don't care about deadlocks, so
-;; let's tell that to the model run.
+;; let's switch it off. Also let's get rid of the constraint as we
+;; don't need it anymore (as it's not even possible to reach more
+;; than 23 hours).
 ^{:nextjournal.clerk/visibility {:result :show :code :hide}
-    ::rc/id ::tick-v2}
-(rc/run-model global #{tick-v2 disallow-after-25 no-hour-after-23}
+  ::rc/id ::tick-v2}
+(rc/run-model global #{tick-v2 no-hour-after-23}
               {:no-deadlock true})
+
+;; But I'm not happy with that, nor you should be, let's create a new
+;; tick proc that does the right thing (23h -> 0h). This also allow us
+;; to remove ◊code{:no-deadlock} as we don't stop anymore, we just go
+;; round and round.
+
+(r/defproc tick-v3
+  (fn [{::keys [hour] :as db}]
+    (if (= hour 23)
+      (assoc db ::hour 0)
+      (update db ::hour inc))))
+
+^{:nextjournal.clerk/visibility {:result :show :code :hide}
+  ::rc/id ::tick-v3}
+(rc/run-model global #{tick-v3 no-hour-after-23})
+
+;; Awesome, we can stop here, it's a lot already (and there tons of
+;; things and nuances to discuss about). Thanks for reading this =D
+
+;; ◊title{Wrapping up}
+
+;; In our next articles, we will see how to deal with things a little
+;; bit more complicated than invariants, but which will enables us to
+;; do different kinds of checks (e.g. how do we check that the clock
+;; will ◊em{always eventually} point to 3 o'clock?). For now, I
+;; recommend you to read some articles from Hillel (he uses TLA+
+;; though, but he explains some of the concepts pretty well):
+;; ◊numbered-list{
+;;   ◊link{https://www.hillelwayne.com/post/action-properties/}{Action
+;; properties}
+;;
+;;   ◊link{https://learntla.com/core/temporal-logic.html}{Temporal
+;; properties}
+;;
+;;   ◊link{https://www.hillelwayne.com/post/fairness/}{Fairness}
+;; }
+
+;; -------------------------------------------
+
+;; Check the raw article
+;; ◊link{https://github.com/pfeodrippe/recife/blob/master/notebooks/recife/notebook/slow_start.clj}{here}.
+
+;; Discuss or comment
+;; ◊link{https://github.com/pfeodrippe/recife/discussions/18}{here}.
+
+;;See you next, bye \o
 
 ^{:nextjournal.clerk/visibility {:code :hide :result :hide}}
 (comment
@@ -281,10 +338,5 @@
   ;; - [-] Diminish font size
   ;;   - No, we are fine with it
   ;; - [ ] Can we add grammar check?
-
-  ;; ◊note{We are using Clerk to render this notebook, which
-  ;; you can find
-  ;; ◊link{https://github.com/pfeodrippe/recife/blob/master/notebooks/recife/notebook/slow_start.clj}{
-  ;; here}.}
 
   ())
