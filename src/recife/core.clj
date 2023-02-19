@@ -2242,6 +2242,7 @@ VIEW
          (schema/explain-humanized schema/DefProc ['~name params# steps#] "Invalid `defproc` args")
          (recife.records/map->RecifeProc
           {:name keywordized-name#
+           :hash ~(hash [name params steps])
            :steps-keys (->> steps#
                             keys
                             (mapv #(if (vector? %)
@@ -2274,6 +2275,7 @@ VIEW
        ^{:type ::Invariant}
        {:name name#
         :invariant f#
+        :hash ~(hash [name opts])
         :operator (invariant name# doc-string# f#)})))
 
 (defmacro -defproperty
@@ -2284,6 +2286,7 @@ VIEW
        ^{:type ::Property}
        {:name name#
         :property expr#
+        :hash ~(hash [name expr])
         :operator (temporal-property name# expr#)})))
 
 (defmacro -defaction-property
@@ -2294,6 +2297,7 @@ VIEW
        ^{:type ::ActionProperty}
        {:name name#
         :property expr#
+        :hash ~(hash [name expr])
         :operator (temporal-property name# expr# {:action? true})})))
 
 (defmacro -deffairness
@@ -2304,6 +2308,7 @@ VIEW
        ^{:type ::Fairness}
        {:name name#
         :property expr#
+        :hash ~(hash [name expr])
         :operator (fairness name# expr#)})))
 
 (defmacro -defconstraint
@@ -2314,6 +2319,7 @@ VIEW
        ^{:type ::Constraint}
        {:name name#
         :constraint f#
+        :hash ~(hash [name f])
         :operator (state-constraint name# f#)})))
 
 (defmacro -defaction-constraint
@@ -2324,6 +2330,7 @@ VIEW
        ^{:type ::ActionConstraint}
        {:name name#
         :constraint f#
+        :hash ~(hash [name f])
         :operator (action-constraint name# f#)})))
 
 (comment
