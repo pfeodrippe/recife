@@ -172,8 +172,8 @@
 
 ;; The simplest way of doing this in Recife is writing an invariant
 ;; with ◊code{rh/definvariant}. Just like ◊code{rh/defconstraint},
-;; this macro receives a state and returns a boolean indicating if
-;; there is some ◊em{violation}.
+;; this macro receives a state and you should return a boolean (or
+;; truthy/falsy value) indicating if there is no ◊em{violation}.
 
 (rh/definvariant no-hour-after-23
   [{::keys [hour]}]
@@ -183,13 +183,38 @@
   ::rc/id ::first-invariant}
 (rc/run-model global #{tick-v1 disallow-after-25 no-hour-after-23})
 
-;;  🥳 Our first violation!!
+;;  🥳 Our first spec violation!!
 
-;; I'm pretty sure you have some idea on how to fix that.
+;; I'm pretty sure you have some ideas on how to fix that.
 
-;; ◊title{Fixing the violation}
+;; ◊title{Fixing the spec violation}
 
+;; Let's create a proc to replace the one we have been using so
+;; far.
 
+;; ◊note{Note that ◊code{rh/definvariant} and ◊code{rh/defconstraint}
+;; receive a ◊code{defn}-like body, while ◊code{r/defproc} receives a
+;; function, we will see the reason for this in the future.}
+(r/defproc tick-v2
+  (fn [{::keys [hour] :as db}]
+    (when (<= hour 22)
+      (update db ::hour inc))))
+
+^{:nextjournal.clerk/visibility {:result :show :code :hide}
+  ::rc/id ::tick-v2}
+(rc/run-model global #{tick-v2 disallow-after-25 no-hour-after-23})
+
+;; Hunn... this is unexpected. We are having another type of violation
+;; here, a ◊em{deadlock}. This means that there is no way to advance to a new
+;; state in this trace and the proc is not marked as complete (see the
+;; error message above to see how to fix it).
+
+;; For this simple clock example, we don't care about deadlocks, so
+;; let's tell that to the model run.
+^{:nextjournal.clerk/visibility {:result :show :code :hide}
+    ::rc/id ::tick-v2}
+(rc/run-model global #{tick-v2 disallow-after-25 no-hour-after-23}
+              {:no-deadlock true})
 
 ^{:nextjournal.clerk/visibility {:code :hide :result :hide}}
 (comment
@@ -231,7 +256,9 @@
   ;;   - [x] Add constraint
   ;;     - Will be removed later
   ;; - [x] Fix mobile rendering
-  ;; - [ ] Invariant for checking that hour does not pass of 23
+  ;; - [x] Invariant for checking that hour does not pass of 23
+  ;; - [ ] Present deadlock
+  ;; - [ ] Fix spec
   ;; - [ ] defchecker
   ;; - [ ] Two processes try to alter the clock
   ;; - [ ] Eventually, clock arrives at some time

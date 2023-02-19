@@ -143,16 +143,21 @@
                 (drop-last (drop 1 &form))
                 (drop-last (drop-last (drop 1 &form)))))
      (let [id# (::id ~form-meta)
-           cache-key# {id# [(quote ~(drop-last &form)) ~global ~opts]}]
+           opts# (merge {:trace-example true}
+                        ~opts)
+           components# (set (conj ~components
+                                  ;; Add constraint so we can always have
+                                  ;; finite traces
+                                  finite-trace))
+           cache-key# {id# [(quote ~(drop-last &form))
+                            ~global
+                            (mapv :hash (sort-by :hash components#))
+                            opts#]}]
        (or (get @*cache cache-key#)
            (-run-delayed id# cache-key#
                          ~global
-                         (set (conj ~components
-                                    ;; Add constraint so we can always have
-                                    ;; finite traces
-                                    finite-trace))
-                         (merge {:trace-example true}
-                                ~opts)))))))
+                         components#
+                         opts#))))))
 
 (defn- adapt-result
   [{:keys [trace-info] :as result}]
@@ -322,6 +327,21 @@
                            [:a {:href "https://www.hillelwayne.com/post/fairness/"}
                             "fair "]
                            [:span "action."]]
+
+                          (= (:type violation) :deadlock)
+                          [:span
+                           (str "Deadlock was reached at step "
+                                (dec (count trace))
+                                ".")
+                           [:br]
+                           [:br]
+                           (str "This means that there is no way to advance to a new state "
+                                "in this trace.")
+                           [:br]
+                           (str "If you don't care "
+                                "about deadlocks, you may disable it by "
+                                "passing `:no-deadlock` to `opts` or by using "
+                                "`r/done` to mark a process as completed.")]
 
                           :else
                           (str "The following invariant was violated by step "
