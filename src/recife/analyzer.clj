@@ -6,13 +6,13 @@
    [recife.core :as r]))
 
 (defn analyze
-  [result {:keys [:init :implementation-mapping :number-of-traces :debug?]
+  [result {:keys [:init :implementation-mapping :number-of-traces :debug]
            :or {number-of-traces 20}}]
   (loop [[trace & other-traces] (-> result
                                     r/states-from-result
                                     (r/random-traces-from-states number-of-traces))
          trace-counter 0]
-    (when debug? (println :trace-counter trace-counter))
+    (when debug (println :trace-counter trace-counter))
     (let [implementation-step->model-step (->> implementation-mapping
                                                (mapv (juxt (comp :step val) key))
                                                (into {}))

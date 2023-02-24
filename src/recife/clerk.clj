@@ -132,6 +132,7 @@
 
   Process is cached using form metadata `:recife.clerk/id` + some simple
   heuristics over the other arguments."
+  {:arglists (:arglists (meta #'r/run-model))}
   ([global components]
    `(run-model ~global ~components nil ~(meta &form)))
   ([global components opts]

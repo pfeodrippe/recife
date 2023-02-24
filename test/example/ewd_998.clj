@@ -145,7 +145,7 @@
                  #_ #_:workers 1
                  #_ #_:trace-example true
                  :depth -1
-                 #_ #_:debug? true}
+                 #_ #_:debug true}
                 (rh/with-features feature-flags
                   :generate {:generate {:num 10}}
                   {})))

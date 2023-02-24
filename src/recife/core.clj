@@ -692,11 +692,11 @@
                              f)
 
                       :fair
-                      (format "WF_vars(%s)"
+                      (format "WF_main_var_seq(%s)"
                               (parse (first args) f))
 
                       :fair+
-                      (format "SF_vars(%s)"
+                      (format "SF_main_var_seq(%s)"
                               (parse (first args) f))
 
                       :call
@@ -872,6 +872,7 @@
                                (-> opts meta :fair)) :recife.fairness/weakly-fair
                            (or (-> expr meta :fair+)
                                (-> opts meta :fair+)) :recife.fairness/strongly-fair)
+        :recife/non-deterministic-params (set (keys opts))
         :recife/fairness-map (some->> (or (-> expr meta :fairness) (-> opts meta :fairness))
                                       (temporal-property (keyword (str (symbol identifier) "-fairness"))))
         :expr expr
@@ -1216,6 +1217,12 @@
                                                   (str/join "\n\n"))
                                          "")
         #_ #_ _ (def operators operators)
+        unchanged-helper-variables (or (some->> @collected-ranges
+                                                seq
+                                                (mapv (fn [{::keys [identifier]}] (format "%s' = %s" identifier identifier)))
+                                                (str/join " /\\ ")
+                                                (str " /\\ "))
+                                       "")
         fairness-identifiers (or (some->> operators
                                           (filter (comp #{:fairness} :recife.operator/type))
                                           seq
@@ -1223,12 +1230,6 @@
                                           (str/join " /\\ ")
                                           (str " /\\ "))
                                  "")
-        unchanged-helper-variables (or (some->> @collected-ranges
-                                                seq
-                                                (mapv (fn [{::keys [identifier]}] (format "%s' = %s" identifier identifier)))
-                                                (str/join " /\\ ")
-                                                (str " /\\ "))
-                                       "")
         formatted-operators (->> (concat (->> operators
                                               (filter (comp #{:operator} :recife.operator/type))
                                               (mapv #(format "%s ==\n  %s%s"
@@ -1256,17 +1257,14 @@
                                     seq
                                     (mapv (juxt :recife/fairness :recife.operator/name))
                                     (mapv (fn [[fairness name]]
-                                            [:raw (format "\\A self \\in %s: %s_vars(%s(self, main_var) %s)"
+                                            [:raw (format "\\A self \\in %s: %s_main_var_seq(%s(self, main_var))"
                                                           (->> (keys (::procs init))
                                                                set
                                                                tla-edn/to-tla-value)
                                                           (case fairness
                                                             :recife.fairness/weakly-fair "WF"
                                                             :recife.fairness/strongly-fair "SF")
-                                                          name
-                                                          (if (seq unchanged-helper-variables)
-                                                            (format "/\\ (%s)" unchanged-helper-variables)
-                                                            ""))])))
+                                                          name)])))
         formatted-fairness (or
                             (some->> (concat fairness-operators
                                              (some->> operators
@@ -1296,6 +1294,8 @@ EXTENDS Integers, TLC
 VARIABLES main_var #{helper-variables}
 
 vars == << main_var #{helper-variables} >>
+
+main_var_seq == << main_var >>
 
 recife_operator_local(_self, _params, _main_var) == _self = _self /\\ _params = _params /\\ _main_var = _main_var
 
@@ -1704,8 +1704,7 @@ VIEW
                                                          (-> (:file-path state-writer)
                                                              states-from-file
                                                              random-traces-from-states
-                                                             rand-nth))}))
-                                             (System/exit 0)))))
+                                                             rand-nth))}))))))
             _ (save-and-flush! ::status [id :running])
             _ (do (p* ::process
                       (doto ^tlc2.TLC tlc
@@ -1892,7 +1891,7 @@ VIEW
   ([init-state next-operator operators]
    (run-model* init-state next-operator operators {}))
   ([init-state next-operator operators {:keys [seed fp workers tlc-args
-                                               raw-output? run-local? debug?
+                                               raw-output? run-local? debug
                                                complete-response?
                                                no-deadlock
                                                depth async simulate generate
@@ -1971,7 +1970,7 @@ VIEW
                              flatten
                              (remove nil?)
                              vec)]
-     (when debug?
+     (when debug
        (println (->> (str/split-lines module-contents)
                      (map-indexed (fn [idx line]
                                     (str (inc idx) " " line)))

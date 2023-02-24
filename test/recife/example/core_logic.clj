@@ -30,7 +30,7 @@
 
 (comment
 
-  (r/run-model member-global #{member-of} {#_ #_:debug? true
+  (r/run-model member-global #{member-of} {#_ #_:debug true
                                            #_ #_:workers 1
                                            :continue true})
 

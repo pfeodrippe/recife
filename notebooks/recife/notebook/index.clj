@@ -11,19 +11,19 @@
  {:doc/reasoning 'recife.notebook.reasoning
   :doc/guide-layout 'recife.notebook.guide-layout
   :doc/non-determinism 'recife.notebook.non-determinism
-  :doc/slow-start 'recife.notebook.slow-start})
+  :doc/slow-start 'recife.notebook.slow-start
+  :doc/quick-start 'recife.notebook.quick-start})
 
 {::clerk/visibility {:code :hide :result :show}}
 
-;; ◊page-name[{:subtitle "A clojure model checker"}]{Recife Guide}
+;; ◊page-name[{:subtitle "A Clojure model checker"}]{Recife Guide}
 
 (tool.clerk/view-index
  [{:title "Intro"
-   :pages [:doc/reasoning]}
+   :pages [:doc/quick-start
+           :doc/reasoning]}
   {:title "Learn"
    :pages [:doc/slow-start]}
-  #_{:title "Concepts"
-   :pages [:doc/non-determinism]}
   {:title "Appendix"
    :pages [:doc/guide-layout]}])
 
@@ -54,10 +54,12 @@
   ;; - [x[ Serve docs using GH pages
   ;; - [x] Reasoning
   ;; - [x] Fix responsiveness
-  ;; - [ ] Slow start
+  ;; - [x] Slow start
+  ;; - [x] Fix halth knuth die issue
   ;; - [ ] Quick start
   ;; - [ ] Model clerk race condition
   ;;   - https://github.com/nextjournal/clerk/issues/414
+  ;; - [ ] Cheatsheet
   ;; - [ ] Initial states
   ;;   - [ ] One of
   ;; - [ ] Proc
