@@ -234,7 +234,7 @@ assuming that the clients scheduled earlier release their resources."
                         ;; below to see things failing when unsat is not different from
                         ;; unsat in the next state.
                         #_action-prop}
-               {#_ #_:debug? true
+               {#_ #_:debug true
                 #_ #_:workers 1})
 
   (def result (r/get-result))
