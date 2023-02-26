@@ -117,16 +117,21 @@
 
 (def ^:private *saved (atom []))
 
-(def ^:private flush-lock (Object.))
+(defn- -flush!
+  []
+  (buf-write nil)
+  (buf-rewind)
+  (buf-write 1)
+  (buf-rewind)
+  (reset! *saved []))
 
 (defn flush!
   []
-  (locking flush-lock
-    (buf-write nil)
-    (buf-rewind)
-    (buf-write 1)
-    (buf-rewind)
-    (reset! *saved [])))
+  (locking lock
+    (while (not (can-write?)))
+
+    (when-not (zero? (.position ^java.nio.DirectCharBufferS @*buf))
+      (-flush!))))
 
 (defn -save!
   [v]
@@ -141,7 +146,7 @@
       (swap! *saved conj v)
 
       (when (= (count @*saved) 100)
-        (flush!))
+        (-flush!))
 
       (catch Exception ex
         (println ex)
@@ -173,32 +178,55 @@ run Recife using `:generate`.
 (defonce ^:private lock-sync
   (Object.))
 
+(defn- reset-contents!
+  [contents v]
+  (reset! *contents (try
+                      #_(println (str :>>___TRY_AFTER_WHEN_V " " v))
+                      (let [[bucket value] v]
+                        #_(println (str :>>___TRY_2_AFTER_WHEN_V " " v))
+                        (if (contains? contents bucket)
+                          (update contents bucket conj value)
+                          (update contents bucket (comp vec conj) value)))
+                      (catch Exception ex
+                        (println ::bad-value v)
+                        contents
+                        #_(throw ex))
+                      (finally
+                        #_(println (str :>>___TRY_FINALLY_AFTER_WHEN_V " " v))))))
+
 (defn sync!
   []
   (locking lock-sync
     (boolean
      (when (can-read?)
+       #_(println :-----------------------------)
+       #_(println :-----------------------------)
+       #_(println :>>___SYNC_READ)
        (buf-rewind)
        ;; Discard first line.
        (buf-read-next-line)
+       #_(println :>>___AFTER_READ_NEXT_LINE)
        (loop [v (buf-read-next-line)]
+         #_(println (str :>>___BEFORE_WHEN_V " " v))
          (when v
-           (swap! *contents (fn [contents]
-                              (try
-                                (let [[bucket value] v]
-                                  (if (contains? contents bucket)
-                                    (update contents bucket conj value)
-                                    (update contents bucket (comp vec conj) value)))
-                                (catch Exception _ex
-                                  #_(println ::bad-value v)
-                                  contents
-                                  #_(throw ex)))))
+           #_(println (keyword (str ">>___v - " v)))
+           #_(println (str :>>___AFTER_WHEN_V " " v))
+           (let [contents @*contents]
+             #_(println :<>HERE_1)
+             (reset-contents! contents v))
+           #_(println :<>HERE_2)
+           #_(println :>>___SYNC_BEF_RECUR)
            (recur (buf-read-next-line))))
+       #_(println :>>___SYNC_INTERNAL_LOOP)
        (when (seq @*contents)
          (reset! *new-contents? true))
        (buf-rewind)
+       (buf-write 1)
+       (buf-write nil)
+       (buf-rewind)
        (buf-write 0)
-       (buf-write nil)))))
+       #_(println :>>___SYNC_LOCK_RELEASE)
+       true))))
 
 (defonce ^:private *sync-loop (atom nil))
 
@@ -216,7 +244,7 @@ run Recife using `:generate`.
                 (try
                   (sync!)
                   (catch Exception e
-                    (println e))))
+                    (println :SYNC_ERROR e))))
               #_(println "STOPPING the future...")))))
 
 #_(bean (type (clay/future pool (println "ss"))))
@@ -224,7 +252,7 @@ run Recife using `:generate`.
 (defn stop-sync-loop!
   []
   (when-let [fut @*sync-loop]
-    #_(println "Stopping sync loop...")
+    #_(println :<><>stopping-sync-loop)
     (.cancel ^java.util.concurrent.Future fut true)
     (reset! *sync-loop nil)
     (sync!)))

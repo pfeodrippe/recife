@@ -1706,15 +1706,19 @@ VIEW
                                                              random-traces-from-states
                                                              rand-nth))}))))))
             _ (save-and-flush! ::status [id :running])
+            _ (save-and-flush! ::debug :tlc-start)
             _ (do (p* ::process
                       (doto ^tlc2.TLC tlc
                         .process))
+                  (save-and-flush! ::debug :tlc-done)
                   (r.buf/flush!)
+                  (save-and-flush! ::debug :flushed)
                   (reset! *closed-properly? true)
                   (let [pstats @@u/pd]
                     (when (:stats pstats)
                       (println (str "\n\n" (tufte/format-pstats pstats))))))
             recorder-info @recorder-atom
+            _ (save-and-flush! ::debug :after-recorder-atom)
             #_#_ _ (clojure.pprint/pprint recorder-info)
             _ (do (def tlc tlc)
                   (def recorder-info recorder-info))
@@ -1777,6 +1781,8 @@ VIEW
                                   :else
                                   {:trace :ok})))]
 
+        (save-and-flush! ::debug :after-building-violation-info)
+
         ;; `do` for debugging.
         #_(do (def recorder-value @recorder-atom)
               (def simulator simulator))
@@ -1818,13 +1824,16 @@ VIEW
          :generated-states (some-> tlc2.TLCGlobals/mainChecker .getStatesGenerated)})
       (finally
         (MP/unsubscribeRecorder recorder)
-        (save-and-flush! ::status [id :done])))))
+        (save-and-flush! ::debug :before-flushing-done)
+        (save-and-flush! ::status [id :done])
+        (save-and-flush! ::debug :returning-from-tlc-result-handler)))))
 
 (defn tlc-result-printer-handler
   [tlc-runner]
   (try
     (prn (tlc-result-handler tlc-runner))
     (finally
+      (save-and-flush! ::debug :exiting)
       (System/exit 0))))
 
 ;; We create a record just so we can use `simple-dispatch`.
@@ -2011,14 +2020,21 @@ VIEW
              t0 (System/nanoTime)
              *destroyed? (atom false)
              *streaming-finished? (atom false)
+             -debug (fn [& v]
+                      #_(apply println v)
+                      nil)
              -deref-result (memoize
                             (fn []
                               ;; Wait until the process finishes.
+                              (-debug :>>>__at-result)
                               @result
+                              (-debug :>>>__after-at-result)
                               (reset! *destroyed? true)
                               (when use-buffer
                                 (r.buf/stop-sync-loop!))
+                              (-debug :>>>__after-stop-sync)
                               (while (not @*streaming-finished?))
+                              (-debug :>>>__after-streaming-finished)
                               ;; Throw exception or return EDN result.
                               (if (.exists (io/as-file exception-filename))
                                 (throw (deserialize-obj exception-filename))
@@ -2046,13 +2062,20 @@ VIEW
                                    (binding [*in* rdr]
                                      (loop [line (read-line)]
                                        (when line
-                                         ;; If it's a EDN hashmap, do not print it.
                                          (when-let [last-line (last @output)]
                                            (println last-line))
                                          (swap! output conj line)
                                          (recur (read-line))))))
+                                 (-debug :>>>__before-finishing-stream)
                                  (reset! *streaming-finished? true)
                                  (deref-result))
+             #_ #__ (future
+                      (with-open [rdr (io/reader (:err result))]
+                        (binding [*in* rdr]
+                          (loop [line (read-line)]
+                            (when line
+                              (println :err line)
+                              (recur (read-line)))))))
              process (RecifeModel.
                       id (atom {})
                       (reify

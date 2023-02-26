@@ -31,9 +31,8 @@
 
 (with-recife
   (r.buf/watch! ::r/status
-                (fn [status]
-                  #_(println :>>>recompute-status status)
-                  (clerk/recompute!))))
+                (fn [_status]
+                  (future (clerk/recompute!)))))
 
 (defmacro example
   [& body]
@@ -138,27 +137,28 @@
   ([global components opts]
    `(run-model ~global ~components ~opts ~(meta &form)))
   ([global components opts form-meta]
-   `(-run-model
-     ~(concat '(r/run-model)
-              (if opts
-                (drop-last (drop 1 &form))
-                (drop-last (drop-last (drop 1 &form)))))
-     (let [id# (::id ~form-meta)
-           opts# (merge {:trace-example true}
-                        ~opts)
-           components# (set (conj ~components
-                                  ;; Add constraint so we can always have
-                                  ;; finite traces
-                                  finite-trace))
-           cache-key# {id# [(quote ~(drop-last &form))
-                            ~global
-                            (mapv :hash (sort-by :hash components#))
-                            opts#]}]
-       (or (get @*cache cache-key#)
-           (-run-delayed id# cache-key#
-                         ~global
-                         components#
-                         opts#))))))
+   `(when #_(:only ~opts) true
+      (-run-model
+       ~(concat '(r/run-model)
+                (if opts
+                  (drop-last (drop 1 &form))
+                  (drop-last (drop-last (drop 1 &form)))))
+       (let [id# (::id ~form-meta)
+             opts# (merge {:trace-example true}
+                          ~opts)
+             components# (set (conj ~components
+                                    ;; Add constraint so we can always have
+                                    ;; finite traces
+                                    finite-trace))
+             cache-key# {id# [(quote ~(drop-last &form))
+                              ~global
+                              (mapv :hash (sort-by :hash components#))
+                              opts#]}]
+         (or (get @*cache cache-key#)
+             (-run-delayed id# cache-key#
+                           ~global
+                           components#
+                           opts#)))))))
 
 (defn- adapt-result
   [{:keys [trace-info] :as result}]
