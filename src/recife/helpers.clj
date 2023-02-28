@@ -263,7 +263,11 @@
 (defmacro defproperty
   {:arglists '([name doc-string? [db] body])}
   [name & decl]
-  (let [[_doc-string params body] (parse-decl decl)]
+  (let [[_doc-string params body] (parse-decl decl)
+        _ (def body body)
+        body (if (seq body)
+               body
+               '(true))]
     `(r/-defproperty ~name
        (binding [*env* (quote ~(add-global-vars
                                 (mapv (fn [p#] `(quote ~p#))
@@ -294,9 +298,12 @@
   [name & decl]
   (let [[_doc-string params body] (parse-decl decl)
         _ (when-not (= (count params) 2)
-            (throw (ex-info "Action constraints requires two arguments"
+            (throw (ex-info "Action properties requires two arguments"
                             {:params params
                              :expected '[db db']})))
+        body (if (seq body)
+               body
+               '(true))
         body (list (cons `box (list (list 'or (cons 'do body)
                                           `(-save-action-property-violation
                                             (symbol ~(str *ns*) (str '~name))

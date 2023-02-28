@@ -268,6 +268,9 @@ run Recife using `:generate`.
               (-save! v)))))))
 
 (defn read-contents
+  "Read saved data, `bucket` is `:default` by default.
+
+  Pass `:all` to fetch everything."
   ([]
    (read-contents :default))
   ([bucket]
