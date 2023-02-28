@@ -314,22 +314,8 @@
   ;;     - Will be removed later
   ;; - [x] Fix mobile rendering
   ;; - [x] Invariant for checking that hour does not pass of 23
-  ;; - [ ] Present deadlock
-  ;; - [ ] Fix spec
-  ;; - [ ] defchecker
-  ;; - [ ] Two processes try to alter the clock
-  ;; - [ ] Eventually, clock arrives at some time
-  ;; - [ ] Infinitely often, clock arrives at some time
-  ;; - [ ] In another notebook, explain the trace output
-  ;; - [ ] Be able to show docstring for a var
-  ;; - [ ] Add the option of the user seeing the raw data in table format
-  ;; - [ ] Show how many seconds ago the run was if the user clicks on a
-  ;;       `i` icon (also number of states and related info)
-  ;; - [ ] We could show random examples in Clerk if
-  ;;      `:trace-example` is activated. This should be feasible by
-  ;;      using `r/save!`
-  ;;   - Even for incomplete traces, it may be useful to show
-  ;;     something in the screen (for fast feedback)
+  ;; - [x] Present deadlock
+  ;; - [x] Fix spec
 
   ;; TODO:
   ;; - [x] Fix code identation on mobile

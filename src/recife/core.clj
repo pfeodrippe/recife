@@ -54,7 +54,6 @@
 
 (def ^{:arglists (:arglists (meta #'r.buf/read-contents))}
   read-saved-data
-  "Read saved data, see `save!`."
   r.buf/read-contents)
 
 (defn read-saved-data-if-new-content
@@ -2069,13 +2068,6 @@ VIEW
                                  (-debug :>>>__before-finishing-stream)
                                  (reset! *streaming-finished? true)
                                  (deref-result))
-             #_ #__ (future
-                      (with-open [rdr (io/reader (:err result))]
-                        (binding [*in* rdr]
-                          (loop [line (read-line)]
-                            (when line
-                              (println :err line)
-                              (recur (read-line)))))))
              process (RecifeModel.
                       id (atom {})
                       (reify
@@ -2097,6 +2089,14 @@ VIEW
                         (deref [_]
                           #_@output-streaming
                           (deref-result))))]
+         ;; Print errors
+         #_(future
+             (with-open [rdr (io/reader (:err result))]
+               (binding [*in* rdr]
+                 (loop [line (read-line)]
+                   (when line
+                     (println :err line)
+                     (recur (read-line)))))))
          (reset! *current-model-run process)
          ;; Read line by line so we can stream the output to the user.
          (if async

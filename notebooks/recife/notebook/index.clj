@@ -56,7 +56,7 @@
   ;; - [x] Fix responsiveness
   ;; - [x] Slow start
   ;; - [x] Fix halth knuth die issue
-  ;; - [ ] Quick start
+  ;; - [x] Quick start
   ;; - [ ] Model clerk race condition
   ;;   - https://github.com/nextjournal/clerk/issues/414
   ;; - [ ] Cheatsheet
