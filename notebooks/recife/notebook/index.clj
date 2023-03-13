@@ -12,7 +12,8 @@
   :doc/guide-layout 'recife.notebook.guide-layout
   :doc/non-determinism 'recife.notebook.non-determinism
   :doc/slow-start 'recife.notebook.slow-start
-  :doc/quick-start 'recife.notebook.quick-start})
+  :doc/quick-start 'recife.notebook.quick-start
+  :doc/temporal 'recife.notebook.temporal})
 
 {::clerk/visibility {:code :hide :result :show}}
 
@@ -23,7 +24,8 @@
    :pages [:doc/quick-start
            :doc/reasoning]}
   {:title "Learn"
-   :pages [:doc/slow-start]}
+   :pages [:doc/slow-start
+           :doc/temporal]}
   {:title "Appendix"
    :pages [:doc/guide-layout]}])
 

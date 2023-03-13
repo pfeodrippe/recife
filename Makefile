@@ -6,7 +6,7 @@ build:
 	rm -rf classes
 	mkdir -p classes
 	clojure -e "(compile 'recife.class)"
-	$(clj_cmd) -X:depstar uberjar :jar target/recife.jar :sync-pom true :version '"0.11.0"' :exclude '["clojure/.*", "lambdaisland/.*", "medley/.*", "alandipert/.*", "metosin/.*", "quil/.*", "tlc2/.*", "com/.*", "javax/.*", "org/.*", "pcal/.*", "tla2sany/.*", "tla2tex/.*", "util/.*", "malli/.*", "jogamp/.*", "natives/.*", "processing/.*", "cljsjs/.*", "icon/.*", "fipp/.*", "edamame/.*", "javassist/.*", "arrudeia/.*"]' :compile-ns '[recife.class]'
+	$(clj_cmd) -X:depstar uberjar :jar target/recife.jar :sync-pom true :version '"0.12.0"' :exclude '["clojure/.*", "lambdaisland/.*", "medley/.*", "alandipert/.*", "metosin/.*", "quil/.*", "tlc2/.*", "com/.*", "javax/.*", "org/.*", "pcal/.*", "tla2sany/.*", "tla2tex/.*", "util/.*", "malli/.*", "jogamp/.*", "natives/.*", "processing/.*", "cljsjs/.*", "icon/.*", "fipp/.*", "edamame/.*", "javassist/.*", "arrudeia/.*"]' :compile-ns '[recife.class]'
 
 .PHONY: deploy
 deploy:
