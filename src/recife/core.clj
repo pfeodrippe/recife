@@ -2035,6 +2035,11 @@ VIEW
                               (while (not @*streaming-finished?))
                               (-debug :>>>__after-streaming-finished)
                               ;; Throw exception or return EDN result.
+                              (when (empty? @output)
+                                (let [msg (format "It seems we are unable to run Recife, see if there are error or if your classpath is correct and that it includes all the needed files (including the ns `%s`)!"
+                                                  *ns*)]
+                                  (println (ex-info msg {}))
+                                  (throw (ex-info msg {}))))
                               (if (.exists (io/as-file exception-filename))
                                 (throw (deserialize-obj exception-filename))
                                 (try
