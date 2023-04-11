@@ -9,7 +9,7 @@
                      elle/elle {:mvn/version "0.1.2"}
                      ;; `unilog` is needed by `elle`.
                      spootnik/unilog {:mvn/version "0.7.24"}
-                     io.github.pfeodrippe/wally {:mvn/version "0.0.3"}
+                     io.github.pfeodrippe/wally {:mvn/version "0.0.4"}
 
                      ;; For implementation apps.
                      cheshire/cheshire {:mvn/version "5.10.1"}
@@ -32,7 +32,7 @@
                       elle/elle {:mvn/version "0.1.2"}
                       ;; `unilog` is needed by `elle`.
                       spootnik/unilog {:mvn/version "0.7.24"}
-                      io.github.pfeodrippe/wally {:mvn/version "0.0.3"}
+                      io.github.pfeodrippe/wally {:mvn/version "0.0.4"}
 
                       ;; For implementation apps.
                       cheshire/cheshire {:mvn/version "5.10.1"}

@@ -9,9 +9,9 @@
   report)
 
 (defn handle-states
-  [history state states-mapping]
+  [history state variables-mapping]
   (let [previous-state (last (last history))]
-    (->> states-mapping
+    (->> variables-mapping
          (mapv (fn [[k {:keys [check snapshot]}]]
                  [k (if (contains? state k)
                       (let [*test-info (atom [])]
@@ -34,7 +34,7 @@
          (into {}))))
 
 (defn drive-trace
-  [trace {:keys [init procs-mapping states-mapping]}]
+  [trace {:keys [init actions-mapping variables-mapping]}]
   (let [initial-global-state (dissoc (get-in trace [0 1]) ::r/procs)
         _ (init initial-global-state)]
     (loop [[[idx {:keys [recife/metadata] :as state}] & next-states] trace
@@ -43,7 +43,7 @@
         {:trace history}
         (let [check (fn check
                       [violation step]
-                      (let [states (handle-states history state states-mapping)
+                      (let [states (handle-states history state variables-mapping)
                             errors (->> states
                                         (remove (comp :result second))
                                         (into {}))]
@@ -57,7 +57,7 @@
           (if metadata
             (let [{:keys [context]} metadata
                   step (first context)
-                  step-fn (procs-mapping step)]
+                  step-fn (actions-mapping step)]
               (when-not step-fn
                 (throw (ex-info "Handler not implemented for step" {:step step})))
               (step-fn context)
@@ -77,16 +77,18 @@
   "Drive a browser using Recife's result. It returns a map with `:errors` or
   the traces if successful.
 
+  See https://recife.pfeodrippe.com/notebooks/recife/notebook/webdriver.html.
+
   `max-number-of-states` is per trace."
   [result {:keys [init procs states max-number-of-traces max-number-of-states]
            :or {max-number-of-traces 10
                 max-number-of-states 10}
            :as params}]
   (let [params (update params
-                       :states-mapping
-                       ;; Adapt states mapping.
-                       (fn [states-mapping]
-                         (->> states-mapping
+                       :variables-mapping
+                       ;; Adapt variables mapping.
+                       (fn [variables-mapping]
+                         (->> variables-mapping
                               (m/map-vals (fn [{:keys [check snapshot]
                                                 :or {check (constantly true)
                                                      snapshot (constantly nil)}
@@ -109,3 +111,9 @@
             result
             (recur other-traces (inc trace-counter) (conj info result))))
         {:info info}))))
+
+;; Helper functions.
+(defn impl-state
+  "Get implementation state."
+  [db]
+  (:-impl db))

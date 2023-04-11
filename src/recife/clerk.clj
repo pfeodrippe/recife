@@ -94,9 +94,9 @@
   (<= (rh/get-level) 100))
 
 (defn -run-delayed
-  [id cache-key global components opts]
+  [id cache-key global components {::keys [block] :as opts}]
   (with-recife
-    (if (tool.clerk/build?)
+    (if (or block (tool.clerk/build?))
       (let [model @(r/run-model global components opts)]
         (swap! *cache assoc cache-key model)
         model)
@@ -161,7 +161,8 @@
              (-run-delayed id# cache-key#
                            ~global
                            components#
-                           opts#)))))))
+                           (merge opts#
+                                  (select-keys ~form-meta [::block])))))))))
 
 (defn- adapt-result
   [{:keys [trace-info] :as result}]
