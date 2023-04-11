@@ -1539,11 +1539,20 @@ VIEW
 
 (defn random-traces-from-states
   ([states]
-   (random-traces-from-states states 1))
-  ([states max-number-of-paths]
-   (if (< max-number-of-paths 1)
+   (random-traces-from-states states {}))
+  ([states {:keys [max-number-of-traces max-number-of-states]
+            :or {max-number-of-traces 1}}]
+   (if (< max-number-of-traces 1)
      []
-     (let [initial-states (get-in states [:ranks 0])]
+     (let [removal-fn (if max-number-of-states
+                        ;; If we have number of states defined, then
+                        ;; we don't don't care about the visited states.
+                        (fn [{:keys [paths]}]
+                          (>= (count (last paths))
+                              max-number-of-states))
+                        (fn [{:keys [visited successors]}]
+                          (contains? visited (first successors))))
+           initial-states (get-in states [:ranks 0])]
        (loop [[current-state] [(rand-nth (vec initial-states)) nil]
               ;; `visited` is used to avoid loops.
               visited #{}
@@ -1555,7 +1564,9 @@ VIEW
               counter 0]
          (let [visited' (conj visited current-state)
                successor-state (some->> (get-in states [:states current-state :successors])
-                                        (remove #(contains? visited' (first %)))
+                                        (remove #(removal-fn {:visited visited
+                                                              :successors %
+                                                              :paths paths}))
                                         vec
                                         seq
                                         rand-nth)
@@ -1584,7 +1595,7 @@ VIEW
 
              ;; Stop if there are no more paths to see or if we have the desired
              ;; number of paths.
-             (or (= (count paths') max-number-of-paths)
+             (or (= (count paths') max-number-of-traces)
                  (= (count removed') (count (:states states)))
                  (not (->> (vec initial-states) (remove #(contains? removed' %)) seq)))
              ;; Return maps instead of positional data.
@@ -1612,9 +1623,9 @@ VIEW
 
 (defn random-traces-from-result
   ([result]
-   (random-traces-from-result result 1))
-  ([result n]
-   (random-traces-from-states (states-from-result result) n)))
+   (random-traces-from-result result {}))
+  ([result opts]
+   (random-traces-from-states (states-from-result result) opts)))
 
 (defn tlc-result-handler
   "This function is a implementation detail, you should not use it.
@@ -2544,39 +2555,5 @@ VIEW
   ;; - [ ] Return better error when some bogus thing happens in the user-provided
   ;;       functions.
   ;; - [ ] Add `tap` support.
-
-  "
-== Interaction with implementation
-
-To test an implementation, we have to make our system deterministic by
-instrumenting it (maybe with `arrudeia`), also we have to keep track of
-which trace we are at (maybe by appending the traces prefixes?) (maybe it's
-not needed). Besides being deterministic and as we will use BFS, we have to
-differentiate between the concurrent traaces through our systems (maybe by
-mocking).
-
-The combination function + state should give you the same result everytime.
-
-Thinking a little bit more, we could use use DFS with the one worker limitation so
-we don't have concurrency issues (which is what we are trying to test in a real
-implementation anyway). DFS also does not let us test liveness stuff, but we could
-probably use something from TLC (or somewhere else) which would check the stories
-for us ad hoc.
-
-We can do it in real time while TLA+ is running or after we have our traces from
-the state writer file. Doing it after appears to be much more easier, it can be
-said that testing it in the implementation it's kind of a refinement of the
-specification. Doing it in real time means that we can drive TLA+ from the
-implementation, but is this useful?
-
-Two types of implementation model checking:
-- Using arrudeia and Recife in the application itself.
-- Sending command through headers so the application know when to \"freeze\".
-
-Just using state writer is how we can know the action, so let's try to use it.
-
-For the implementation project, also see https://github.com/pfeodrippe/recife/projects/2.
-
-"
 
   ())
