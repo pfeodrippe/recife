@@ -26,7 +26,7 @@ jobs:
       - name: Release
         run: |
           make build
-          clojure -A:dev -X recife.notebook.index/build!
+          # clojure -A:dev -X recife.notebook.index/build!
           cp -R public/build .
           mv build docs
 

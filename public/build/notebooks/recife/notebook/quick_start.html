@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html><head><title>Clerk</title><meta charset="UTF-8"><meta content="width=device-width, initial-scale=1" name="viewport"><link href="data:," rel="icon"><link href="https://fonts.googleapis.com/css?family=Roboto+Slab:400,100,300,700&amp;subset=latin,latin-ext" rel="stylesheet" type="text/css"><style type="text/css">
+@font-face {
+font-family: concourse_index;
+font-style: normal;
+font-weight: normal;
+font-stretch: normal;
+font-display: auto;
+src: url('../../../concourse_index_regular.woff2') format('woff2');
+}
+
+
+ol li:before {
+    counter-increment: foobar;
+    content: counter(foobar);
+    font-family: "concourse_index";
+    font-size: 1.5rem;
+    position: absolute;
+    margin-left: -3.0rem;
+    margin-top: -4px;
+}
+
+ul[bullet_list] li:before {
+    content: "•";
+    font-family: "concourse_index";
+    position: absolute;
+    font-size: 1.2rem;
+    margin-top: 0;
+    margin-left: -3rem;
+}
+
+ol, ul {
+    counter-reset: foobar;
+}
+
+ol li, ul li {
+    margin-left: 0.8rem;
+    list-style: none;
+}
+
+li {
+    margin-bottom: 1em !important;
+}
+
+aside {
+    margin-bottom: 2em;
+    width: 12rem;
+    padding-left: .5rem;
+    margin-left: -14rem;
+    float: left;
+    text-align: right;
+    position: absolute;
+}
+
+aside > p {
+    color: #667;
+    font-size: 1rem;
+    font-family: 'Roboto Slab', serif;
+}
+
+p {
+    font-family: 'Roboto Slab', serif;
+    color: black;
+    font-size: 1.1rem;
+}
+
+title-block {
+
+    position: absolute;
+    margin-bottom: 2em;
+    border-top: solid 3px #333;
+    padding-top: 5px;
+    width: 10rem;
+    padding-left: .5rem;
+    margin-left: -12rem;
+    float: left;
+    text-align: right;
+
+    font-family: 'Roboto Slab', serif;
+    color: black;
+    font-size: 1.1rem;
+}
+
+title-block topic {
+    display:block;
+    font-family: 'Roboto Slab', serif;
+    text-transform: inherit;
+    letter-spacing: inherit;
+    font-size: 125%;
+    line-height: 1.10;
+    border-bottom: inherit;
+    margin-top: 0.8rem;
+    margin-bottom: 0.8rem;
+    font-weight: bolder;
+    border-top: 0;
+    padding-top: 0;
+}
+
+short-rule {
+    display: block;
+    font-size: 100%;
+    line-height: 1.25;
+    font-style: italic;
+    hyphens: none;
+}
+
+a[external_link] {
+    color: inherit !important;
+}
+
+a[external_link]::after {
+    position: relative;
+    content: "﻿°";
+    margin-left: 0em;
+    font-size: 90%;
+    top: -0.1em;
+    color: rgb(153, 51, 51);
+    font-feature-settings: "caps";
+    font-variant-numeric: normal;
+}
+
+a[internal_link] {
+    color: inherit !important;
+    // font-variant-caps: all-small-caps;
+    // font-family: PT Serif;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    font-size: 17px;
+}
+
+.code-viewer {
+    padding-left: 0 !important;
+    margin-left: 4rem;
+}
+
+@media all and (max-width: 960px)
+{
+
+
+
+title-block {
+
+    position: inherit;
+    margin-bottom: 2em;
+    border-top: solid 3px #333;
+    padding-top: 5px;
+    width: 10rem;
+    padding-left: .5rem;
+    float: inherit;
+    text-align: left;
+
+    font-family: 'Roboto Slab', serif;
+    color: black;
+    font-size: 1.1rem;
+}
+
+.pl-72 {
+    padding-left: 0 !important;
+}
+
+.code-viewer {
+    width: 90%;
+    padding-left: 0 !important;
+    margin-left: 0vw !important;
+}
+
+aside {
+    margin-bottom: 1.5em;
+    margin-top: 1.5em !important;
+    margin-left: 0;
+    float: none;
+    text-align: left;
+    position: inherit;
+    border-width: thick;
+    background: #fefefe;
+    padding: 0.3rem 0.5rem;
+    width: 90%;
+    border: 1px dashed #ccc;
+    border-left: 3px solid #ccc;
+}
+
+aside > p {
+    margin-bottom: 0 !important;
+    margin-top: 0 !important;
+}
+
+
+}
+
+
+</style><meta content="summary_large_image" name="twitter:card"><script src="https://cdn.tailwindcss.com?plugins=typography" type="text/javascript"></script><script>tailwind.config = {
+  darkMode: "class",
+  content: ["./tw/viewer.js", "./tw/**/*.edn"],
+  safelist: ['dark'],
+  theme: {
+    extend: {},
+    fontFamily: {
+      sans: ["Fira Sans", "-apple-system", "BlinkMacSystemFont", "sans-serif"],
+      serif: ["PT Serif", "serif"],
+      mono: ["Fira Mono", "monospace"]
+    }
+  },
+  variants: {
+    extend: {},
+  },
+  plugins: [],
+}
+</script><style type="text/tailwindcss">@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-size: 18px;
+  }
+  @media (max-width: 600px) {
+    html {
+      font-size: 16px;
+    }
+  }
+  .font-condensed { font-family: "Fira Sans Condensed", sans-serif; }
+  .font-inter     { font-family: "Inter", sans-serif; }
+  body {
+    @apply font-serif antialiased text-gray-900 sm:overscroll-y-none;
+  }
+  code, .code {
+    @apply font-mono text-sm text-gray-900 bg-slate-50 px-0.5 py-px rounded dark:bg-gray-800;
+  }
+  code::before, code::after { @apply content-none !important; }
+  h1, h3, h4, h5, h6 {
+    @apply font-condensed font-bold mt-8 first:mt-0;
+  }
+  h2 {
+    /*We cannot collapse margins due to nesting but we want to*/
+    /*keep the h2’s large margin visible*/
+    @apply font-condensed font-bold mt-8 first:mt-2;
+  }
+  h1 { @apply text-4xl; }
+  h2 { @apply text-3xl; }
+  h3 { @apply text-2xl; }
+
+  @media print {
+      h1 { @apply text-2xl !important; }
+      h2 { @apply text-xl !important; }
+      h3 { @apply text-lg !important; }
+  }
+  
+  button { @apply focus:outline-none; }
+  strong { @apply font-bold; }
+  em     { @apply italic; }
+  pre    { @apply m-0 font-mono; }
+}
+
+/* Compatibility */
+/* --------------------------------------------------------------- */
+/* TODO: Verify which colors are in use and replace with Tailwind
+   colors accordingly. Move Nj-specific styles out of here. */
+
+:root {
+  --teal-color: #31afd0;
+  --dark-teal-color: #095960;
+  --near-black-color: #2e2e2c;
+  --red-color: #d64242;
+  --dark-blue-color: #1f2937;
+  --dark-blue-60-color: rgba(28, 42, 56, 0.6);
+  --gray-panel-color: rgba(239, 241, 245, 1.000);
+  --brand-color: var(--dark-blue-color);
+  --link-color: #5046e4;
+  --command-bar-selected-color: var(--teal-color);
+}
+
+.serif      { @apply font-serif; }
+.sans-serif { @apply font-sans; }
+.monospace  { @apply font-mono; }
+.inter      { @apply font-inter; }
+
+.border-color-teal { border-color: var(--dark-teal-color); }
+.teal { color: var(--teal-color); }
+.bg-dark-blue { background: var(--dark-blue-color); }
+.bg-dark-blue-60 { background: rgba(28, 42, 56, 0.6); }
+.bg-gray-panel { background: var(--gray-panel-color); }
+.text-dark-blue  { color: var(--dark-blue-color); }
+.text-dark-blue-60 { color: var(--dark-blue-60-color); }
+.border-dark-blue-30 { border-color: rgba(28, 42, 56, 0.6); }
+.text-brand { color: var(--dark-blue-color); }
+.bg-brand { background: var(--dark-blue-color); }
+.text-selected { color: white; }
+.red { color: var(--red-color); }
+
+/* Disclose Button */
+/* --------------------------------------------------------------- */
+
+.disclose {
+  @apply content-none border-solid cursor-pointer inline-block relative mr-[3px] top-[-2px] transition-all;
+  border-color: var(--near-black-color) transparent;
+  border-width: 6px 4px 0;
+}
+.disclose:hover {
+  border-color: var(--near-black-color) transparent;
+}
+.dark .disclose,
+.dark .disclose:hover {
+  border-color: white transparent;
+}
+.disclose.collapsed {
+  @apply rotate-[-90deg];
+}
+
+/* Layout */
+/* --------------------------------------------------------------- */
+
+.page {
+  @apply max-w-5xl mx-auto px-12 box-border flex-shrink-0;
+}
+.max-w-prose { @apply max-w-[46rem] !important; }
+.max-w-wide  { @apply max-w-3xl !important; }
+
+/* List Styles */
+/* --------------------------------------------------------------- */
+
+.task-list-item + .task-list-item,
+.markdown-viewer ul ul {
+  @apply mt-1 mb-0;
+}
+
+/* compact TOC */
+.markdown-viewer .toc ul {
+  list-style: none;
+  @apply my-1;
+}
+
+/* Code Viewer */
+/* --------------------------------------------------------------- */
+
+.code-viewer {
+  @apply font-mono bg-slate-100 rounded-sm text-sm overflow-x-auto dark:bg-gray-800;
+}
+.code-listing  {
+    @apply -ml-8 -mr-8 relative !important;
+}
+.code-viewer .cm-content {
+  @apply py-4 px-8;
+}
+@media (min-width: 960px){
+    .notebook-viewer .code-viewer .cm-content {
+        @apply py-4 pl-12;
+    }
+    .notebook-viewer .code-listing {
+        width: 48rem !important;
+        @apply -ml-12 mr-0 !important;
+    }
+}
+/* Don’t show focus outline when double-clicking cell in Safari */
+.cm-scroller { @apply focus:outline-none; }
+
+/* Syntax Highlighting */
+/* --------------------------------------------------------------- */
+
+.inspected-value { @apply text-xs font-mono leading-[1.25rem]; }
+.cmt-strong, .cmt-heading { @apply font-bold; }
+.cmt-italic, .cmt-emphasis { @apply italic; }
+.cmt-strikethrough { @apply line-through; }
+.cmt-link { @apply underline; }
+.untyped-value { @apply whitespace-nowrap; }
+
+.cm-editor, .cmt-default, .result-viewer {
+  @apply text-slate-800 dark:text-slate-300;
+}
+.cmt-keyword {
+  @apply text-purple-800 dark:text-pink-400;
+}
+.cmt-atom, .cmt-bool, .cmt-url, .cmt-contentSeparator, .cmt-labelName {
+  @apply text-blue-900 dark:text-blue-300;
+}
+.cmt-inserted, .cmt-literal {
+  @apply text-emerald-700 dark:text-emerald-200;
+}
+.cmt-string, .cmt-deleted {
+  @apply text-rose-700 dark:text-sky-300;
+}
+.cmt-italic.cmt-string {
+  @apply dark:text-sky-200;
+}
+.cmt-regexp, .cmt-escape {
+  @apply text-orange-500 dark:text-orange-300;
+}
+.cmt-variableName {
+  @apply text-blue-800 dark:text-sky-300;
+}
+.cmt-typeName, .cmt-namespace {
+  @apply text-emerald-600 dark:text-emerald-300;
+}
+.cmt-className {
+  @apply text-teal-600 dark:text-teal-200;
+}
+.cmt-macroName {
+  @apply text-teal-700 dark:text-teal-200;
+}
+.cmt-propertyName {
+  @apply text-blue-700 dark:text-blue-200;
+}
+.cmt-comment {
+  @apply text-slate-500 dark:text-slate-400;
+}
+.cmt-meta {
+  @apply text-slate-600 dark:text-slate-400;
+}
+.cmt-invalid {
+  @apply text-red-500 dark:text-red-300;
+}
+
+.result-data {
+  @apply font-mono text-sm overflow-x-auto whitespace-nowrap leading-normal;
+}
+.result-data::-webkit-scrollbar, .path-nav::-webkit-scrollbar {
+  @apply h-0;
+}
+.result-data-collapsed {
+  @apply whitespace-nowrap;
+}
+.result-data-field {
+  @apply ml-4 whitespace-nowrap;
+}
+.result-data-field-link{
+  @apply ml-4 whitespace-nowrap cursor-pointer;
+}
+.result-data-field-link:hover {
+  @apply text-black bg-black/5;
+}
+.result-text-empty {
+  color: rgba(0,0,0,.3);
+}
+.browsify-button:hover {
+  box-shadow: -2px 0 0 2px #edf2f7;
+}
+
+/* Prose */
+/* --------------------------------------------------------------- */
+
+.notebook-viewer,
+.markdown-viewer {
+  @apply prose
+    dark:prose-invert
+    prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline
+    dark:prose-a:text-blue-300
+    prose-p:mt-4 prose-p:leading-snug
+    prose-ol:mt-4 prose-ol:mb-6 prose-ol:leading-snug
+    prose-ul:mt-4 prose-ul:mb-6 prose-ul:leading-snug
+    prose-blockquote:mt-4 prose-blockquote:leading-snug
+    prose-hr:mt-6 prose-hr:border-t-2 prose-hr:border-solid prose-hr:border-slate-200
+    prose-figure:mt-4
+    prose-figcaption:mt-2 prose-figcaption:text-xs
+    prose-headings:mb-4
+    prose-table:mt-0
+    prose-th:mb-0
+    prose-img:my-0
+    prose-code:font-medium prose-code:bg-slate-100
+    max-w-none;
+}
+.markdown-viewer blockquote p:first-of-type:before,
+.markdown-viewer blockquote p:last-of-type:after {
+  @apply content-none;
+}
+
+/* Images */
+/* --------------------------------------------------------------- */
+
+
+/* Todo Lists */
+/* --------------------------------------------------------------- */
+
+.contains-task-list {
+  @apply pl-6 list-none;
+}
+.contains-task-list input[type="checkbox"] {
+  @apply appearance-none h-4 w-4 rounded border border-slate-200 relative mr-[0.3rem] ml-[-1.5rem] top-[0.15rem];
+}
+.contains-task-list input[type="checkbox"]:checked {
+  @apply border-indigo-600 bg-indigo-600 bg-no-repeat bg-contain;
+  background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 16 16' fill='white' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3e%3c/svg%3e");
+}
+
+/* Markdown TOC */
+/* --------------------------------------------------------------- */
+
+.markdown-viewer .toc      { @apply mt-4; }
+.markdown-viewer h1 + .toc { @apply mt-8; }
+
+.markdown-viewer .toc h1,
+.markdown-viewer .toc h2,
+.markdown-viewer .toc h3,
+.markdown-viewer .toc h4,
+.markdown-viewer .toc h5,
+.markdown-viewer .toc h6 {
+  @apply text-base text-indigo-600 font-sans my-0;
+}
+.markdown-viewer .toc a {
+  @apply text-indigo-600 font-normal no-underline hover:underline;
+}
+.markdown-viewer .toc li    { @apply m-0; }
+.markdown-viewer .toc ul ul { @apply pl-4; }
+
+/* Notebook Spacing */
+/* --------------------------------------------------------------- */
+
+.notebook-viewer { @apply py-16; }
+#clerk-static-app .notebook-viewer { @apply pt-[0.8rem] pb-16; }
+.markdown-viewer *:first-child:not(.code-viewer):not(li):not(h2):not(.sidenote) { @apply mt-0; }
+/*.viewer + .viewer { @apply mt-6; }*/
+.viewer + .result-viewer { @apply mt-0; }
+.code-viewer + .result-viewer { @apply mt-3; }
+.markdown-viewer + .markdown-viewer { @apply mt-0; }
+
+/* Sidenotes */
+/* --------------------------------------------------------------- */
+
+.sidenote-ref {
+  @apply top-[-0.5em] w-auto h-auto inline border-0 bg-transparent m-0 pointer-events-none;
+}
+.sidenote {
+  @apply block font-sans text-xs mt-4 bg-slate-100 dark:bg-slate-800 p-4;
+  font-style: normal;
+  font-weight: normal;
+}
+.sidenote-container {
+  @apply mb-4;
+}
+@media (min-width: 860px) {
+  .sidenote sup { @apply inline; }
+  .sidenote-column {
+    @apply w-[165px] absolute right-0 top-0 -mr-[205px];
+  }
+  .sidenote {
+    @apply bg-transparent dark:bg-transparent p-0;
+  }
+  .sidenote:first-child {
+    @apply mt-1;
+  }
+  .sidenotes-layout .markdown-viewer {
+    @apply pr-[205px];
+  }
+  .sidenote-container {
+    @apply relative mb-0;
+  }
+  .sidenotes-layout h1 {
+    @apply w-[756px] !important;
+  }
+}
+.code-viewer + .viewer:not(.markdown-viewer):not(.code-viewer):not(.code-viewer-folded),
+.code-viewer-folded + .viewer:not(.markdown-viewer):not(.code-viewer):not(.code-viewer-folded),
+.result-viewer + .result-viewer {
+  @apply mt-2;
+}
+.code-viewer + .code-viewer-folded {
+  @apply mt-4;
+}
+.result-viewer {
+  @apply leading-tight mb-6;
+}
+.result-viewer figure {
+  @apply mt-0 !important;
+}
+@media (min-width: 768px) {
+  .devcard-desc > div {
+    @apply max-w-full m-0;
+  }
+}
+
+/* Command Palette */
+/* --------------------------------------------------------------- */
+
+.nj-commands-input {
+  @apply bg-transparent text-white;
+}
+.nj-context-menu-item:hover:not([disabled]) {
+  @apply cursor-pointer;
+  background-color: rgba(255,255,255,.14);
+}
+
+/* Devdocs */
+/* --------------------------------------------------------------- */
+
+.logo, .logo-white {
+  @apply block indent-[-999em];
+  background: url(/images/nextjournal-logo.svg) center center no-repeat;
+}
+.devdocs-body {
+  @apply font-inter;
+}
+
+/* Workarounds */
+/* --------------------------------------------------------------- */
+
+/* Fixes vega viewer resizing into infinity */
+.vega-embed .chart-wrapper { @apply h-auto !important; }
+/* fixes fraction separators being overridden by tw’s border-color */
+.katex * { @apply border-black; }
+
+@media print {
+    .dark-mode-toggle,
+    .toc-toggle { @apply hidden; }
+    .notebook-viewer { @apply pt-0; font-size: 12pt !important; margin-left: 0 !important; }
+    .code-viewer .cm-content,
+    .viewer-code .cm-content { @apply whitespace-pre-wrap !important; overflow: none; }
+    .code-viewer .cm-line { font-size: 12pt !important; }
+    html * { page-break-inside: avoid !important; }
+    .toc-panel { @apply hidden; }
+}
+</style><script src="https://storage.googleapis.com/nextjournal-cas-eu/assets/2hTcAWf2xfb7pvgxaZqgs4gewrARv3fF54SHC86CKbC1WUxuoexaQ4VrYXY1coYhM6izMFV7nmQMHnjCHdMG2bGB-viewer.js" type="module"></script><link href="https://cdn.jsdelivr.net/npm/katex@0.13.13/dist/katex.min.css" rel="stylesheet" type="text/css"><link href="https://fonts.bunny.net" rel="preconnect"><link href="https://fonts.bunny.net/css?family=fira-mono:400,700%7Cfira-sans:400,400i,500,500i,700,700i%7Cfira-sans-condensed:700,700i%7Cpt-serif:400,400i,700,700i" rel="stylesheet" type="text/css"></head><body><div id="clerk-static-app"></div><script type="module">let state = "{:out-path \"public/build\", :path->doc {\"notebooks/recife/notebook/quick_start.clj\" {:path [], :nextjournal/value {:atom-var-name->state #viewer-eval (nextjournal.clerk.render/intern-atoms! {}), :blocks [{:nextjournal/value [:div.markdown-viewer [:title-block [:topic (\"quick start\")] [:short-rule \"Gimme some code\"]] [:p [:<> \"Run the spec below and see a temporal property violation.\"]]], :nextjournal/opts {:id \"\"}, :nextjournal/viewer {:name nextjournal.clerk.viewer/html-viewer-, :render-fn #viewer-fn identity, :hash \"5du1K91pV2nRmpCG3vM8fBcDsgHWKs\"}} {:nextjournal/value \"(ns recife.notebook.quick-start\\n  {:nextjournal.clerk/visibility {:result :hide}\\n   :clerk/name \\\"quick start\\\"}\\n  (:require\\n   [recife.clerk :as rc]\\n   [recife.core :as r]\\n   [recife.helpers :as rh]))\", :nextjournal/opts {:id \"recife.notebook.quick-start/anon-expr-5dqoDLsqqdzumKJjMXMaFErU7WjxBy-code\", :loc {:line 5, :end-line 11, :column 1, :end-column 29}}, :nextjournal/viewer {:name nextjournal.clerk.viewer/code-viewer, :render-fn #viewer-fn nextjournal.clerk.render/render-code, :hash \"5dsJQw12yyyd7TcZEf52VSHxnqnJUC\"}} {:nextjournal/value \"(def global\\n  {::paid? (r/one-of #{true false})})\", :nextjournal/opts {:id \"recife.notebook.quick-start/global-code\", :loc {:line 13, :end-line 14, :column 1, :end-column 38}}, :nextjournal/viewer {:name nextjournal.clerk.viewer/code-viewer, :render-fn #viewer-fn nextjournal.clerk.render/render-code, :hash \"5dsJQw12yyyd7TcZEf52VSHxnqnJUC\"}} {:nextjournal/value \"(r/defproc ^:fair activate {:local {:pc ::try-activation}}\\n  {::try-activation\\n   (fn [{::keys [paid?] :as db}]\\n     (if paid?\\n       (-> db\\n           (assoc ::status :activated)\\n           r/done)\\n       (-> db\\n           (assoc ::status :requires-payment)\\n           (r/goto ::pay))))\\n\\n   [::pay\\n    {:fail? #{true false}}]\\n   (fn [{:keys [fail?] :as db}]\\n     (-> db\\n         (assoc ::paid? (not fail?))\\n         (r/goto ::try-activation)))})\", :nextjournal/opts {:id \"recife.notebook.quick-start/activate-code\", :loc {:line 16, :end-line 32, :column 1, :end-column 39}}, :nextjournal/viewer {:name nextjournal.clerk.viewer/code-viewer, :render-fn #viewer-fn nextjournal.clerk.render/render-code, :hash \"5dsJQw12yyyd7TcZEf52VSHxnqnJUC\"}} {:nextjournal/value \"(rh/defproperty will-eventualy-activate\\n  [{::keys [status]}]\\n  (rh/eventually\\n   (rh/always\\n    (= status :activated))))\", :nextjournal/opts {:id \"recife.notebook.quick-start/will-eventualy-activate-code\", :loc {:line 34, :end-line 38, :column 1, :end-column 29}}, :nextjournal/viewer {:name nextjournal.clerk.viewer/code-viewer, :render-fn #viewer-fn nextjournal.clerk.render/render-code, :hash \"5dsJQw12yyyd7TcZEf52VSHxnqnJUC\"}} {:path [], :nextjournal/value {:nextjournal/presented {:path [], :nextjournal/value [{:path [0], :nextjournal/value {:val {:path [0 :val], :nextjournal/value {:trace [[0 {:recife.notebook.quick-start/paid? false, :recife.core/procs {:recife.notebook.quick-start/activate {:pc :recife.notebook.quick-start/try-activation}}, :printed \"#:recife.notebook.quick-start{:paid? false}\\n\"}] [1 {:recife.notebook.quick-start/paid? false, :recife.core/procs {:recife.notebook.quick-start/activate {:pc :recife.notebook.quick-start/pay}}, :recife.notebook.quick-start/status :requires-payment, :recife/metadata {:context [:recife.notebook.quick-start/try-activation {:self :recife.notebook.quick-start/activate}]}, :printed \"#:recife.notebook.quick-start{:paid? false, :status :requires-payment}\\n\"}] [2 {:recife.notebook.quick-start/paid? false, :recife.core/procs {:recife.notebook.quick-start/activate {:pc :recife.notebook.quick-start/try-activation}}, :recife.notebook.quick-start/status :requires-payment, :recife/metadata {:context [:recife.notebook.quick-start/pay {:self :recife.notebook.quick-start/activate, :fail? true}]}, :printed \"#:recife.notebook.quick-start{:paid? false, :status :requires-payment}\\n\"}]], :trace-info {:violation {:type :back-to-state, :state-number 1}}, :distinct-states 6, :generated-states 9, :seed 3244971896687327870, :fp 34, :recife/transit-states-file-path \"/var/folders/6r/vx4stgxd5yg6pbv_t_b2wttw0000gp/T/transit-output10641334264610570559.msgpack\", :experimental {:violated-temporal-properties {:recife.notebook.quick-start/will-eventualy-activate {:violated? true}}}}, :nextjournal/viewer {:name :recife.clerk/recife-response-viewer, :render-fn #viewer-fn (do (defn render-response [{:keys [trace trace-info trace-info-code experimental], :as value} opts] (nextjournal.clerk.viewer/html [nextjournal.clerk.viewer/with-d3-require {:package [\"mermaid@9.4.0/dist/mermaid.js\"]} (fn [mermaid] (when value [nextjournal.clerk.viewer/with-d3-require {:package [\"elgrapho\"]} (fn [elgrapho] (if (not (sequential? trace)) [:div [:br] [:div.mt-5.bg-green-100.p-2 [:span.text-green-500.mr-3 \"✔\"] [:span \"No violations found\"]]] (let [reg #\".*android|.*Android.*|.*webOs.*|.*Android.*|.*iPhone.*\" mobile? (or (re-matches reg (str js/navigator.userAgent)) (re-matches reg (str js/navigator.vendor)) (re-matches reg (str js/window.opera))) {:keys [violation]} trace-info stuttering? (= (:type violation) :stuttering) model {:nodes (->> trace (mapv (fn [[idx state]] {:x (+ 0 (* 0.1M idx)), :y (+ 0 (* -0.1M idx)), :group idx, :label (if (= idx 0) \"0 - INITIAL\" (str idx \" - \" (-> (:recife/metadata state) :context first name) (if (and stuttering? (= (dec (count trace)) idx)) \" -- CRASH!\" \"\")))})) vec), :edges (cond-> (->> trace (partition 2 1) (mapv (fn [[[idx-0 state-0] [idx-1 state-1]]] {:from idx-0, :to idx-1}))) (= (:type violation) :back-to-state) (conj {:from (dec (count trace)), :to (:state-number violation)}))} build-graph (fn [el] (new elgrapho (clj->js {:model (-> model clj->js ((-> elgrapho .-layouts .-Hairball))), :container el, :width 700, :height 700, :animations false, :arrows true}))) build-mermaid (fn [el] (when el (set! (.-innerHTML el) \"\") (let [max-per-line 6 group->node (->> (:nodes model) (mapv (fn [m] (update m :label (fn* [p1__47202#] (-> (clojure.string/replace p1__47202# #\" \" \"\") (clojure.string/replace #\"-\" \"_\")))))) (mapv (juxt :group identity)) (into (sorted-map))) render-label (fn [group] (if (zero? group) \"[*]\" (str (:label (group->node group)) \":::_white\"))) render (fn [start-idx] (.render mermaid (str (gensym)) (str (->> [\"stateDiagram-v2\" \"direction LR\" \"classDef _white fill:white\"] (clojure.string/join \"\\n\")) \"\\n\" (->> (mapv (fn [{:keys [from to]}] (str \"  \" (render-label from) \" --> \" (render-label to))) (:edges model)) (drop start-idx) (take max-per-line) (clojure.string/join \"\\n\")) \"\\n\") (fn* [p1__47203#] (set! (.-innerHTML el) (str (.-innerHTML el) p1__47203#)))))] (loop [start-idx 0] (when (< start-idx (count trace)) (render start-idx) (recur (+ start-idx (inc max-per-line))))))))] [:div.mt-5 (if (:trace-example trace-info) [:div.bg-green-100.rounded-md.p-5 [:span.text-green-500.mr-3 \"✔\"] [:span \"No violations found (trace below is a valid one)\"]] [:div.bg-red-100.p-5 [:div.mb-2 [:span.text-red-500.mr-3 \"⚠\"] [:span \"Violation found\"]] [:div [:div (cond (= (:type violation) :back-to-state) (str \"The system can be stuck in a loop, starting on state number \" (:state-number violation) \", that will violate the following temporal  properties:\") stuttering? [:span (str \"The system is allowed to stop (stutter) at any time \" \"if there is nothing saying that it cannot stop, you should \" \"define a \") [:a {:href \"https://www.hillelwayne.com/post/fairness/\"} \"fair \"] [:span \"action.\"]] (= (:type violation) :deadlock) [:span (str \"Deadlock was reached at step \" (dec (count trace)) \".\") [:br] [:br] (str \"This means that there is no way to advance to a new state \" \"in this trace.\") [:br] (str \"If you don't care \" \"about deadlocks, you may disable it by \" \"passing `:no-deadlock` to `opts` or by using \" \"`r/done` to mark a process as completed.\")] (= (:type violation) :action-property) (str \"The following action property was violated by step \" (dec (count trace)) \":\") :else (str \"The following invariant was violated by step \" (dec (count trace)) \":\"))] (cond (= (:type violation) :back-to-state) (into [:ul] (->> (:violated-temporal-properties experimental) (filter (comp :violated? val)) (mapv first) (mapv (fn* [p1__47204#] (nextjournal.clerk.viewer/code (str \"#'\" (symbol p1__47204#))))) (mapv (comp (partial vector :li) nextjournal.clerk.render/inspect)))) (contains? #{:action-property :invariant} (:type violation)) (into [:ul] (->> [(:name violation)] (mapv (fn* [p1__47205#] (nextjournal.clerk.viewer/code (str \"#'\" (symbol p1__47205#))))) (mapv (comp (partial vector :li) nextjournal.clerk.render/inspect)))))]]) [:div.mt-3 {:ref (fn [el] (when el (if mobile? (build-mermaid el) (let [graph (build-graph el)] (.zoomToPoint graph 0 0 (/ 1 1.1) (/ 1 1.1)) (set! (.-animations graph) true) (set! (.-tooltipTemplate graph) (fn [idx el] (set! (.-innerHTML el) (str \"<pre>\\n\" (str \"Step \" idx \"\\n\" \"--------\" \"\\n\" (:printed (last (get trace idx)))) (str \"</pre>\"))))) graph))))}]])))]))])) (fn [value] (render-response value))), :hash \"5dtAxfHbeMtYfZhwVpmTE3QFvbc7pL\"}}, :form {:path [0 :form], :nextjournal/value \"(r/run-model global #{will-eventualy-activate activate})\", :nextjournal/viewer {:name nextjournal.clerk.viewer/code-viewer, :render-fn #viewer-fn nextjournal.clerk.render/render-code, :hash \"5dsJQw12yyyd7TcZEf52VSHxnqnJUC\"}}}, :nextjournal/viewer {:render-fn #viewer-fn (fn [{:keys [form val]} opts] [:div {:class \"py-[7px]\"} [:div [:div.bg-slate-100.px-2.rounded (nextjournal.clerk.render/inspect-presented opts form)]] [:div.flex.mt-1 (nextjournal.clerk.render/inspect-presented opts val)]]), :hash \"5drSTHstWcj1HhMU8wwuLhsuVSUgZK\"}}], :nextjournal/viewer {:render-fn #viewer-fn (fn [examples opts] (into [:div.border-l-2.border-slate-300.pl-4 [:div.uppercase.tracking-wider.text-xs.font-sans.text-blue-500.mt-4.mb-2 \"Recife\"]] (nextjournal.clerk.render/inspect-children opts) examples)), :hash \"5dqyCNmtFdRkgSRpRw2F5miTApCJSA\"}}, :nextjournal/blob-id \"5duCWKif83D4gj3bWigLquY9FS16Vi\"}, :nextjournal/opts {:id \"recife.notebook.quick-start/anon-expr-5dsgMjZaXNPxMVXTFyiPAJ2uuGKNYS-result\"}, :nextjournal/viewer {:name nextjournal.clerk.viewer/result-viewer, :render-fn #viewer-fn nextjournal.clerk.render/render-result, :hash \"5dtGVHesd2XCTLFYF3aY4kJvkrX1x1\"}} {:nextjournal/value [:div.markdown-viewer [:p [:<> \"Ok, this is too much, if you want to go deeper and slower, there is\\na series of articles about Recife, starting with\\n\"] [:a {:href \"../../../notebooks/recife/notebook/slow_start.html\", :internal_link \"true\", :class [:hover:bg-orange-100 :hover:rounded :hover:no-underline :transition :duration-200 :ease-in :ease-out]} [:<> \"slow start\"]] [:<> \".\"]]], :nextjournal/opts {:id \"\"}, :nextjournal/viewer {:name nextjournal.clerk.viewer/html-viewer-, :render-fn #viewer-fn identity, :hash \"5du1K91pV2nRmpCG3vM8fBcDsgHWKs\"}}], :toc {:type :toc}, :toc-visibility false, :scope recife.notebook.quick-start}, :nextjournal/viewer {:name nextjournal.clerk.viewer/notebook-viewer, :render-fn #viewer-fn (do (defn exists? [v] true) (defn render-processed-block [x] (let [{viewer-name :name} (nextjournal.clerk.viewer/->viewer x) viewer-css-class (nextjournal.clerk.viewer/css-class x) inner-viewer-name (some-> x nextjournal.clerk.viewer/->value nextjournal.clerk.viewer/->viewer :name) processed-block-id (get-in x [:nextjournal/opts :id])] [:div {:data-block-id processed-block-id, :class (concat [(when (:nextjournal/open-graph-image-capture (nextjournal.clerk.viewer/->value x)) \"open-graph-image-capture\")] (if viewer-css-class (cond-> viewer-css-class (string? viewer-css-class) vector) [\"viewer\" (when viewer-name (name viewer-name)) (when inner-viewer-name (name inner-viewer-name)) (case (or (nextjournal.clerk.viewer/width x) (case viewer-name ((quote nextjournal.clerk.viewer/code-viewer) (quote nextjournal.clerk.viewer/code-folded-viewer)) :wide :prose)) :wide \"w-full max-w-wide\" :full \"w-full\" \"w-full max-w-prose px-8\")]))} [nextjournal.clerk.render/inspect-presented x]])) (fn render-notebook [{:as _doc, xs :blocks, :keys [bundle? css-class sidenotes? toc toc-visibility]}] (reagent.core/with-let [local-storage-key \"clerk-navbar\" navbar-width 220 !state (reagent.core/atom {:md-toc toc, :scroll-el (when (exists? js/document) (js/document.querySelector \"html\")), :local-storage-key local-storage-key, :width navbar-width, :theme {:slide-over \"bg-slate-100 dark:bg-gray-800 font-sans border-r dark:border-slate-900\"}, :mobile-width 300, :mobile? (and (exists? js/innerWidth) (< js/innerWidth 640)), :set-hash? (not bundle?), :visibility toc-visibility}) root-ref-fn (fn [el] (when el (when-some [heading (when (and (exists? js/location) (not bundle?)) (try (some-> js/location .-hash not-empty js/decodeURI js/document.querySelector) (catch js/Error _ (js/console.warn (str \"Clerk render-notebook, invalid selector: \" (.-hash js/location))))))] (js/requestAnimationFrame (fn* [] (.scrollIntoViewIfNeeded heading))))))] (let [{:keys [md-toc mobile? open? visibility]} (clojure.core/deref !state) doc-inset (cond mobile? 0 open? navbar-width :else 0)] (when-not (= visibility toc-visibility) (swap! !state assoc :visibility toc-visibility :open? (not= :collapsed toc-visibility))) [:div.flex {:ref root-ref-fn} [:div.flex-auto.w-screen.scroll-container.pl-72 [:> (.-div framer-motion/motion) {:key \"notebook-viewer\", :initial (when toc-visibility {:margin-left doc-inset}), :animate (when toc-visibility {:margin-left doc-inset}), :transition nextjournal.clerk.render.navbar/spring, :class (str (or css-class \"flex flex-col items-center notebook-viewer flex-auto \") (when sidenotes? \"sidenotes-layout\"))} (doall (map render-processed-block xs))]]])))), :hash \"5drNTdFeYhNx9RTShux8kBJ5a3eRbh\"}}}, :index \"notebooks/recife/notebook/index.clj\", :browse? true, :paths [\"notebooks/recife/notebook/guide_layout.clj\" \"notebooks/recife/notebook/webdriver.clj\" \"notebooks/recife/notebook/slow_start.clj\" \"notebooks/recife/notebook/non_determinism.clj\" \"notebooks/recife/notebook/index.clj\" \"notebooks/recife/notebook/reasoning.clj\" \"notebooks/recife/notebook/quick_start.clj\" \"notebooks/recife/notebook/temporal.clj\"], :resource->url {\"/js/viewer.js\" \"https://storage.googleapis.com/nextjournal-cas-eu/assets/2hTcAWf2xfb7pvgxaZqgs4gewrARv3fF54SHC86CKbC1WUxuoexaQ4VrYXY1coYhM6izMFV7nmQMHnjCHdMG2bGB-viewer.js\"}, :current-path \"notebooks/recife/notebook/quick_start.clj\", :bundle? false, :path->url {\"notebooks/recife/notebook/guide_layout.clj\" \"notebooks/recife/notebook/guide_layout.html\", \"notebooks/recife/notebook/webdriver.clj\" \"notebooks/recife/notebook/webdriver.html\", \"notebooks/recife/notebook/slow_start.clj\" \"notebooks/recife/notebook/slow_start.html\", \"notebooks/recife/notebook/non_determinism.clj\" \"notebooks/recife/notebook/non_determinism.html\", \"notebooks/recife/notebook/index.clj\" \"\", \"notebooks/recife/notebook/reasoning.clj\" \"notebooks/recife/notebook/reasoning.html\", \"notebooks/recife/notebook/quick_start.clj\" \"notebooks/recife/notebook/quick_start.html\", \"notebooks/recife/notebook/temporal.clj\" \"notebooks/recife/notebook/temporal.html\"}, :expanded-paths [\"notebooks/recife/notebook/guide_layout.clj\" \"notebooks/recife/notebook/webdriver.clj\" \"notebooks/recife/notebook/slow_start.clj\" \"notebooks/recife/notebook/non_determinism.clj\" \"notebooks/recife/notebook/index.clj\" \"notebooks/recife/notebook/reasoning.clj\" \"notebooks/recife/notebook/quick_start.clj\" \"notebooks/recife/notebook/temporal.clj\"], :report-fn #function[nextjournal.clerk.builder/stdout-reporter]}".replaceAll('nextjournal.clerk.view/escape-closing-script-tag', 'script')
+let opts = nextjournal.clerk.sci_env.read_string(state)
+nextjournal.clerk.static_app.init(opts)
+</script></body></html>
