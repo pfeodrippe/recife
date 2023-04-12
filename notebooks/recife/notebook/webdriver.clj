@@ -30,7 +30,7 @@
 ;; ◊title{Audio Player}
 
 ;; We will be modelling the available actions in the
-;; ◊link{https://github.com/pfeodrippe/recife/blob/master/notebooks/recife/notebook/resource/audioplayer.html}{audioplayer.html}
+;; ◊link{https://github.com/pfeodrippe/recife/blob/master/resources-test/audioplayer.html}{audioplayer.html}
 ;; file.
 
 ;; For this webpage, the user can just click on a Play/Pause button
@@ -38,7 +38,7 @@
 
 ^{:nextjournal.clerk/visibility {:result :show :code :hide}
   :nextjournal.clerk/viewer 'nextjournal.clerk.viewer/html-viewer}
-(slurp (io/resource "recife/notebook/resource/audioplayer.html"))
+(slurp (io/resource "audioplayer.html"))
 
 ;; ◊note{A "variable" in our case is just a key in a map.}
 
@@ -195,7 +195,7 @@
 ;; static page.
 (def init
   (fn  [_]
-    (w/navigate (str (io/resource "recife/notebook/resource/audioplayer.html")))))
+    (w/navigate (str (io/resource "audioplayer.html")))))
 
 ;; Then we drive it (open the REPL to see it in action)!
 ;; Or check the video at

@@ -25,7 +25,7 @@
                      metosin/muuntaja {:mvn/version "0.6.8"}
                      io.github.pfeodrippe/dev-tooling {:mvn/version "1.0.57"}
                      org.clojure/core.logic {:mvn/version "1.0.1"}}
-        :extra-paths ["test" "notebooks"]}
+        :extra-paths ["test" "notebooks" "resources-test"]}
   :test {:jvm-opts ["-XX:-OmitStackTraceInFastThrow"]
          :extra-deps {nubank/matcher-combinators {:mvn/version "3.1.4"}
                       lambdaisland/kaocha {:mvn/version "1.0-612"}
@@ -48,7 +48,7 @@
                       metosin/muuntaja {:mvn/version "0.6.8"}
                       io.github.pfeodrippe/dev-tooling {:mvn/version "1.0.57"}
                       org.clojure/core.logic {:mvn/version "1.0.1"}}
-         :extra-paths ["test"]
+         :extra-paths ["test" "resources-test"]
          :main-opts   ["-m" "kaocha.runner"]}}
 
  :deps
