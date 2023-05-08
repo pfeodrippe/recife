@@ -38,7 +38,7 @@
 
 (comment
 
-  (-> @(r/run-model global #{wire invariant eventually-consistent} #_{:raw-output? true})
+  (-> @(r/run-model global #{wire invariant eventually-consistent} #_{:raw-output true})
       r/timeline-diff)
 
   ())

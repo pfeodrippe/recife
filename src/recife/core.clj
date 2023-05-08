@@ -1735,61 +1735,61 @@ VIEW
 
             simulator tlc2.TLCGlobals/simulator
 
-            {:keys [:trace
-                    :info]} (if-some [error-trace (-> ^tlc2.output.ErrorTraceMessagePrinterRecorder
-                                                      (private-field tlc "recorder")
-                                                      .getMCErrorTrace
-                                                      (.orElse nil))]
-                              (let [states (->> (.getStates ^tlc2.model.MCError error-trace)
-                                                (mapv bean))
-                                    stuttering-state (some #(when (:stuttering %) %) states)
-                                    back-to-state (some #(when (:backToState %) %) states)]
-                                {:trace (->> states
-                                             ;; We don't want to return the state which
-                                             ;; is stuttering, it's always equals to the
-                                             ;; anterior.
-                                             (remove :stuttering)
-                                             ;; Same for backToState.
-                                             (remove :backToState)
-                                             (mapv (fn [state]
-                                                     (->> state
-                                                          :variables
-                                                          (some #(when (= (.getName ^tlc2.model.MCVariable %)
-                                                                          "main_var")
-                                                                   (.getTLCValue ^tlc2.model.MCVariable %))))))
-                                             (mapv tla-edn/to-edn)
-                                             (map-indexed (fn [idx v] [idx v]))
-                                             (into []))
-                                 :info (merge (dissoc recorder-info :others)
-                                              (cond
-                                                stuttering-state
-                                                {:violation {:type :stuttering
-                                                             :state-number (:stateNumber stuttering-state)}}
+            {:keys [trace info]}
+            (if-some [error-trace (-> ^tlc2.output.ErrorTraceMessagePrinterRecorder
+                                      (private-field tlc "recorder")
+                                      .getMCErrorTrace
+                                      (.orElse nil))]
+              (let [states (->> (.getStates ^tlc2.model.MCError error-trace)
+                                (mapv bean))
+                    stuttering-state (some #(when (:stuttering %) %) states)
+                    back-to-state (some #(when (:backToState %) %) states)]
+                {:trace (->> states
+                             ;; We don't want to return the state which
+                             ;; is stuttering, it's always equals to the
+                             ;; anterior.
+                             (remove :stuttering)
+                             ;; Same for backToState.
+                             (remove :backToState)
+                             (mapv (fn [state]
+                                     (->> state
+                                          :variables
+                                          (some #(when (= (.getName ^tlc2.model.MCVariable %)
+                                                          "main_var")
+                                                   (.getTLCValue ^tlc2.model.MCVariable %))))))
+                             (mapv tla-edn/to-edn)
+                             (map-indexed (fn [idx v] [idx v]))
+                             (into []))
+                 :info (merge (dissoc recorder-info :others)
+                              (cond
+                                stuttering-state
+                                {:violation {:type :stuttering
+                                             :state-number (:stateNumber stuttering-state)}}
 
-                                                back-to-state
-                                                {:violation {:type :back-to-state
-                                                             :state-number (dec (:stateNumber back-to-state))}}))})
-                              (let [initial-state (when (-> recorder-info :violation :initial-state?)
-                                                    ;; If we had a initial state violation, `MCError` is `nil`,
-                                                    ;; but the state is stored in the main checker.
-                                                    (-> (private-field tlc2.TLCGlobals/mainChecker
-                                                                       tlc2.tool.AbstractChecker
-                                                                       "errState")
-                                                        bean
-                                                        :vals
-                                                        (.get (UniqueString/uniqueStringOf "main_var"))
-                                                        tla-edn/to-edn))]
-                                (cond
-                                  initial-state
-                                  {:trace [[0 initial-state]]
-                                   :info (dissoc recorder-info :others)}
+                                back-to-state
+                                {:violation {:type :back-to-state
+                                             :state-number (dec (:stateNumber back-to-state))}}))})
+              (let [initial-state (when (-> recorder-info :violation :initial-state?)
+                                    ;; If we had a initial state violation, `MCError` is `nil`,
+                                    ;; but the state is stored in the main checker.
+                                    (some-> (private-field tlc2.TLCGlobals/mainChecker
+                                                           tlc2.tool.AbstractChecker
+                                                           "errState")
+                                            bean
+                                            :vals
+                                            (.get (UniqueString/uniqueStringOf "main_var"))
+                                            tla-edn/to-edn))]
+                (cond
+                  initial-state
+                  {:trace [[0 initial-state]]
+                   :info (dissoc recorder-info :others)}
 
-                                  (:error recorder-info)
-                                  {:trace :error
-                                   :info (dissoc recorder-info :others)}
+                  (:error recorder-info)
+                  {:trace :error
+                   :info (dissoc recorder-info :others)}
 
-                                  :else
-                                  {:trace :ok})))]
+                  :else
+                  {:trace :ok})))]
 
         (save-and-flush! ::debug :after-building-violation-info)
 
@@ -1824,6 +1824,8 @@ VIEW
                      {:simulation
                       {:states-count (long (private-field simulator "numOfGenStates"))
                        :traces-count (long (private-field simulator "numOfGenTraces"))}}))
+            (merge (when (:continue opts)
+                     (select-keys opts [:continue])))
             (medley/assoc-some :recife/transit-states-file-path (:file-path state-writer))))
 
       (catch Exception ex
@@ -1898,7 +1900,8 @@ VIEW
   ([]
    (get-result @*current-model-run))
   ([model-run]
-   @model-run))
+   (when (some? model-run)
+     @model-run)))
 
 (defn get-model
   "Get current model."
@@ -1910,7 +1913,7 @@ VIEW
   ([init-state next-operator operators]
    (run-model* init-state next-operator operators {}))
   ([init-state next-operator operators {:keys [seed fp workers tlc-args
-                                               raw-output? run-local? debug
+                                               raw-output run-local debug
                                                complete-response?
                                                no-deadlock
                                                depth async simulate generate
@@ -1942,6 +1945,9 @@ VIEW
 
    ;; Run model.
    (let [use-buffer true
+         opts (if continue
+                (assoc opts :trace-example false)
+                opts)
          file (doto (File/createTempFile "eita" ".tla") .delete) ; we are interested in the random name of the folder
          abs-path (-> file .getAbsolutePath (str/split #"\.") first (str "/spec.tla"))
          opts-file-path (-> file .getAbsolutePath (str/split #"\.") first (str "/opts.edn"))
@@ -1998,7 +2004,7 @@ VIEW
      (io/delete-file exception-filename true)
      (io/delete-file invariant-data-filename true)
      (cond
-       run-local?
+       run-local
        (let [result (tlc-result-handler #(spec/run-spec abs-path
                                                         (str file-name "." file-type)
                                                         tlc-opts
@@ -2007,7 +2013,7 @@ VIEW
            (throw (deserialize-obj exception-filename))
            result))
 
-       raw-output?
+       raw-output
        (let [result (spec/run abs-path
                       (str file-name "." file-type)
                       tlc-opts
@@ -2062,6 +2068,9 @@ VIEW
                                         ;; this still needs lots of testing!
                                         (assoc-in [:experimental :violated-temporal-properties]
                                                   (rt/check-temporal-properties edn (::components opts)))
+
+                                        continue
+                                        (assoc :violations (read-saved-data :recife/violation))
 
                                         true
                                         (with-meta {:type ::RecifeResponse}))

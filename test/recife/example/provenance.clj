@@ -88,22 +88,4 @@
   (r/get-result)
   (r/halt!)
 
-  (->> (r/get-result)
-       r/states-from-result
-       r/random-traces-from-states
-       #_(mapv #(mapv last %))
-       #_(mapv last)
-       #_(mapv ::employers))
-
-  ;; You can use a proc as a function as if you were simulating a trace,
-  ;; this is just a convenience so you can emulate some known scenario to harden
-  ;; your code.
-  ;; You can only call procs that have one operator (one step).
-  (-> (add-employer global)
-      add-employer
-      add-employer
-      ;; You can also pass extra args (which represent local variables or
-      ;; non-deterministic ones),
-      (add-parent-employer {:parent 1 :child 2}))
-
   ())
