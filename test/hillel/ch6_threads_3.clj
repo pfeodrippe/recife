@@ -89,7 +89,7 @@
                   :fp 0
                   :seed 1
                   #_ #_:simulate true
-                  #_ #_:run-local? true}))
+                  #_ #_:run-local true}))
 
   (r/get-result)
   (r/halt!)

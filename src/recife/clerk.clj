@@ -165,7 +165,7 @@
                                   (select-keys ~form-meta [::block])))))))))
 
 (defn- adapt-result
-  [{:keys [trace-info] :as result}]
+  [result]
   ;; Update trace elements so they contains the
   ;; pretty-printed version that we can use for the
   ;; node tooltip.
@@ -181,8 +181,7 @@
                                          (dissoc state
                                                  ::r/procs
                                                  :recife/metadata))))])
-                        trace))))
-      #_(assoc :trace-info-code (v/code trace-info))))
+                        trace))))))
 
 (def ^:private render-response
   (with-recife
@@ -193,7 +192,7 @@
       'r 'reagent.core
       'v 'nextjournal.clerk.viewer}
      '(defn render-response
-        [{:keys [trace trace-info trace-info-code experimental]
+        [{:keys [trace trace-info trace-info-code experimental continue violations]
           :as value}
          opts]
         (v/html
@@ -202,13 +201,19 @@
             (when value
               [v/with-d3-require {:package ["elgrapho"]}
                (fn [elgrapho]
-                 (if (not (sequential? trace))
+                 (cond
+                   (seq violations)
+                   [:div (nextjournal.clerk.render/inspect (v/code value))]
+
+                   (not (sequential? trace))
                    [:div
                     [:br]
                     [:div.mt-5.bg-green-100.p-2
                      [:span.text-green-500.mr-3
                       "✔"]
                      [:span "No violations found"]]]
+
+                   :else
                    (let [reg #".*android|.*Android.*|.*webOs.*|.*Android.*|.*iPhone.*"
                          mobile? (or (re-matches reg (str js/navigator.userAgent))
                                      (re-matches reg (str js/navigator.vendor))
@@ -356,14 +361,18 @@
                                    "`r/done` to mark a process as completed.")]
 
                              (= (:type violation) :action-property)
-                             (str "The following action property was violated by step "
-                                  (dec (count trace))
-                                  ":")
+                             (if (zero? (dec (count trace)))
+                               (str "The following action property was violated by the initial state:")
+                               (str "The following action property was violated by step "
+                                    (dec (count trace))
+                                    ":"))
 
                              :else
-                             (str "The following invariant was violated by step "
-                                  (dec (count trace))
-                                  ":"))]
+                             (if (zero? (dec (count trace)))
+                               (str "The following invariant was violated by the initial state:")
+                               (str "The following invariant was violated by step "
+                                    (dec (count trace))
+                                    ":")))]
                           (cond
                             (= (:type violation) :back-to-state)
                             (into [:ul]
