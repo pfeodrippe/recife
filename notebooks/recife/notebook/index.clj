@@ -14,7 +14,8 @@
   :doc/slow-start 'recife.notebook.slow-start
   :doc/quick-start 'recife.notebook.quick-start
   :doc/temporal 'recife.notebook.temporal
-  :doc/webdriver 'recife.notebook.webdriver})
+  :doc/webdriver 'recife.notebook.webdriver
+  :doc/logic-and-provenance 'recife.notebook.logic-and-provenance})
 
 {::clerk/visibility {:code :hide :result :show}}
 
@@ -27,7 +28,8 @@
   {:title "Learn"
    :pages [:doc/slow-start
            :doc/temporal
-           :doc/webdriver]}
+           :doc/webdriver
+           :doc/logic-and-provenance]}
   {:title "Appendix"
    :pages [:doc/guide-layout]}])
 
