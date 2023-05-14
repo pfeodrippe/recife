@@ -6,3 +6,4 @@
   - https://www.hillelwayne.com/post/formally-modeling-migrations/
   - [ ] We can model relations directly with actions automatically created for them
 - [ ] Communication between Recife and Alloy using Clojure
+- [ ] Create Clerk viewer for `with-eval`

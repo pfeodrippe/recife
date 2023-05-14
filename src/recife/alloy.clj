@@ -1,5 +1,6 @@
 (ns recife.alloy
   (:require
+   [clojure.edn :as edn]
    [clojure.string :as str]
    [clojure.walk :as walk]
    [clojure.pprint :as pp])
@@ -31,11 +32,20 @@
 (defonce ^:private current-state
   (atom {:viz-gui nil
          :ans nil
-         :ans-index 0}))
+         :ans-index 0
+         :module nil}))
+
+(defn -current-answer
+  []
+  (:ans @current-state))
+
+(defn -current-module
+  []
+  (:module @current-state))
 
 (defn next-solution!
   []
-  (let [{:keys [:viz-gui :ans]} @current-state
+  (let [{:keys [viz-gui ans]} @current-state
         next-ans (.next ans)]
     (when (.satisfiable next-ans)
       (swap! current-state assoc :ans next-ans)
@@ -46,7 +56,7 @@
       true)))
 
 (defn run-alloy-expression
-  [module-contents {:keys [:expression :reuse-ans? :show-viz?]}]
+  [module-contents {:keys [expression reuse-ans? show-viz?]}]
   (let [reporter (edu.mit.csail.sdg.alloy4.A4Reporter.)
         world (CompUtil/parseEverything_fromString reporter module-contents)
         opt (A4Options.)]
@@ -56,20 +66,23 @@
          (mapv (fn [alloy-cmd]
                  (let [ans' (TranslateAlloyToKodkod/execute_commandFromBook
                              reporter (.getAllReachableSigs world) alloy-cmd opt)
-                       {:keys [:ans :ans-index]} (if reuse-ans?
-                                                   ;; XXX: Call (.next ans) n times so we are at the same solution
-                                                   ;; and can "reuse" it.
-                                                   {:ans (if (zero? (:ans-index @current-state))
-                                                           ans'
-                                                           (reduce (fn [current-ans _]
-                                                                     (.next current-ans))
-                                                                   ans'
-                                                                   (range (:ans-index @current-state))))
-                                                    :ans-index (:ans-index @current-state)}
-                                                   {:ans ans'
-                                                    :ans-index 0})]
+                       {:keys [ans ans-index]} (if reuse-ans?
+                                                 ;; XXX: Call (.next ans) n times so we are at the same solution
+                                                 ;; and can "reuse" it.
+                                                 {:ans (if (zero? (:ans-index @current-state))
+                                                         ans'
+                                                         (reduce (fn [current-ans _]
+                                                                   (.next current-ans))
+                                                                 ans'
+                                                                 (range (:ans-index @current-state))))
+                                                  :ans-index (:ans-index @current-state)}
+                                                 {:ans ans'
+                                                  :ans-index 0})]
                    (when (.satisfiable ans)
-                     (swap! current-state assoc :ans ans :ans-index ans-index)
+                     (swap! current-state assoc
+                            :ans ans
+                            :ans-index ans-index
+                            :module module-contents)
                      (.writeXML ans ".alloy_output.xml")
                      (when show-viz?
                        (if (nil? (:viz-gui @current-state))
@@ -303,11 +316,11 @@
            (= op 'recife.alloy/subset?)
            (format "%s in %s" (parse (nth expr 1)) (parse (nth expr 2)))
 
-           (= op 'recife.alloy/all)
+           (= op 'recife.alloy/for-all)
            (format "all %s | {\n  %s\n}"
                    (parse-args (nth expr 1)) (parse (nth expr 2)))
 
-           (= op 'recife.alloy/some**)
+           (= op 'recife.alloy/for-some)
            (format "some %s | {\n  %s\n}"
                    (parse-args (nth expr 1)) (parse (nth expr 2)))
 
@@ -316,7 +329,7 @@
                    (parse-args (nth expr 1)))
 
            (= op 'recife.alloy/cartesian)
-           (format "%s -> %s" (parse (nth expr 1)) (parse (nth expr 2)))
+           (str/join "->" (mapv parse (drop 1 expr)))
 
            (= op 'recife.alloy/trans)
            (format "^%s" (parse (nth expr 1)))
@@ -348,7 +361,6 @@
            (->> (rest expr)
                 (mapv parse)
                 (str/join " ++ "))
-
 
            (= op 'recife.alloy/always)
            (format "always {%s}"
@@ -396,7 +408,7 @@
 
 (declare invoke*)
 
-(deftype AlloySignature [sig-map]
+(deftype AlloyObj [sig-map]
   clojure.lang.IPersistentSet
   (disjoin [_ k]
     (.disjoin (sig-map->set sig-map) k))
@@ -436,21 +448,21 @@
   (invoke [this arg1 arg2 arg3 arg4 arg5 arg6 arg7] (invoke* this [arg1 arg2 arg3 arg4 arg5 arg6 arg7]))
   (invoke [this arg1 arg2 arg3 arg4 arg5 arg6 arg7 arg8] (invoke* this [arg1 arg2 arg3 arg4 arg5 arg6 arg7 arg8])))
 
-(defmethod print-method AlloySignature [c, ^java.io.Writer w]
+(defmethod print-method AlloyObj [c, ^java.io.Writer w]
   (.write w (.toString c)))
 
-(defmethod pp/simple-dispatch AlloySignature [c]
+(defmethod pp/simple-dispatch AlloyObj [c]
   (let [sig-map (.-sig-map c)]
     (if (contains? #{:rec.type/pred :rec.type/fun :rec.type/fact :rec.type/assertion :rec.type/check :rec.type/run}
                    (:rec.alloy/type sig-map))
       (let [form (:rec.alloy/form sig-map)]
         (pr form))
       (let [res (->> (with-out-str
-                       (pr (sig-map->set (.-sig-map c))))
+                       (pp/pprint (sig-map->set (.-sig-map c))))
                      str/split-lines
                      (drop-while #(str/includes? % "kodkod.engine.config.Reporter"))
                      (str/join "\n"))]
-        (print res)))))
+        (pp/simple-dispatch (edn/read-string res))))))
 
 (defn- invoke*
   [this args]
@@ -459,9 +471,9 @@
       (:rec.type/relation :rec.type/sig)
       (let [expression
             (format "{%s.%s}"
-                    (:rec.alloy/name (.-sig-map obj))
-                    (:rec.alloy/name (.-sig-map this)))]
-        (AlloySignature. (assoc (.-sig-map this)
+                    (:rec.alloy/name (.-sig-map this))
+                    (:rec.alloy/name (.-sig-map obj)))]
+        (AlloyObj. (assoc (.-sig-map this)
                                 :rec.alloy/result-cache (atom nil)
                                 :rec.alloy/name expression)))
 
@@ -472,7 +484,7 @@
                     (->> args
                          (mapv #(:rec.alloy/name (.-sig-map %)))
                          (str/join ", ")))]
-        (AlloySignature. (assoc (.-sig-map obj)
+        (AlloyObj. (assoc (.-sig-map obj)
                                 :rec.alloy/result-cache (atom nil)
                                 :rec.alloy/type :rec.type/pred-call
                                 :rec.alloy/name expression))))))
@@ -480,7 +492,7 @@
 (defn build-alloy-module
   [{:keys [:rec.signature/sigs :rec.signature/module]}
    constraints
-   {:keys [:run]}]
+   {:keys [run]}]
   ;; Reset sigs cache.
   (run! #(reset! (:rec.alloy/result-cache %) nil) sigs)
   (let [module-body (apply str
@@ -496,7 +508,7 @@
                                 (mapv :rec.alloy/form)
                                 (str/join "\n\n"))
                            "\n\n"
-                           (if (instance? AlloySignature run)
+                           (if (instance? AlloyObj run)
                              (:rec.alloy/form run)
                              run))]
     (reset! module module-body)
@@ -506,13 +518,13 @@
   "Transitive closure operator (`^`)."
   [alloy-obj]
   (let [sig-map (.sig-map alloy-obj)]
-    (AlloySignature. (assoc sig-map
+    (AlloyObj. (assoc sig-map
                             :rec.alloy/result-cache (atom nil)
                             :rec.alloy/name (format "^%s" (:rec.alloy/name sig-map))))))
 
 (defn pred
   [name args & body]
-  (AlloySignature.
+  (AlloyObj.
    {:rec.alloy/name (custom-munge name)
     :rec.alloy/type :rec.type/pred
     :rec.alloy/form (format "pred %s[%s] {\n  %s\n}"
@@ -528,7 +540,7 @@
 (defmacro deffun
   [name _ return-type args & body]
   `(def ~name
-     (AlloySignature.
+     (AlloyObj.
       {:rec.alloy/name '~(custom-munge name)
        :rec.alloy/type :rec.type/fun
        :rec.alloy/form ~(format "fun %s[%s] : %s {\n  %s\n}"
@@ -539,7 +551,7 @@
 
 (defn fact
   [name & body]
-  (AlloySignature.
+  (AlloyObj.
    {:rec.alloy/name (custom-munge name)
     :rec.alloy/type :rec.type/fact
     :rec.alloy/form (format "fact %s {\n  %s\n}"
@@ -554,7 +566,7 @@
 (defmacro defassert
   [name & body]
   `(def ~name
-     (AlloySignature.
+     (AlloyObj.
       {:rec.alloy/name '~(custom-munge name)
        :rec.alloy/type :rec.type/assertion
        :rec.alloy/form ~(format "assert %s {\n  %s\n}"
@@ -563,7 +575,7 @@
 
 (defn check
   [name options & body]
-  (AlloySignature.
+  (AlloyObj.
    {:rec.alloy/name (custom-munge name)
     :rec.alloy/type :rec.type/check
     :rec.alloy/form (format "check %s {\n  %s\n}%s"
@@ -579,7 +591,7 @@
 
 (defn run
   [name options & body]
-  (AlloySignature.
+  (AlloyObj.
    {:rec.alloy/name (custom-munge name)
     :rec.alloy/type :rec.type/run
     :rec.alloy/form (format "run {\n  %s\n}%s"
@@ -615,8 +627,8 @@
     v))
 
 (defn sig
-  [name opts {:keys [:module-atom :vars?]}]
-  (AlloySignature.
+  [name opts {:keys [module-atom vars?]}]
+  (AlloyObj.
    {:rec.alloy/name (clojure.core/name name)
     :rec.alloy/type :rec.type/sig
     :rec.alloy/ordered? (boolean (:ordered? opts))
@@ -624,7 +636,7 @@
     :rec.alloy/result-cache (atom nil)
     :rec.alloy/relations (->> (:relations opts)
                               (mapv (fn [[relation _]]
-                                      (let [signature (AlloySignature.
+                                      (let [signature (AlloyObj.
                                                        {:rec.alloy/name (custom-munge (clojure.core/name relation))
                                                         :rec.alloy/type :rec.type/relation
                                                         :rec.alloy/parent name
@@ -662,7 +674,7 @@
    (fn
      ([sigs]
       (signatures sigs {}))
-     ([sigs {:keys [:vars?]
+     ([sigs {:keys [vars?]
              :or {vars? true}}]
       (let [module-atom (atom nil)]
         {:rec.signature/sigs
@@ -680,16 +692,18 @@
 
          :rec.signature/module module-atom})))))
 
-(defn- create-alloy-obj
-  [existing-alloy-obj expression]
-  (AlloySignature. {:rec.alloy/name expression
-                    :rec.alloy/type :rec.type/expression
-                    :rec.alloy/module (:rec.alloy/module (.-sig-map existing-alloy-obj))
-                    :rec.alloy/result-cache (atom nil)}))
+(defn -create-alloy-obj
+  [module expression]
+  (AlloyObj. {:rec.alloy/name expression
+              :rec.alloy/type :rec.type/expression
+              :rec.alloy/module (atom module)
+              :rec.alloy/result-cache (atom nil)}))
 
 ;; Operators
 
 (declare all)
+
+(declare ^:private eita)
 
 (declare one)
 
@@ -697,7 +711,7 @@
 
 (declare some*)
 
-(declare some**)
+(declare for-some)
 
 (declare subset?)
 
@@ -717,13 +731,15 @@
 
 (declare eventually)
 
-(defn cartesian
-  [x y])
+(declare cartesian)
 
-(defn j
-  "Join."
-  [& args]
-  (create-alloy-obj (first args)
-                    (format "{%s}"
-                            (->> (mapv :rec.alloy/name args)
-                                 (str/join ".")))))
+(declare j)
+
+(defmacro with-eval
+  "Eval (possible multiple) expressions in the context of the current instance
+  found. A vector of responses (maps with `:expr` and `:result` is returned."
+  [& body]
+  (->> body
+       (mapv (fn [el]
+               `{:result (-create-alloy-obj (-current-module) (parse (quote ~el)))
+                 :expr (quote ~el)}))))
