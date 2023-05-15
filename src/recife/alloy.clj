@@ -56,51 +56,57 @@
       true)))
 
 (defn run-alloy-expression
-  [module-contents {:keys [expression reuse-ans? show-viz?]}]
-  (let [reporter (edu.mit.csail.sdg.alloy4.A4Reporter.)
-        world (CompUtil/parseEverything_fromString reporter module-contents)
-        opt (A4Options.)]
-    (set! (.-solver opt) A4Options$SatSolver/GlucoseJNI)
-    (set! (.-skolemDepth opt) 1)
-    (->> (.getAllCommands world)
-         (mapv (fn [alloy-cmd]
-                 (let [ans' (TranslateAlloyToKodkod/execute_commandFromBook
-                             reporter (.getAllReachableSigs world) alloy-cmd opt)
-                       {:keys [ans ans-index]} (if reuse-ans?
-                                                 ;; XXX: Call (.next ans) n times so we are at the same solution
-                                                 ;; and can "reuse" it.
-                                                 {:ans (if (zero? (:ans-index @current-state))
-                                                         ans'
-                                                         (reduce (fn [current-ans _]
-                                                                   (.next current-ans))
-                                                                 ans'
-                                                                 (range (:ans-index @current-state))))
-                                                  :ans-index (:ans-index @current-state)}
-                                                 {:ans ans'
-                                                  :ans-index 0})]
-                   (when (.satisfiable ans)
-                     (swap! current-state assoc
-                            :ans ans
-                            :ans-index ans-index
-                            :module module-contents)
-                     (.writeXML ans ".alloy_output.xml")
-                     (when show-viz?
-                       (if (nil? (:viz-gui @current-state))
-                         (do (swap! current-state assoc
-                                    :viz-gui (VizGUI. true ".alloy_output.xml" nil
-                                                      (reify Computer
-                                                        (compute [_ _]
-                                                          (next-solution!)
-                                                          ""))
-                                                      nil
-                                                      true
-                                                      1))
-                             (.setFocusableWindowState (.getFrame (:viz-gui @current-state)) false))
-                         (.loadXML (:viz-gui @current-state) ".alloy_output.xml" true)))
-                     (->> expression
-                          (CompUtil/parseOneExpression_fromString world)
-                          (.eval ans))))))
-         last)))
+  ([module-contents]
+   (run-alloy-expression module-contents {}))
+  ([module-contents {:keys [expression reuse-ans? show-viz debug]
+                     :or {expression "univ"
+                          show-viz true}}]
+   (when debug
+     (println module-contents))
+   (let [reporter (edu.mit.csail.sdg.alloy4.A4Reporter.)
+         world (CompUtil/parseEverything_fromString reporter module-contents)
+         opt (A4Options.)]
+     (set! (.-solver opt) A4Options$SatSolver/GlucoseJNI)
+     (set! (.-skolemDepth opt) 1)
+     (->> (.getAllCommands world)
+          (mapv (fn [alloy-cmd]
+                  (let [ans' (TranslateAlloyToKodkod/execute_commandFromBook
+                              reporter (.getAllReachableSigs world) alloy-cmd opt)
+                        {:keys [ans ans-index]} (if reuse-ans?
+                                                  ;; XXX: Call (.next ans) n times so we are at the same solution
+                                                  ;; and can "reuse" it.
+                                                  {:ans (if (zero? (:ans-index @current-state))
+                                                          ans'
+                                                          (reduce (fn [current-ans _]
+                                                                    (.next current-ans))
+                                                                  ans'
+                                                                  (range (:ans-index @current-state))))
+                                                   :ans-index (:ans-index @current-state)}
+                                                  {:ans ans'
+                                                   :ans-index 0})]
+                    (when (.satisfiable ans)
+                      (swap! current-state assoc
+                             :ans ans
+                             :ans-index ans-index
+                             :module module-contents)
+                      (.writeXML ans ".alloy_output.xml")
+                      (when show-viz
+                        (if (nil? (:viz-gui @current-state))
+                          (do (swap! current-state assoc
+                                     :viz-gui (VizGUI. true ".alloy_output.xml" nil
+                                                       (reify Computer
+                                                         (compute [_ _]
+                                                           (next-solution!)
+                                                           ""))
+                                                       nil
+                                                       true
+                                                       1))
+                              (.setFocusableWindowState (.getFrame (:viz-gui @current-state)) false))
+                          (.loadXML (:viz-gui @current-state) ".alloy_output.xml" true)))
+                      (->> expression
+                           (CompUtil/parseOneExpression_fromString world)
+                           (.eval ans))))))
+          last))))
 
 (defn parse-alloy-result
   [alloy-result]
@@ -137,17 +143,25 @@
        (mapv (fn [[var _ var-type]]
                (format "%s: %s"
                        (custom-munge var)
-                       (if (coll? var-type)
+                       (cond
+                         string?
+                         var-type
+
+                         (coll? var-type)
                          (->> var-type
                               (mapv (comp custom-munge clojure.core/name))
                               (str/join " "))
+
+                         :else
                          (custom-munge var-type)))))
        (str/join ", ")))
 
 (defn- parse-type
   [type]
   (format "%s"
-          (->> type
+          (->> (if (seq? type)
+                 type
+                 [type])
                (mapv (comp custom-munge clojure.core/name))
                (str/join " "))))
 
@@ -198,7 +212,8 @@
            (format "%s = %s" (parse (nth expr 1)) (parse (nth expr 2)))
 
            (= op 'clojure.core/empty?)
-           (format "%s = none" (parse (nth expr 1)))
+           (format "no %s" (parse (nth expr 1)))
+           #_(format "%s = none" (parse (nth expr 1)))
 
            (= op 'clojure.core/not)
            (format "!%s" (parse (nth expr 1)))
@@ -285,23 +300,13 @@
            (= op 'clojure.core/max)
            (format "max[%s]" (last expr))
 
-           ;; TODO: We are gonna to assume for now a two-arity function (and for other functions too!).
-           (= op 'clojure.set/difference)
-           (format "%s - %s" (parse (nth expr 1)) (parse (nth expr 2)))
-
-           (= op 'clojure.set/union)
-           (->> (rest expr)
-                (mapv parse)
-                (str/join " + "))
-
-           (= op 'clojure.set/subset?)
-           (format "%s in %s" (parse (nth expr 1)) (parse (nth expr 2)))
-
-           (= op 'clojure.set/intersection)
-           (format "%s & %s" (parse (nth expr 1)) (parse (nth expr 2)))
-
            (= op 'recife.alloy/intersection)
            (format "%s & %s" (parse (nth expr 1)) (parse (nth expr 2)))
+
+           (= op 'recife.alloy/in)
+           (format "%s in %s"
+                   (parse (nth expr 1))
+                   (parse (nth expr 2)))
 
            (= op 'recife.alloy/union)
            (->> (rest expr)
@@ -326,7 +331,23 @@
 
            (= op 'recife.alloy/one)
            (format "one %s"
-                   (parse-args (nth expr 1)))
+                   (parse (nth expr 1)))
+           #_(format "one %s"
+                     (parse-args (nth expr 1)))
+
+           (= op 'recife.alloy/iff)
+           (format "%s iff %s"
+                   (parse (nth expr 1))
+                   (parse (nth expr 2)))
+
+           (= op 'recife.alloy/implies)
+           (format "%s implies %s"
+                   (parse (nth expr 1))
+                   (parse (nth expr 2)))
+
+           (= op 'recife.alloy/rev)
+           (format "~%s"
+                   (parse (nth expr 1)))
 
            (= op 'recife.alloy/cartesian)
            (str/join "->" (mapv parse (drop 1 expr)))
@@ -547,7 +568,7 @@
                                 (custom-munge name)
                                 (parse-args args)
                                 (parse-type return-type)
-                                (parse (macroexpand-all (first body))))})))
+                                (parse (macroexpand-all (last body))))})))
 
 (defn fact
   [name & body]
@@ -648,7 +669,7 @@
                                         signature))))
     :rec.alloy/form (format "%ssig %s %s {%s}"
                             (cond
-                              (:abstract? opts) "abstract "
+                              (:abstract opts) "abstract "
                               (:multiplicity opts) (str (clojure.core/name (:multiplicity opts)) " ")
                               :else "")
                             (custom-munge (clojure.core/name name))
@@ -663,7 +684,9 @@
                                                  (format "%s%s: %s"
                                                          (if (-> relation meta :var) "var " "")
                                                          (custom-munge (clojure.core/name relation))
-                                                         (->> description
+                                                         (->> (if (sequential? description)
+                                                                description
+                                                                [description])
                                                               (mapv parse-sig-description)
                                                               (str/join " ")))))
                                          (str/join ", "))
@@ -682,7 +705,7 @@
               ;; XXX: Put abstracts first because there were some differences
               ;;in the ordering that I still have to investigate further.
               (sort-by (fn [[_sig-name opts]]
-                         (:abstract? opts)))
+                         (:abstract opts)))
               reverse
               (mapv (fn [[sig-name opts]]
                       (let [signature (sig (symbol (name sig-name)) opts {:module-atom module-atom :vars? vars?})]
@@ -701,9 +724,7 @@
 
 ;; Operators
 
-(declare all)
-
-(declare ^:private eita)
+(declare for-all)
 
 (declare one)
 
@@ -734,6 +755,14 @@
 (declare cartesian)
 
 (declare j)
+
+(declare rev)
+
+(declare iff)
+
+(declare implies)
+
+(declare in)
 
 (defmacro with-eval
   "Eval (possible multiple) expressions in the context of the current instance
