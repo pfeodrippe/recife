@@ -106,7 +106,10 @@
                       (->> expression
                            (CompUtil/parseOneExpression_fromString world)
                            (.eval ans))))))
-          last))))
+          last
+          (#(do (when (nil? %)
+                  (println "\n\n   ==== No solution or counter example found! ==== \n\n"))
+                %))))))
 
 (defn parse-alloy-result
   [alloy-result]
@@ -529,8 +532,14 @@
                                 (mapv :rec.alloy/form)
                                 (str/join "\n\n"))
                            "\n\n"
-                           (if (instance? AlloyObj run)
+                           (cond
+                             (instance? AlloyObj run)
                              (:rec.alloy/form run)
+
+                             (sequential? run)
+                             (str/join " " run)
+
+                             :else
                              run))]
     (reset! module module-body)
     module-body))
@@ -701,7 +710,12 @@
              :or {vars? true}}]
       (let [module-atom (atom nil)]
         {:rec.signature/sigs
-         (->> sigs
+         (->> (->> sigs
+                   (mapv (fn [[sig-name opts]]
+                           (let [relations (filter (comp symbol? key) opts)]
+                             [sig-name
+                              (-> (apply dissoc opts (keys relations))
+                                  (update :relations merge relations))]))))
               ;; XXX: Put abstracts first because there were some differences
               ;;in the ordering that I still have to investigate further.
               (sort-by (fn [[_sig-name opts]]

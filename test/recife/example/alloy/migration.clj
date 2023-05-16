@@ -7,18 +7,18 @@
   (ry/signatures
    '{Event {}
 
-     Person {:relations {events [:set Event]
-                         likes [:set Event]
-                         hates [:set Event]}}
+     Person {events [:set Event]
+             likes [:set Event]
+             hates [:set Event]}
 
-     NewPerson {:relations {person Person}}
+     NewPerson {person Person}
 
-     Attendance {:relations {event Event
-                             attendee NewPerson}}
+     Attendance {event Event
+                 attendee NewPerson}
 
      Review {:abstract true
-             :relations {event Event
-                         reviewer NewPerson}}
+             event Event
+             reviewer NewPerson}
 
      Likes {:extends Review}
      Hates {:extends Review}}))
@@ -142,9 +142,10 @@
                            [valid valid-new example same-events
                             same-reviews equivalent example2
                             equivalence-preserves-validity]
-                           {:run #_"run example2"
-                            #_"check equivalence_preserves_validity for 2 but 1 Person, 1 NewPerson"
-                            "check equivalence_preserves_validity"})
+                           {:run
+                            #_["run example2 for 2 but 1 Person, 1 NewPerson"]
+                            #_["check equivalence_preserves_validity for 2 but 1 Person, 1 NewPerson"]
+                            ["check equivalence_preserves_validity"]})
     (ry/run-alloy-expression {:debug true}))
 
 (comment
