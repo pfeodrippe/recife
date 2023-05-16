@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>pfeodrippe</groupId>
   <artifactId>recife</artifactId>
-  <version>0.16.0</version>
+  <version>0.18.0</version>
   <name>recife</name>
   <description/>
   <url>https://github.com/pfeodrippe/recife</url>
@@ -56,6 +56,11 @@
       <groupId>pfeodrippe</groupId>
       <artifactId>arrudeia</artifactId>
       <version>0.11.0-SNAPSHOT</version>
+    </dependency>
+    <dependency>
+      <groupId>io.github.pfeodrippe</groupId>
+      <artifactId>alloy</artifactId>
+      <version>0.2.0</version>
     </dependency>
     <dependency>
       <groupId>org.clj-commons</groupId>

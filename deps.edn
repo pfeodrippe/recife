@@ -66,9 +66,11 @@
   org.clj-commons/claypoole {:mvn/version "1.2.2"}
   com.taoensso/nippy {:mvn/version "3.2.0"}
   org.clojure/core.async {:mvn/version "1.6.673"}
-  alloy/alloy {:local/root "jars/org.alloytools.alloy.dist.jar"
-               :exclusions [org.alloytools/org.alloytools.alloy.core
-                            org.alloytools/org.alloytools.alloy.application
-                            org.alloytools/org.alloytools.alloy.extra]}}
+  io.github.pfeodrippe/alloy {:mvn/version "0.2.0"}}
+
+ #_{alloy/alloy {:local/root "jars/org.alloytools.alloy.dist.jar"
+                 :exclusions [org.alloytools/org.alloytools.alloy.core
+                              org.alloytools/org.alloytools.alloy.application
+                              org.alloytools/org.alloytools.alloy.extra]}}
 
  :paths ["src" "classes"]}
