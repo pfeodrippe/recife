@@ -14,4 +14,10 @@
            recife.helpers/defaction-constraint clojure.core/defn
            recife.helpers/defaction-property clojure.core/defn
            recife.helpers/for-all clojure.core/let
-           recife.helpers/for-some clojure.core/let}}
+           recife.helpers/for-some clojure.core/let
+           recife.alloy/deffun schema.core/defn
+           recife.alloy/deffact schema.core/defn
+           recife.alloy/defrun schema.core/defn
+           recife.alloy/defpred schema.core/defn
+           recife.alloy/defcheck schema.core/defn
+           recife.alloy/defassert schema.core/defn}}

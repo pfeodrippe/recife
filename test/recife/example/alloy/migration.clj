@@ -85,7 +85,7 @@
 ;;   p.events = np.~attendee.event
 ;; }
 (ry/defpred same-events
-  [p :- Person np :-> NewPerson]
+  [p :- Person np :- NewPerson]
   (= (ry/j p events)
      (ry/j np (ry/rev attendee) event)))
 
@@ -94,7 +94,7 @@
 ;;  p.hates = (np.~reviewer & Hates).event
 ;; }
 (ry/defpred same-reviews
-  [p :- Person np :-> NewPerson]
+  [p :- Person np :- NewPerson]
   (let [reviewer-rev (ry/rev reviewer)]
     (and (= (ry/j p likes)
             (-> (ry/j np reviewer-rev)
@@ -111,7 +111,7 @@
 ;;   same_reviews[p, np]
 ;; }
 (ry/defpred equivalent
-  [p :- Person np :-> NewPerson]
+  [p :- Person np :- NewPerson]
   (and (= p (ry/j np person))
        (same-events p np)
        (same-reviews p np)))
@@ -138,14 +138,84 @@
      (ry/iff (valid p)
              (valid-new np)))))
 
+;; pred migration[p: Person, np: NewPerson] {
+;;   p = np.person
+;;
+;;   #p.events = #np.~attendee
+;;   #p.likes = #np.~reviewer & Likes
+;;   #p.hates = #np.~reviewer & Hates
+;;
+;;   -- migrate events
+;;   all e: p.events |
+;;     one a: Attendance {
+;;       a.event = e
+;;       a.attendee = np
+;;     }
+;;
+;;   -- migrate likes
+;;   all l: p.likes |
+;;     one r: Likes {
+;;       r.event = l
+;;       r.reviewer = np
+;;     }
+;;
+;;   -- migrate hates
+;;   all h: p.hates |
+;;     one r: Hates {
+;;       r.event = h
+;;       r.reviewer = np
+;;     }
+;; }
+(ry/defpred migration
+  [p :- Person np :- NewPerson]
+  (and (= p (ry/j np person))
+
+       ;; Uncomment this to have no counter examples.
+       #_(= (count events) (count (ry/j np (ry/rev attendee))))
+       #_(= (count likes) (count (-> (ry/j np (ry/rev reviewer))
+                                     (ry/intersection Likes))))
+       #_(= (count hates) (count (-> (ry/j np (ry/rev reviewer))
+                                     (ry/intersection Hates))))
+
+       ;; migrate events
+       (ry/for-all [e :- "p.events"]
+         (ry/for-one [a :- Attendance]
+           (and (= (ry/j a event) e)
+                (= (ry/j a attendee) np))))
+
+       ;; migrate likes
+       (ry/for-all [l :- "p.likes"]
+         (ry/for-one [r :- Likes]
+           (and (= (ry/j r event) l)
+                (= (ry/j r reviewer) np))))
+
+       ;; migrate hates
+       (ry/for-all [h :- "p.hates"]
+         (ry/for-one [r :- Hates]
+           (and (= (ry/j r event) h)
+                (= (ry/j r reviewer) np))))))
+
+;; assert migration_preserves_equivalence {
+;;   all p: Person, np: NewPerson |
+;;     migration[p, np] implies equivalent[p, np]
+;; }
+(ry/defassert migration-preserves-equivalence
+  (ry/for-all [p :- Person np :- NewPerson]
+    (ry/implies
+     (migration p np)
+     (equivalent p np))))
+
 (-> (ry/build-alloy-module sigs
                            [valid valid-new example same-events
                             same-reviews equivalent example2
-                            equivalence-preserves-validity]
+                            equivalence-preserves-validity
+                            migration
+                            migration-preserves-equivalence]
                            {:run
                             #_["run example2 for 2 but 1 Person, 1 NewPerson"]
                             #_["check equivalence_preserves_validity for 2 but 1 Person, 1 NewPerson"]
-                            ["check equivalence_preserves_validity"]})
+                            #_["check equivalence_preserves_validity"]
+                            ["check migration_preserves_equivalence for 2 but 1 Person, 1 NewPerson, 1 Event"]})
     (ry/run-alloy-expression {:debug true}))
 
 (comment

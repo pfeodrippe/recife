@@ -332,11 +332,21 @@
            (format "some %s | {\n  %s\n}"
                    (parse-args (nth expr 1)) (parse (nth expr 2)))
 
+           (= op 'recife.alloy/for-no)
+           (format "no %s | {\n  %s\n}"
+                   (parse-args (nth expr 1)) (parse (nth expr 2)))
+
+           (= op 'recife.alloy/for-one)
+           (format "one %s | {\n  %s\n}"
+                   (parse-args (nth expr 1)) (parse (nth expr 2)))
+
+           (= op 'recife.alloy/for-lone)
+           (format "lone %s | {\n  %s\n}"
+                   (parse-args (nth expr 1)) (parse (nth expr 2)))
+
            (= op 'recife.alloy/one)
            (format "one %s"
                    (parse (nth expr 1)))
-           #_(format "one %s"
-                     (parse-args (nth expr 1)))
 
            (= op 'recife.alloy/iff)
            (format "%s iff %s"
@@ -738,15 +748,21 @@
 
 ;; Operators
 
-(declare for-all)
-
 (declare one)
 
 (declare ++)
 
 (declare some*)
 
+(declare for-all)
+
 (declare for-some)
+
+(declare for-no)
+
+(declare for-one)
+
+(declare for-lone)
 
 (declare subset?)
 
