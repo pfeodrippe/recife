@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>pfeodrippe</groupId>
   <artifactId>recife</artifactId>
-  <version>0.18.0</version>
+  <version>0.19.0</version>
   <name>recife</name>
   <description/>
   <url>https://github.com/pfeodrippe/recife</url>
@@ -80,7 +80,7 @@
     <dependency>
       <groupId>babashka</groupId>
       <artifactId>process</artifactId>
-      <version>0.4.14</version>
+      <version>0.5.20</version>
     </dependency>
     <dependency>
       <groupId>com.taoensso</groupId>
