@@ -5,6 +5,4 @@ image:https://img.shields.io/clojars/v/pfeodrippe/recife.svg[link="http://clojar
 
 A model checker library in Clojure.
 
-See the 2021 London Clojurians talk https://www.youtube.com/watch?v=TkENblqzxcw.
-
 Check the docs at https://recife.pfeodrippe.com/.
