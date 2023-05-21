@@ -20,8 +20,7 @@
              event Event
              reviewer NewPerson}
 
-     Likes {:extends Review}
-     Hates {:extends Review}}))
+     [Likes Hates] {:extends Review}}))
 
 #_(ry/next-solution!)
 
@@ -49,7 +48,6 @@
     (ry/j NewPerson (ry/rev attendee) event))
 
   ())
-
 
 ;; pred valid[p: Person]
 ;; {

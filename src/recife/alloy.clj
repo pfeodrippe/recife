@@ -720,12 +720,18 @@
              :or {vars? true}}]
       (let [module-atom (atom nil)]
         {:rec.signature/sigs
-         (->> (->> sigs
-                   (mapv (fn [[sig-name opts]]
-                           (let [relations (filter (comp symbol? key) opts)]
-                             [sig-name
-                              (-> (apply dissoc opts (keys relations))
-                                  (update :relations merge relations))]))))
+         (->> sigs
+              (mapcat (fn [[sig-name-or-coll opts]]
+                        (if (coll? sig-name-or-coll)
+                          (->> sig-name-or-coll
+                               (mapv (fn [v]
+                                       [v opts])))
+                          [[sig-name-or-coll opts]])))
+              (mapv (fn [[sig-name opts]]
+                      (let [relations (filter (comp symbol? key) opts)]
+                        [sig-name
+                         (-> (apply dissoc opts (keys relations))
+                             (update :relations merge relations))])))
               ;; XXX: Put abstracts first because there were some differences
               ;;in the ordering that I still have to investigate further.
               (sort-by (fn [[_sig-name opts]]
