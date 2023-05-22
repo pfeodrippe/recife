@@ -8,3 +8,8 @@
 - [ ] Communication between Recife and Alloy using Clojure
 - [ ] Create Clerk viewer for `with-eval`
 - [ ] Check if some schema migration is a breaking change
+- [ ] Malli with Alloy
+  - [ ] How can we use relations to check schemas?
+  - [ ] Can we compile SCI functions into Alloy?
+- [ ] Pathom with Alloy
+  - [ ] Generate visualizations with Alloy?
