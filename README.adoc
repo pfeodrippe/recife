@@ -6,3 +6,11 @@ image:https://img.shields.io/clojars/v/pfeodrippe/recife.svg[link="http://clojar
 A model checker library in Clojure.
 
 Check the docs at https://recife.pfeodrippe.com/.
+
+== YourKit 
+
+YourKit supports open source projects with innovative and intelligent tools
+for monitoring and profiling Java and .NET applications.
+YourKit is the creator of link:https://www.yourkit.com/java/profiler/[YourKit Java Profiler],
+link:https://www.yourkit.com/dotnet-profiler/[YourKit .NET Profiler],
+and link:https://www.yourkit.com/youmonitor/[YourKit YouMonitor].
