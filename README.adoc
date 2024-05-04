@@ -9,6 +9,8 @@ Check the docs at https://recife.pfeodrippe.com/.
 
 == YourKit 
 
+image:https://www.yourkit.com/images/yklogo.png[link="https://www.yourkit.com/images/yklogo.png",title="YourKit"]
+
 YourKit supports open source projects with innovative and intelligent tools
 for monitoring and profiling Java and .NET applications.
 YourKit is the creator of link:https://www.yourkit.com/java/profiler/[YourKit Java Profiler],
