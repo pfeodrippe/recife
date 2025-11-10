@@ -35,10 +35,16 @@
 
 (comment
 
-  (-> @(r/run-model global #{wire invariant} {#_ #_:raw-output true
-                                              #_ #_:debug true
-                                              #_ #_:run-local true})
-      r/timeline-diff)
+  (tlc2.TLCGlobals/reset)
+
+  (r/run-model global #{wire invariant} {#_ #_:raw-output true
+                                         :debug true
+                                         :run-local true})
+
+  (-> @ (r/run-model global #{wire invariant} {#_ #_:raw-output true
+                                               :debug true
+                                               :run-local true})
+        r/timeline-diff)
 
   (r/read-saved-data :recife/violation)
   (r/get-result)

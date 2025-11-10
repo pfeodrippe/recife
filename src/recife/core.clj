@@ -756,19 +756,6 @@
      :form form
      :recife.operator/type :tla-only}))
 
-(defn tla-repl
-  [tla-expr]
-  (let [tmp (java.nio.file.Files/createTempDirectory "repltest"
-                                                     (into-array java.nio.file.attribute.FileAttribute []))]
-    (-> (tlc2.REPL. tmp)
-        (.processValue tla-expr)
-        tla-edn/to-edn)))
-
-#_(tla-repl "RandomSubset(2, [1..43 -> {TRUE, FALSE}])")
-#_(tla-repl "RandomSubset(2, [2..5 -> {TRUE, FALSE}])")
-#_(count (tla-repl "[1..43 -> {TRUE, FALSE}]"))
-#_(tla-repl "CHOOSE x \\in RandomSubset(2, [2..43 -> {TRUE, FALSE}]): TRUE")
-
 (defn context-from-state
   [state]
   (if (vector? state)
@@ -1413,25 +1400,25 @@ VIEW
   (writeState [this state successor successor-state-new?]
     (.writeState this state successor successor-state-new? tlc2.util.IStateWriter$Visualization/DEFAULT))
 
-  (^void writeState [this
+  #_(^void writeState [this
                      ^tlc2.tool.TLCState state
                      ^tlc2.tool.TLCState successor
                      ^boolean successor-state-new?
                      ^tlc2.tool.Action action]
    (edn-write-state this state successor nil 0 0 successor-state-new? tlc2.util.IStateWriter$Visualization/DEFAULT action))
 
-  (^void writeState [this
-                     ^tlc2.tool.TLCState state
-                     ^tlc2.tool.TLCState successor
-                     ^boolean successor-state-new?
-                     ^tlc2.util.IStateWriter$Visualization visualization]
-   (edn-write-state this state successor nil 0 0 successor-state-new? visualization nil))
+  #_(^void writeState [this
+                       ^tlc2.tool.TLCState state
+                       ^tlc2.tool.TLCState successor
+                       ^boolean successor-state-new?
+                       ^tlc2.util.IStateWriter$Visualization visualization]
+     (edn-write-state this state successor nil 0 0 successor-state-new? visualization nil))
 
-  (writeState [this state successor action-checks from length successor-state-new?]
-    (edn-write-state this state successor action-checks from length successor-state-new? tlc2.util.IStateWriter$Visualization/DEFAULT nil))
+  #_(writeState [this state successor action-checks from length successor-state-new?]
+      (edn-write-state this state successor action-checks from length successor-state-new? tlc2.util.IStateWriter$Visualization/DEFAULT nil))
 
-  (writeState [this state successor action-checks from length successor-state-new? visualization]
-    (edn-write-state this state successor action-checks from length successor-state-new? visualization nil))
+  #_(writeState [this state successor action-checks from length successor-state-new? visualization]
+      (edn-write-state this state successor action-checks from length successor-state-new? visualization nil))
 
   (close [_]
     (spit "edn-states-atom.edn" @edn-states-atom))
@@ -1494,24 +1481,24 @@ VIEW
   (writeState [this state successor successor-state-new?]
     (.writeState this state successor successor-state-new? tlc2.util.IStateWriter$Visualization/DEFAULT))
 
-  (^void writeState [this
+  #_(^void writeState [this
                      ^tlc2.tool.TLCState state
                      ^tlc2.tool.TLCState successor
                      ^boolean successor-state-new?
                      ^tlc2.tool.Action action]
    (file-sw-write-state this state successor nil 0 0 successor-state-new? tlc2.util.IStateWriter$Visualization/DEFAULT action))
 
-  (^void writeState [this
+  #_(^void writeState [this
                      ^tlc2.tool.TLCState state
                      ^tlc2.tool.TLCState successor
                      ^boolean successor-state-new?
                      ^tlc2.util.IStateWriter$Visualization visualization]
    (file-sw-write-state this state successor nil 0 0 successor-state-new? visualization nil))
 
-  (writeState [this state successor action-checks from length successor-state-new?]
+  #_(writeState [this state successor action-checks from length successor-state-new?]
     (file-sw-write-state this state successor action-checks from length successor-state-new? tlc2.util.IStateWriter$Visualization/DEFAULT nil))
 
-  (writeState [this state successor action-checks from length successor-state-new? visualization]
+  #_(writeState [this state successor action-checks from length successor-state-new? visualization]
     (file-sw-write-state this state successor action-checks from length successor-state-new? visualization nil))
 
   (close [_]

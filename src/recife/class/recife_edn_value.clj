@@ -260,11 +260,6 @@
         (.assign vis res idx)
         res)))
 
-(defn edn-createFrom-ValueInputStream-Map
-  [^RecifeEdnValue _this ^IValueInputStream _vis ^java.util.Map _tbl]
-  (p* ::createFrom-arity-3
-      (println :>>BEGK_TBL)))
-
 (defn edn-fingerPrint
   [^RecifeEdnValue this ^long fp]
   (p* ::fingerPrint

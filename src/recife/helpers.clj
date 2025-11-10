@@ -316,7 +316,7 @@
 
 (defn -save-invariant-violation
   [name db]
-  (when (not (get-trace-value :recife/trace-violated?))
+  #_(when (not (get-trace-value :recife/trace-violated?))
     (let [current-state (tlc2.util.IdThread/getCurrentState)
           violation {:trace (if (zero? (get-level))
                               (->> [db]
