@@ -45,9 +45,20 @@
 
 (def kind "RecifeEdnValue")
 
+;; Pre-compile regex patterns for performance
+(def ^:private dot-pattern (re-pattern "\\."))
+(def ^:private triple-underscore-pattern (re-pattern "___"))
+
+;; Cache for munge operations
+(defonce ^:private munge-cache (atom {}))
+
 (defn- custom-munge
   [v]
-  (str/replace (munge v) #"\." "___"))
+  (let [v-str (str v)]
+    (or (get @munge-cache v-str)
+        (let [result (str/replace (munge v) dot-pattern "___")]
+          (swap! munge-cache assoc v-str result)
+          result))))
 
 (defn ->tla
   [v]
@@ -70,8 +81,13 @@
 
         (vector? v)
         (p* ::->tla--vector
-            (TupleValue.
-             (tla-edn/typed-array Value (mapv ->tla v))))
+            (let [n (count v)
+                  ^"[Ltlc2.value.impl.Value;" arr (make-array Value n)]
+              (loop [i 0]
+                (when (< i n)
+                  (aset arr i ^Value (->tla (nth v i)))
+                  (recur (unchecked-inc i))))
+              (TupleValue. arr)))
 
         :else
         (let [coll v]
@@ -82,18 +98,31 @@
 
             (every? keyword? (keys coll))
             (p* ::->tla--record
-                (RecordValue.
-                 (tla-edn/typed-array UniqueString (mapv #(-> % key ^RecifeEdnValue tla-edn/to-tla-value .getUniqueString)
-                                                         coll))
-                 (tla-edn/typed-array Value (mapv #(-> % val tla-edn/to-tla-value) coll))
-                 false))
+                (let [entries (seq coll)
+                      n (count entries)
+                      ^"[Lutil.UniqueString;" names (make-array UniqueString n)
+                      ^"[Ltlc2.value.impl.Value;" values (make-array Value n)]
+                  (loop [i 0, es entries]
+                    (when es
+                      (let [[k val] (first es)]
+                        (aset names i (.getUniqueString ^RecifeEdnValue (tla-edn/to-tla-value k)))
+                        (aset values i ^Value (tla-edn/to-tla-value val))
+                        (recur (unchecked-inc i) (next es)))))
+                  (RecordValue. names values false)))
 
             :else
             (p* ::->tla--fcn-rcd
-                (FcnRcdValue.
-                 (tla-edn/typed-array Value (mapv #(-> % key tla-edn/to-tla-value) coll))
-                 (tla-edn/typed-array Value (mapv #(-> % val tla-edn/to-tla-value) coll))
-                 false)))))))
+                (let [entries (seq coll)
+                      n (count entries)
+                      ^"[Ltlc2.value.impl.Value;" keys-arr (make-array Value n)
+                      ^"[Ltlc2.value.impl.Value;" values-arr (make-array Value n)]
+                  (loop [i 0, es entries]
+                    (when es
+                      (let [[k val] (first es)]
+                        (aset keys-arr i ^Value (tla-edn/to-tla-value k))
+                        (aset values-arr i ^Value (tla-edn/to-tla-value val))
+                        (recur (unchecked-inc i) (next es)))))
+                  (FcnRcdValue. keys-arr values-arr false))))))))
 
 (defn edn-getKindString
   [^RecifeEdnValue _]
@@ -108,7 +137,7 @@
 (defn- tlc-string->keyword
   [v]
   (or (get @*cache v)
-      (let [s (str/replace v #"___" ".")
+      (let [s (str/replace v triple-underscore-pattern ".")
             res (keyword (repl/demunge s))]
         (swap! *cache assoc v res)
         res)))
@@ -117,25 +146,27 @@
   [^{:tag "[Ltlc2.value.impl.Value;"} names
    ^{:tag "[Ltlc2.value.impl.Value;"} values
    ^tlc2.tool.coverage.CostModel _cm]
-  #_(when (= (rand-int 100) 89)
-      (debug :>>ccc (mapv identity values)))
   (p* ::createMap
-      (RecifeEdnValue. (p* ::createMap--zipmap
-                           (zipmap (p* ::createMap--keys
-                                       (mapv #(tla-edn/to-edn ^RecifeEdnValue %) names))
-                                   (p* ::createMap--values
-                                       (mapv #(tla-edn/to-edn ^Value %) values)))))
-      #_(RecifeEdnValue. (p* ::createMap--zipmap
-                             (zipmap (p* ::createMap--keys
-                                         (mapv tlc-string->keyword names))
-                                     (p* ::createMap--values
-                                         (mapv tla-edn/to-edn values)))))))
+      (let [n (alength names)]
+        (RecifeEdnValue.
+         (loop [i 0, acc (transient {})]
+           (if (< i n)
+             (recur (unchecked-inc i)
+                    (assoc! acc
+                            (tla-edn/to-edn ^RecifeEdnValue (aget names i))
+                            (tla-edn/to-edn ^Value (aget values i))))
+             (persistent! acc)))))))
 
 (defn edn-createTuple
   [^{:tag "[Ltlc2.value.impl.Value;"} values
    ^tlc2.tool.coverage.CostModel _cm]
   (p* ::createTuple
-      (RecifeEdnValue. (mapv tla-edn/to-edn values))))
+      (let [n (alength values)]
+        (RecifeEdnValue.
+         (loop [i 0, acc (transient [])]
+           (if (< i n)
+             (recur (unchecked-inc i) (conj! acc (tla-edn/to-edn (aget values i))))
+             (persistent! acc)))))))
 
 (defn edn-createInt
   [i]

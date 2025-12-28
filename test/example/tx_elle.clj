@@ -82,7 +82,7 @@
 
 (comment
 
-  (def result @(r/run-model global #{tx client serializable? constraint}))
+  (def result (r/run-model global #{tx client serializable? constraint}))
 
   (ra/visualize-result result)
 

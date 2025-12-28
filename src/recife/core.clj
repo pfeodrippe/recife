@@ -39,7 +39,6 @@
 #_(set! *warn-on-reflection* true)
 
 (set! *unchecked-math* false)
-#_(set! *unchecked-math* :warn-on-boxed)
 
 (def ^{:arglists (:arglists (meta #'r.buf/save!))}
   save!
@@ -63,14 +62,30 @@
   (when (r.buf/has-new-contents?)
     (r.buf/read-contents)))
 
+;; Pre-compile regex patterns for performance
+(def ^:private dot-pattern (re-pattern "\\."))
+(def ^:private triple-underscore-pattern (re-pattern "___"))
+
+;; Caches for munge/demunge operations
+(defonce ^:private munge-cache (atom {}))
+(defonce ^:private demunge-cache (atom {}))
+
 (defn- custom-munge
   [v]
-  (str/replace (munge v) #"\." "___"))
+  (let [v-str (str v)]
+    (or (get @munge-cache v-str)
+        (let [result (str/replace (munge v) dot-pattern "___")]
+          (swap! munge-cache assoc v-str result)
+          result))))
 
 (defn- to-edn-string
   [v]
-  (let [s (str/replace (str v)  #"___" ".")]
-    (keyword (repl/demunge s))))
+  (let [s (str v)]
+    (or (get @demunge-cache s)
+        (let [replaced (str/replace s triple-underscore-pattern ".")
+              result (keyword (repl/demunge replaced))]
+          (swap! demunge-cache assoc s result)
+          result))))
 
 (defn- parse-tlc-isolated-output
   "Parse TLC stdout/stderr to extract results.
@@ -132,97 +147,55 @@
 
 (defn- record-info-from-record
   [record]
-  {:names (p* ::record-info-from-record--to-edn
-              (mapv tla-edn/to-edn (.-names ^RecordValue record)))})
+  (let [names (p* ::record-info-from-record--to-edn
+                  (mapv tla-edn/to-edn (.-names ^RecordValue record)))
+        ;; Pre-compute index map for O(1) lookups instead of linear search
+        index-map (into {} (map-indexed (fn [i k] [k i]) names))]
+    {:names names
+     :index-map index-map}))
 
 (declare build-record-map)
 
-;; TODO: Maybe also keep a companion Clojure map?
-;; TODO: We may store the index for a given k.
+;; TlaRecordMap uses an index-map for O(1) key lookups instead of linear search
 (def-map-type TlaRecordMap [record record-info]
   (get [_ k default-value]
        (p* ::tla-record-map--get
-           (let [val-tla (or (get @keyword-cache k)
-                             (let [result (UniqueString/of (custom-munge (symbol k)))]
-                               (swap! keyword-cache assoc k result)
-                               result))
-
-                 ^{:tag "[Lutil.UniqueString;"}
-                 names (.-names ^RecordValue record)
-
-                 length (alength names)]
-             (loop [idx 0]
-               (if (< idx length)
-                 (let [name' (aget names idx)]
-                   (if (= (hash val-tla) (hash name'))
-                     (tla-edn/to-edn
-                      (aget ^{:tag "[Ltlc2.value.impl.Value;"} (.-values ^RecordValue record)
-                            idx))
-                     (recur (unchecked-inc idx))))
-                 default-value)))))
+           ;; Use pre-computed index-map for O(1) lookup instead of linear search
+           (if-let [idx (get (:index-map record-info) k)]
+             (tla-edn/to-edn
+              (aget ^{:tag "[Ltlc2.value.impl.Value;"} (.-values ^RecordValue record)
+                    idx))
+             default-value)))
 
   (assoc [this k v]
          (p* ::tla-record-map--assoc-1
-             (let [val-tla (p* ::val-tla-unique
-                               (or (get @keyword-cache k)
-                                   (let [result (UniqueString/of (custom-munge (symbol k)))]
-                                     (swap! keyword-cache assoc k result)
-                                     result)))
-                   ;; This is a much work solution (~5x) as strings are not
-                   ;; interned, while unique strings are.
-                   #_(p* ::val-tla
-                         (.val (tla-edn/to-tla-value k)))
-
-                   ^{:tag "[Lutil.UniqueString;"}
+             (let [^{:tag "[Lutil.UniqueString;"}
                    names (.-names ^RecordValue record)
-
                    ^{:tag "[Ltlc2.value.impl.Value;"}
                    values (.-values ^RecordValue record)
-
-                   *new-key? (volatile! true)
                    length (alength names)
-
-                   ^{:tag "[Lutil.UniqueString;"}
-                   new-names (make-array UniqueString length)
-
-                   ^{:tag "[Ltlc2.value.impl.Value;"}
-                   new-values (make-array Value length)]
-               (loop [idx 0]
-                 (if (< idx length)
-                   (do
-                     (let [name' (aget names idx)]
-                       (if (p ::hash
-                              (= (hash val-tla) (hash name')))
-                         (do (vreset! *new-key? false)
-                             (aset new-names idx name')
-                             (aset new-values idx (tla-edn/to-tla-value v)))
-                         (do (aset new-names idx name')
-                             (aset new-values idx (aget values idx)))))
-                     (recur (unchecked-inc idx)))
-                   (if @*new-key?
-                     (build-record-map
-                      (conj (into [] names)
-                            val-tla)
-                      (conj (into [] values)
-                            (tla-edn/to-tla-value v)))
-                     (build-record-map new-names new-values))))))
-         ;; Old code, just for maintained for reference.
-         #_(if (contains? (set @(:names @record-info)) k)
-             (p* ::tla-record-map--assoc-1
-                 (let [record'
-                       (p* ::tla-record-map--assoc-1-dissoc
-                           (.record ^TlaRecordMap (dissoc this k)))]
+                   new-value (tla-edn/to-tla-value v)]
+               ;; Use index-map for O(1) key existence check
+               (if-let [existing-idx (get (:index-map record-info) k)]
+                 ;; Key exists - update value at that index
+                 (let [^{:tag "[Lutil.UniqueString;"}
+                       new-names (make-array UniqueString length)
+                       ^{:tag "[Ltlc2.value.impl.Value;"}
+                       new-values (make-array Value length)]
+                   (dotimes [i length]
+                     (aset new-names i (aget names i))
+                     (aset new-values i (if (= i existing-idx)
+                                          new-value
+                                          (aget values i))))
+                   (build-record-map new-names new-values))
+                 ;; Key doesn't exist - add new key-value pair
+                 (let [val-tla (or (get @keyword-cache k)
+                                   (let [result (UniqueString/of (custom-munge (symbol k)))]
+                                     (swap! keyword-cache assoc k result)
+                                     result))]
                    (build-record-map
-                    (conj (into [] (.-names ^RecordValue record'))
-                          (UniqueString/of (custom-munge (symbol k))))
-                    (conj (into [] (.-values ^RecordValue record'))
-                          (tla-edn/to-tla-value v)))))
-             (p* ::tla-record-map--assoc-2
-                 (build-record-map
-                  (conj (into [] (.-names ^RecordValue record))
-                        (UniqueString/of (custom-munge (symbol k))))
-                  (conj (into [] (.-values ^RecordValue record))
-                        (tla-edn/to-tla-value v))))))
+                    (conj (into [] names) val-tla)
+                    (conj (into [] values) new-value)))))))
 
   (dissoc [_ k]
           (p* ::tla-record-map--dissoc
@@ -259,22 +232,22 @@
 
 (defn- record-keys
   [v]
-  (mapv #_#(or (get @keys-cache (str %))
-               (p* ::k-no-cache
-                   (let [result (tla-edn/-to-edn %)]
-                     (swap! keys-cache assoc (str %) result)
-                     result)))
-   tla-edn/-to-edn
+  (mapv (fn [name]
+          (let [name-str (str name)]
+            (or (get @keys-cache name-str)
+                (let [result (tla-edn/-to-edn name)]
+                  (swap! keys-cache assoc name-str result)
+                  result))))
         (.-names ^RecordValue v)))
 
 (defn- record-values
   [v]
-  (mapv #(or (get @values-cache (str %))
-             (p* ::v-no-cache
-                 (let [result (tla-edn/-to-edn %)]
-                   (swap! values-cache assoc (str %) result)
-                   result)))
-        #_tla-edn/-to-edn
+  (mapv (fn [val]
+          (let [val-str (str val)]
+            (or (get @values-cache val-str)
+                (let [result (tla-edn/-to-edn val)]
+                  (swap! values-cache assoc val-str result)
+                  result))))
         (.-values ^RecordValue v)))
 
 (defmacro use-cache
@@ -312,19 +285,23 @@
 
 (extend-protocol tla-edn/TLAPlusEdn
   RecordValue
-  #_(-to-edn [v]
-             (p* ::tla-edn--record
-                 (build-record-map v)))
   (-to-edn [v]
     (p* ::tla-edn--record
-        (let [name->value (p* ::tla-edn--zipmap
-                              (zipmap (p* ::tla-edn--zipmap-keys
-                                          (record-keys v))
-                                      (p* ::tla-edn--zipmap-values
-                                          (record-values v))))]
-          (if (= name->value {:tla-edn.record/empty? true})
+        (let [names (.-names ^RecordValue v)
+              values (.-values ^RecordValue v)
+              n (alength names)]
+          (if (zero? n)
             {}
-            name->value))))
+            (let [result (loop [i 0, acc (transient {})]
+                           (if (< i n)
+                             (recur (unchecked-inc i)
+                                    (assoc! acc
+                                            (tla-edn/-to-edn (aget names i))
+                                            (tla-edn/-to-edn (aget values i))))
+                             (persistent! acc)))]
+              (if (= result {:tla-edn.record/empty? true})
+                {}
+                result))))))
 
   IntValue
   (-to-edn [v]
@@ -360,10 +337,23 @@
   FcnRcdValue
   (-to-edn [v]
     (p* ::tla-edn--fcn
-        (if (fcn-rcd-is-tuple? v)
-          (mapv tla-edn/-to-edn (.-values v))
-          (zipmap (mapv tla-edn/-to-edn (.-domain v))
-                  (mapv tla-edn/-to-edn (.-values v))))))
+        (let [values (.-values v)
+              n (alength values)]
+          (if (fcn-rcd-is-tuple? v)
+            ;; Tuple case: single-pass vector construction
+            (loop [i 0, acc (transient [])]
+              (if (< i n)
+                (recur (unchecked-inc i) (conj! acc (tla-edn/-to-edn (aget values i))))
+                (persistent! acc)))
+            ;; Map case: single-pass map construction
+            (let [domain (.-domain v)]
+              (loop [i 0, acc (transient {})]
+                (if (< i n)
+                  (recur (unchecked-inc i)
+                         (assoc! acc
+                                 (tla-edn/-to-edn (aget domain i))
+                                 (tla-edn/-to-edn (aget values i))))
+                  (persistent! acc))))))))
 
   RecifeEdnValue
   (-to-edn [v]
@@ -378,12 +368,22 @@
   SetEnumValue
   (-to-edn [v]
     (p* ::tla-edn--set
-        (set (mapv tla-edn/-to-edn (.toArray (.-elems v))))))
+        (let [arr (.toArray (.-elems v))
+              n (alength arr)]
+          (loop [i 0, acc (transient #{})]
+            (if (< i n)
+              (recur (unchecked-inc i) (conj! acc (tla-edn/-to-edn (aget arr i))))
+              (persistent! acc))))))
 
   TupleValue
   (-to-edn [v]
     (p* ::tla-edn--tuple
-        (mapv tla-edn/-to-edn (.getElems v)))))
+        (let [elems (.getElems v)
+              n (alength elems)]
+          (loop [i 0, acc (transient [])]
+            (if (< i n)
+              (recur (unchecked-inc i) (conj! acc (tla-edn/-to-edn (aget elems i))))
+              (persistent! acc)))))))
 
 (extend-protocol tla-edn/EdnToTla
   RecifeIntervalValue
@@ -459,22 +459,35 @@
   clojure.lang.PersistentVector
   (-to-tla-value [coll]
     (p* ::to-tla--vector
-        (TupleValue.
-         (tla-edn/typed-array Value (mapv #(-> % tla-edn/-to-tla-value) coll)))))
+        (let [n (count coll)
+              arr (make-array Value n)]
+          (loop [i 0, s (seq coll)]
+            (when s
+              (aset arr i (tla-edn/-to-tla-value (first s)))
+              (recur (unchecked-inc i) (next s))))
+          (TupleValue. arr))))
 
   clojure.lang.PersistentList
   (-to-tla-value [coll]
     (p* ::to-tla--list
-        (TupleValue.
-         (tla-edn/typed-array Value (mapv #(-> % tla-edn/-to-tla-value) coll)))))
+        (let [n (count coll)
+              arr (make-array Value n)]
+          (loop [i 0, s (seq coll)]
+            (when s
+              (aset arr i (tla-edn/-to-tla-value (first s)))
+              (recur (unchecked-inc i) (next s))))
+          (TupleValue. arr))))
 
   clojure.lang.PersistentHashSet
   (-to-tla-value [coll]
     (p* ::to-tla--hash-set
-        #_(RecifeEdnValue. coll)
-        (SetEnumValue.
-         (tla-edn/typed-array Value (mapv #(-> % tla-edn/-to-tla-value) coll))
-         false)))
+        (let [n (count coll)
+              arr (make-array Value n)]
+          (loop [i 0, s (seq coll)]
+            (when s
+              (aset arr i (tla-edn/-to-tla-value (first s)))
+              (recur (unchecked-inc i) (next s))))
+          (SetEnumValue. arr false))))
 
   String
   (-to-tla-value [v]
@@ -498,6 +511,20 @@
   (-to-tla-value [v]
     (p* ::to-tla--long
         (IntValue/gen v))))
+
+;; Single-pass key splitting for performance - avoids two passes through the map
+(defn- split-by-namespace
+  "Splits a map into [namespaced-keys, non-namespaced-keys] in a single pass."
+  [m]
+  (loop [entries (seq m)
+         global (transient {})
+         local (transient {})]
+    (if entries
+      (let [[k v] (first entries)]
+        (if (namespace k)
+          (recur (next entries) (assoc! global k v) local)
+          (recur (next entries) global (assoc! local k v))))
+      [(persistent! global) (persistent! local)])))
 
 ;; TODO: For serialized objecs, make it a custom random filename
 ;; so exceptions from concurrent executions do not mess with each other.
@@ -531,10 +558,13 @@
                     (throw (ex-info (str "po* -- " self " ==== " (::extra-args main-var) " ==== " (keys main-var)) {})))
             local (get-in main-var [::procs self])
             extra-args (::extra-args main-var)
+            ;; Use conj/into instead of multiple merge calls for better performance
             result (p ::result (f (p* ::result--merge
-                                      (merge {:self self} global extra-args local))))
-            result-global (medley/filter-keys namespace result)
-            result-local (medley/remove-keys namespace result)
+                                      (-> {:self self}
+                                          (into global)
+                                          (into extra-args)
+                                          (into local)))))
+            [result-global result-local] (split-by-namespace result)
             metadata (if (:recife/metadata result-global)
                        ;; There is some bug somewhere which prevent us of the form
                        ;;    Caused by java.lang.ClassCastException

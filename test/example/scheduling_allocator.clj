@@ -219,23 +219,23 @@ assuming that the clients scheduled earlier release their resources."
   ;; 47s to 29s after adding keyword-cache
   ;; 14s after fairness was fixed.
   ;; 10s after refactoring some TLA+ code.
-  (r/run-model global #{request allocate return schedule
-                        resource-mutex allocator-invariant-1 allocator-invariant-2
-                        allocator-invariant-3 allocator-invariant-4
-                        clients-will-return clients-will-obtain inf-often-satisfied
+  (time (r/run-model global #{request allocate return schedule
+                              resource-mutex allocator-invariant-1 allocator-invariant-2
+                              allocator-invariant-3 allocator-invariant-4
+                              clients-will-return clients-will-obtain inf-often-satisfied
 
-                        ;; You can also use nested components that Recife will
-                        ;; flatten it for you. This way, you can group things
-                        ;; the way you prefer.
-                        [allocate-fairness return-fairness]
+                              ;; You can also use nested components that Recife will
+                              ;; flatten it for you. This way, you can group things
+                              ;; the way you prefer.
+                              [allocate-fairness return-fairness]
 
-                        ;; You can also check action properties, they receive 2 arguments,
-                        ;; the current state (db) and the next state (db'). Uncomment
-                        ;; below to see things failing when unsat is not different from
-                        ;; unsat in the next state.
-                        #_action-prop}
-               {#_ #_:debug true
-                #_ #_:workers 1})
+                              ;; You can also check action properties, they receive 2 arguments,
+                              ;; the current state (db) and the next state (db'). Uncomment
+                              ;; below to see things failing when unsat is not different from
+                              ;; unsat in the next state.
+                              #_action-prop}
+                     {#_ #_:debug true
+                      #_ #_:workers 1}))
 
   (def result (r/get-result))
   (r/read-saved-data :recife/violation)
