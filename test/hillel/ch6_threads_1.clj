@@ -44,6 +44,6 @@
 (comment
 
   ;; deadlock.
-  @(r/run-model {} #{thread at-most-one-critical})
+  (r/run-model {} #{thread at-most-one-critical})
 
   ())

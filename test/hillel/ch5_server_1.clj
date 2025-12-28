@@ -32,6 +32,6 @@
 (comment
 
   ;; invariant, 3 steps.
-  @(r/run-model global #{writer reader bounded-queue})
+  @ (r/run-model global #{writer reader bounded-queue})
 
   ())

@@ -14,7 +14,7 @@
    (fn [{:keys [:amount :account/alice] :as db}]
      (if (<= amount alice)
        (-> db
-           (update :account/alice - (:amount db))
+           (update :account/alice + (:amount db))
            (r/goto ::deposit))
        (r/done db)))
 
@@ -38,7 +38,7 @@
 
 (comment
 
-  (-> @(r/run-model global #{wire invariant eventually-consistent} #_{:raw-output true})
+  (-> (r/run-model global #{wire invariant eventually-consistent} #_{:raw-output true})
       r/timeline-diff)
 
   ())

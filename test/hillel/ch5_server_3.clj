@@ -43,7 +43,7 @@
 (comment
 
   ;; Should deadlock.
-  (def result @(r/run-model global #{writer reader bounded-queue}))
+  (def result @ (r/run-model global #{writer reader bounded-queue}))
 
   (ra/visualize-result result)
 

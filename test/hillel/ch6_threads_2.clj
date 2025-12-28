@@ -57,6 +57,6 @@
 (comment
 
   ;; back-to-state
-  @(r/run-model {} #{thread at-most-one-critical no-livelocks})
+  (r/run-model {} #{thread at-most-one-critical no-livelocks})
 
   ())

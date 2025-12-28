@@ -72,6 +72,58 @@
   (let [s (str/replace (str v)  #"___" ".")]
     (keyword (repl/demunge s))))
 
+(defn- parse-tlc-isolated-output
+  "Parse TLC stdout/stderr to extract results.
+   Returns a result map compatible with tlc-result-handler output."
+  [{:keys [exit-code output error]}]
+  (let [combined (str output "\n" error)
+        ;; Parse state counts
+        distinct-states (some->> (re-find #"(\d+) distinct states? found" combined)
+                                 second
+                                 parse-long)
+        generated-states (some->> (re-find #"(\d+) states? generated" combined)
+                                  second
+                                  parse-long)
+        ;; Check for violations
+        invariant-match (re-find #"Invariant\s+(\S+)\s+is violated" combined)
+        action-prop-match (re-find #"Action property\s+(\S+)\s+is violated" combined)
+        temporal-match (re-find #"Temporal properties were violated" combined)
+        deadlock-match (re-find #"Deadlock reached" combined)
+        stuttering-match (re-find #"stuttering" combined)
+        back-to-state-match (re-find #"Back to state" combined)
+        ;; Build violation info
+        violation (cond
+                    invariant-match
+                    {:type :invariant
+                     :name (to-edn-string (str/replace (second invariant-match) #"_COLON_" ""))}
+
+                    action-prop-match
+                    {:type :action-property
+                     :name (to-edn-string (str/replace (second action-prop-match) #"_COLON_" ""))}
+
+                    (and temporal-match stuttering-match)
+                    {:type :stuttering}
+
+                    (and temporal-match back-to-state-match)
+                    {:type :back-to-state}
+
+                    deadlock-match
+                    {:type :deadlock}
+
+                    :else nil)
+        ;; Determine trace status
+        trace (cond
+                violation :violation-detected
+                (zero? exit-code) :ok
+                :else :error)]
+    {:trace trace
+     :trace-info (when violation {:violation violation})
+     :distinct-states distinct-states
+     :generated-states generated-states
+     :isolated true
+     :tlc-output output
+     :tlc-error error}))
+
 (defonce ^:private string-cache (atom {}))
 (defonce ^:private keyword-cache (atom {}))
 (defonce ^:private cache (atom {}))
@@ -212,7 +264,7 @@
                    (let [result (tla-edn/-to-edn %)]
                      (swap! keys-cache assoc (str %) result)
                      result)))
-        tla-edn/-to-edn
+   tla-edn/-to-edn
         (.-names ^RecordValue v)))
 
 (defn- record-values
@@ -261,8 +313,8 @@
 (extend-protocol tla-edn/TLAPlusEdn
   RecordValue
   #_(-to-edn [v]
-      (p* ::tla-edn--record
-          (build-record-map v)))
+             (p* ::tla-edn--record
+                 (build-record-map v)))
   (-to-edn [v]
     (p* ::tla-edn--record
         (let [name->value (p* ::tla-edn--zipmap
@@ -475,8 +527,8 @@
   [identifier f self main-var]
   (p* ::process-operator*
       (let [global (dissoc main-var ::extra-args)
-            #_ #__ (when (::extra-args main-var)
-                     (throw (ex-info (str "po* -- " self " ==== " (::extra-args main-var) " ==== " (keys main-var)) {})))
+            #_#__ (when (::extra-args main-var)
+                    (throw (ex-info (str "po* -- " self " ==== " (::extra-args main-var) " ==== " (keys main-var)) {})))
             local (get-in main-var [::procs self])
             extra-args (::extra-args main-var)
             result (p ::result (f (p* ::result--merge
@@ -1005,8 +1057,7 @@
   "If `:action?` is set, the function will receive 2 arguments, the current var
   and the next one."
   [collector identifier {:keys [action?]}]
-  (let [
-        ;; With `counter` we are able to use many functions for the same
+  (let [        ;; With `counter` we are able to use many functions for the same
         ;; temporal property.
         counter (atom 100)]
     (fn [id-and-args]
@@ -1215,7 +1266,7 @@
                                                                  (:form %)))
                                                   (str/join "\n\n"))
                                          "")
-        #_ #_ _ (def operators operators)
+        #_#__ (def operators operators)
         unchanged-helper-variables (or (some->> @collected-ranges
                                                 seq
                                                 (mapv (fn [{::keys [identifier]}] (format "%s' = %s" identifier identifier)))
@@ -1395,54 +1446,56 @@ VIEW
            conj
            [(.fingerPrint tlc-successor) (get-in successor-state [:recife/metadata :context])])))
 
+(defn- state-new?
+  "Check if the state flags indicate this is a new (unseen) state.
+  In the new TLC API, stateFlags is a short where 0 = unseen."
+  [state-flags]
+  (= (int state-flags) (int tlc2.util.IStateWriter/IsUnseen)))
+
 (defn- edn-write-state
-  [_state-writer state successor _action-checks _from _length successor-state-new? _visualization _action]
-  (when successor-state-new?
+  [_state-writer state successor _action-checks _from _length state-flags _visualization _action]
+  (when (state-new? state-flags)
     (edn-save-state successor))
   (edn-rank-state state)
   (edn-save-successor state successor))
 
-#_ (clojure.edn/read-string (slurp "edn-states-atom.edn"))
+#_(clojure.edn/read-string (slurp "edn-states-atom.edn"))
 
-(defrecord EdnStateWriter [#_edn-states-atom]
-  tlc2.util.IStateWriter
-  (writeState [_ state]
-    (edn-save-state state)
-    (edn-rank-state state))
-
-  (writeState [this state successor successor-state-new?]
-    (.writeState this state successor successor-state-new? tlc2.util.IStateWriter$Visualization/DEFAULT))
-
-  (^void writeState [this
-                     ^tlc2.tool.TLCState state
-                     ^tlc2.tool.TLCState successor
-                     ^boolean successor-state-new?
-                     ^tlc2.tool.Action action]
-   (edn-write-state this state successor nil 0 0 successor-state-new? tlc2.util.IStateWriter$Visualization/DEFAULT action))
-
-  (^void writeState [this
-                     ^tlc2.tool.TLCState state
-                     ^tlc2.tool.TLCState successor
-                     ^boolean successor-state-new?
-                     ^tlc2.util.IStateWriter$Visualization visualization]
-   (edn-write-state this state successor nil 0 0 successor-state-new? visualization nil))
-
-  (writeState [this state successor action-checks from length successor-state-new?]
-    (edn-write-state this state successor action-checks from length successor-state-new? tlc2.util.IStateWriter$Visualization/DEFAULT nil))
-
-  (writeState [this state successor action-checks from length successor-state-new? visualization]
-    (edn-write-state this state successor action-checks from length successor-state-new? visualization nil))
-
-  (close [_]
-    (spit "edn-states-atom.edn" @edn-states-atom))
-
-  (getDumpFileName [_])
-
-  (isNoop [_] false)
-
-  (isDot [_] false)
-
-  (snapshot [_]))
+;; EdnStateWriter using proxy because Clojure doesn't support short type hints in defrecord
+(defn make-edn-state-writer
+  "Create an IStateWriter that stores state in edn-states-atom."
+  []
+  (proxy [tlc2.util.IStateWriter] []
+    (writeState
+      ([state]
+       (edn-save-state state)
+       (edn-rank-state state))
+      ([state successor state-flags]
+       (.writeState ^tlc2.util.IStateWriter this state successor state-flags
+                    tlc2.util.IStateWriter$Visualization/DEFAULT))
+      ([state successor state-flags action-or-viz]
+       (if (instance? tlc2.util.IStateWriter$Visualization action-or-viz)
+         ;; (state, successor, stateFlags, visualization)
+         (edn-write-state this state successor nil 0 0 state-flags action-or-viz nil)
+         ;; (state, successor, stateFlags, action)
+         (edn-write-state this state successor nil 0 0 state-flags
+                          tlc2.util.IStateWriter$Visualization/DEFAULT action-or-viz)))
+      ([state successor state-flags action pred]
+       ;; (state, successor, stateFlags, action, semanticNode)
+       (edn-write-state this state successor nil 0 0 state-flags
+                        tlc2.util.IStateWriter$Visualization/DEFAULT action))
+      ([state successor action-checks from length state-flags]
+       (edn-write-state this state successor action-checks from length state-flags
+                        tlc2.util.IStateWriter$Visualization/DEFAULT nil))
+      ([state successor action-checks from length state-flags visualization]
+       (edn-write-state this state successor action-checks from length state-flags visualization nil)))
+    (close []
+      (spit "edn-states-atom.edn" @edn-states-atom))
+    (getDumpFileName [] nil)
+    (isNoop [] false)
+    (isDot [] false)
+    (isConstrained [] false)
+    (snapshot [] nil)))
 
 ;; FileStateWriter
 (defn- file-sw-save-state
@@ -1476,56 +1529,55 @@ VIEW
            [(.fingerPrint tlc-successor) (get-in successor-state [:recife/metadata :context])])))
 
 (defn- file-sw-write-state
-  [this state successor _action-checks _from _length successor-state-new? visualization _action]
+  [this state successor _action-checks _from _length state-flags visualization _action]
   ;; If it's stuttering, we don't put it as a successor.
   (when-not (= visualization tlc2.util.IStateWriter$Visualization/STUTTERING)
-    (when successor-state-new?
+    (when (state-new? state-flags)
       (file-sw-save-state this successor))
     (file-sw-rank-state this state)
     (file-sw-save-successor this state successor)))
 
-;; TODO: Move the state writers to a `state-writers` ns.
-(defrecord FileStateWriter [writer output-stream edn-states-atom file-path]
-  tlc2.util.IStateWriter
-  (writeState [this state]
-    (file-sw-save-state this state)
-    (file-sw-rank-state this state))
-
-  (writeState [this state successor successor-state-new?]
-    (.writeState this state successor successor-state-new? tlc2.util.IStateWriter$Visualization/DEFAULT))
-
-  (^void writeState [this
-                     ^tlc2.tool.TLCState state
-                     ^tlc2.tool.TLCState successor
-                     ^boolean successor-state-new?
-                     ^tlc2.tool.Action action]
-   (file-sw-write-state this state successor nil 0 0 successor-state-new? tlc2.util.IStateWriter$Visualization/DEFAULT action))
-
-  (^void writeState [this
-                     ^tlc2.tool.TLCState state
-                     ^tlc2.tool.TLCState successor
-                     ^boolean successor-state-new?
-                     ^tlc2.util.IStateWriter$Visualization visualization]
-   (file-sw-write-state this state successor nil 0 0 successor-state-new? visualization nil))
-
-  (writeState [this state successor action-checks from length successor-state-new?]
-    (file-sw-write-state this state successor action-checks from length successor-state-new? tlc2.util.IStateWriter$Visualization/DEFAULT nil))
-
-  (writeState [this state successor action-checks from length successor-state-new? visualization]
-    (file-sw-write-state this state successor action-checks from length successor-state-new? visualization nil))
-
-  (close [_]
-    (t/write writer @edn-states-atom)
-    (reset! edn-states-atom nil)
-    (.close ^java.io.OutputStream output-stream))
-
-  (getDumpFileName [_])
-
-  (isNoop [_] false)
-
-  (isDot [_] false)
-
-  (snapshot [_]))
+;; FileStateWriter using proxy because Clojure doesn't support short type hints in defrecord
+(defn make-file-state-writer
+  "Create an IStateWriter that stores state to a file using transit."
+  [writer output-stream edn-states-atom file-path]
+  (let [sw-state {:writer writer
+                  :output-stream output-stream
+                  :edn-states-atom edn-states-atom
+                  :file-path file-path}]
+    (proxy [tlc2.util.IStateWriter] []
+      (writeState
+        ([s]
+         (file-sw-save-state sw-state s)
+         (file-sw-rank-state sw-state s))
+        ([s successor state-flags]
+         (.writeState ^tlc2.util.IStateWriter this s successor state-flags
+                      tlc2.util.IStateWriter$Visualization/DEFAULT))
+        ([s successor state-flags action-or-viz]
+         (if (instance? tlc2.util.IStateWriter$Visualization action-or-viz)
+           ;; (state, successor, stateFlags, visualization)
+           (file-sw-write-state sw-state s successor nil 0 0 state-flags action-or-viz nil)
+           ;; (state, successor, stateFlags, action)
+           (file-sw-write-state sw-state s successor nil 0 0 state-flags
+                                tlc2.util.IStateWriter$Visualization/DEFAULT action-or-viz)))
+        ([s successor state-flags action pred]
+         ;; (state, successor, stateFlags, action, semanticNode)
+         (file-sw-write-state sw-state s successor nil 0 0 state-flags
+                              tlc2.util.IStateWriter$Visualization/DEFAULT action))
+        ([s successor action-checks from length state-flags]
+         (file-sw-write-state sw-state s successor action-checks from length state-flags
+                              tlc2.util.IStateWriter$Visualization/DEFAULT nil))
+        ([s successor action-checks from length state-flags visualization]
+         (file-sw-write-state sw-state s successor action-checks from length state-flags visualization nil)))
+      (close []
+        (t/write writer @edn-states-atom)
+        (reset! edn-states-atom nil)
+        (.close ^java.io.OutputStream output-stream))
+      (getDumpFileName [] file-path)
+      (isNoop [] false)
+      (isDot [] false)
+      (isConstrained [] false)
+      (snapshot [] nil))))
 
 (defn- states-from-file
   [file-path]
@@ -1627,51 +1679,153 @@ VIEW
   ([result opts]
    (random-traces-from-states (states-from-result result) opts)))
 
+(defn- make-recorder
+  "Create a recorder for capturing TLC messages."
+  []
+  (let [recorder-atom (atom {:others []})
+        record #(swap! recorder-atom merge %)]
+    {:atom recorder-atom
+     :recorder (reify IMessagePrinterRecorder
+                 (record [_ code objects]
+                   (p* ::tlc-result--recorder
+                       (condp = code
+                         EC/TLC_INVARIANT_VIOLATED_BEHAVIOR
+                         (record {:violation (merge
+                                              {:type :invariant
+                                               :name (to-edn-string (str/replace (first objects) #"_COLON_" ""))}
+                                              (when (.exists (io/as-file invariant-data-filename))
+                                                {:data (deserialize-obj invariant-data-filename)}))})
+
+                         EC/TLC_ACTION_PROPERTY_VIOLATED_BEHAVIOR
+                         (record {:violation {:type :action-property
+                                              :name (to-edn-string (str/replace (first objects) #"_COLON_" ""))}})
+
+                         EC/TLC_MODULE_VALUE_JAVA_METHOD_OVERRIDE
+                         (record {:error-messages (str/split (last objects) #"\n")})
+
+                         EC/TLC_INVARIANT_VIOLATED_INITIAL
+                         (record {:violation (merge
+                                              {:type :invariant
+                                               :name (to-edn-string (str/replace (first objects) #"_COLON_" ""))
+                                               :initial-state? true}
+                                              (when (.exists (io/as-file invariant-data-filename))
+                                                {:data (deserialize-obj invariant-data-filename)}))})
+
+                         EC/TLC_DEADLOCK_REACHED
+                         (record {:violation {:type :deadlock}})
+
+                         EC/TLC_PARSING_FAILED
+                         (record {:error :parsing-failure})
+
+                         EC/GENERAL
+                         (record {:error :general
+                                  :error-messages (str/split (first objects) #"\n")})
+
+                         (swap! recorder-atom update :others conj
+                                [code objects])))))}))
+
+(defn- build-result-from-tlc
+  "Extract the result map from a TLC run."
+  [^tlc2.TLC tlc recorder-info]
+  (let [simulator tlc2.TLCGlobals/simulator
+        {:keys [trace info]}
+        (if-some [error-trace (-> ^tlc2.output.ErrorTraceMessagePrinterRecorder
+                               (private-field tlc "recorder")
+                                  .getMCErrorTrace
+                                  (.orElse nil))]
+          (let [states (->> (.getStates ^tlc2.model.MCError error-trace)
+                            (mapv bean))
+                stuttering-state (some #(when (:stuttering %) %) states)
+                back-to-state (some #(when (:backToState %) %) states)]
+            {:trace (->> states
+                         (remove :stuttering)
+                         (remove :backToState)
+                         (mapv (fn [state]
+                                 (->> state
+                                      :variables
+                                      (some #(when (= (.getName ^tlc2.model.MCVariable %)
+                                                      "main_var")
+                                               (.getTLCValue ^tlc2.model.MCVariable %))))))
+                         (mapv tla-edn/to-edn)
+                         (map-indexed (fn [idx v] [idx v]))
+                         (into []))
+             :info (merge (dissoc recorder-info :others)
+                          (cond
+                            stuttering-state
+                            {:violation {:type :stuttering
+                                         :state-number (:stateNumber stuttering-state)}}
+
+                            back-to-state
+                            {:violation {:type :back-to-state
+                                         :state-number (dec (:stateNumber back-to-state))}}))})
+          (let [initial-state (when (-> recorder-info :violation :initial-state?)
+                                (some-> (private-field tlc2.TLCGlobals/mainChecker
+                                                       tlc2.tool.AbstractChecker
+                                                       "errState")
+                                        bean
+                                        :vals
+                                        (.get (UniqueString/uniqueStringOf "main_var"))
+                                        tla-edn/to-edn))]
+            (cond
+              initial-state
+              {:trace [[0 initial-state]]
+               :info (dissoc recorder-info :others)}
+
+              (:error recorder-info)
+              {:trace :error
+               :info (dissoc recorder-info :others)}
+
+              :else
+              {:trace :ok})))]
+    (-> {:trace (cond
+                  (and (nil? (some-> ^tlc2.tool.AbstractChecker
+                              tlc2.TLCGlobals/mainChecker
+                                     .theFPSet
+                                     .size))
+                       (nil? simulator))
+                  :error
+
+                  :else
+                  trace)
+         :trace-info info
+         :distinct-states (some-> tlc2.TLCGlobals/mainChecker .theFPSet .size)
+         :generated-states (some-> tlc2.TLCGlobals/mainChecker .getStatesGenerated)
+         :seed (private-field tlc "seed")
+         :fp (private-field tlc "fpIndex")}
+        (merge (when simulator
+                 {:simulation
+                  {:states-count (long (private-field simulator "numOfGenStates"))
+                   :traces-count (long (private-field simulator "numOfGenTraces"))}})))))
+
+(defn tlc-result-handler-local
+  "Simplified handler for run-local mode. No subprocess infrastructure needed."
+  [tlc-runner]
+  ;; Use MemStateQueue instead of DiskStateQueue to avoid System.exit calls
+  ;; from TLC's StatePoolReader thread on cleanup errors.
+  (System/setProperty "tlc2.tool.queue.IStateQueue" "MemStateQueue")
+  (let [{:keys [atom recorder]} (make-recorder)]
+    (try
+      (let [tlc (do (MP/setRecorder recorder)
+                    (tlc-runner))]
+        (p* ::process
+            (doto ^tlc2.TLC tlc
+              .process))
+        (build-result-from-tlc tlc @atom))
+      (catch Exception ex
+        (serialize-obj ex exception-filename)
+        {:trace :error
+         :trace-info (.getMessage ex)
+         :distinct-states (some-> tlc2.TLCGlobals/mainChecker .theFPSet .size)
+         :generated-states (some-> tlc2.TLCGlobals/mainChecker .getStatesGenerated)})
+      (finally
+        (MP/unsubscribeRecorder recorder)))))
+
 (defn tlc-result-handler
   "This function is a implementation detail, you should not use it.
   It handles the TLC object and its result, generating the output we see when
   calling `run-model`."
   [tlc-runner]
-  (let [recorder-atom (atom {:others []})
-        record #(swap! recorder-atom merge %)
-        recorder (reify IMessagePrinterRecorder
-                   (record [_ code objects]
-                     (p* ::tlc-result--recorder
-                         (condp = code
-                           EC/TLC_INVARIANT_VIOLATED_BEHAVIOR
-                           (record {:violation (merge
-                                                {:type :invariant
-                                                 :name (to-edn-string (str/replace (first objects) #"_COLON_" ""))}
-                                                (when (.exists (io/as-file invariant-data-filename))
-                                                  {:data (deserialize-obj invariant-data-filename)}))})
-
-                           EC/TLC_ACTION_PROPERTY_VIOLATED_BEHAVIOR
-                           (record {:violation {:type :action-property
-                                                :name (to-edn-string (str/replace (first objects) #"_COLON_" ""))}})
-
-                           EC/TLC_MODULE_VALUE_JAVA_METHOD_OVERRIDE
-                           (record {:error-messages (str/split (last objects) #"\n")})
-
-                           EC/TLC_INVARIANT_VIOLATED_INITIAL
-                           (record {:violation (merge
-                                                {:type :invariant
-                                                 :name (to-edn-string (str/replace (first objects) #"_COLON_" ""))
-                                                 :initial-state? true}
-                                                (when (.exists (io/as-file invariant-data-filename))
-                                                  {:data (deserialize-obj invariant-data-filename)}))})
-
-                           EC/TLC_DEADLOCK_REACHED
-                           (record {:violation {:type :deadlock}})
-
-                           EC/TLC_PARSING_FAILED
-                           (record {:error :parsing-failure})
-
-                           EC/GENERAL
-                           (record {:error :general
-                                    :error-messages (str/split (first objects) #"\n")})
-
-                           (swap! recorder-atom update :others conj
-                                  [code objects])))))
+  (let [{:keys [atom recorder]} (make-recorder)
         ;; Read opts file from JVM property.
         {::keys [id] :as opts}
         (some-> (System/getProperty "RECIFE_OPTS_FILE_PATH") slurp edn/read-string)]
@@ -1690,31 +1844,32 @@ VIEW
                                    (:trace-example opts))
                            (let [file-path (.getAbsolutePath (File/createTempFile "transit-output" ".msgpack"))
                                  os (io/output-stream file-path)
-                                 state-writer (->FileStateWriter (t/writer os :msgpack) os (atom {}) file-path)]
+                                 state-writer (make-file-state-writer (t/writer os :msgpack) os (atom {}) file-path)]
                              (.setStateWriter ^tlc2.TLC tlc state-writer)
                              state-writer))
             *closed-properly? (atom false)
             _ (.addShutdownHook (Runtime/getRuntime)
                                 (Thread. ^Runnable
-                                         (fn []
-                                           (r.buf/flush!)
-                                           (when state-writer
-                                             (.close state-writer))
-                                           (when-not @*closed-properly?
-                                             (println "\n---- Closing child Recife process ----\n")
-                                             (let [pstats @@u/pd]
-                                               (when (:stats pstats)
-                                                 (println (str "\n\n" (tufte/format-pstats pstats)))))
-                                             (prn
-                                              (merge
-                                               (-> {:unfinished? true}
-                                                   (medley/assoc-some :recife/transit-states-file-path
-                                                                      (:file-path state-writer)))
-                                               {:trace (when (:trace-example opts)
-                                                         (-> (:file-path state-writer)
-                                                             states-from-file
-                                                             random-traces-from-states
-                                                             rand-nth))}))))))
+                                 (fn []
+                                   (r.buf/flush!)
+                                   (when state-writer
+                                     (.close state-writer))
+                                   (when-not @*closed-properly?
+                                     (println "\n---- Closing child Recife process ----\n")
+                                     (let [pstats @@u/pd]
+                                       (when (:stats pstats)
+                                         (println (str "\n\n" (tufte/format-pstats pstats)))))
+                                     (prn
+                                      (merge
+                                       (-> {:unfinished? true}
+                                           (medley/assoc-some :recife/transit-states-file-path
+                                                              (some-> state-writer .getDumpFileName)))
+                                       {:trace (when (:trace-example opts)
+                                                 (some-> state-writer
+                                                         .getDumpFileName
+                                                         states-from-file
+                                                         random-traces-from-states
+                                                         rand-nth))}))))))
             _ (save-and-flush! ::status [id :running])
             _ (save-and-flush! ::debug :tlc-start)
             _ (do (p* ::process
@@ -1727,106 +1882,22 @@ VIEW
                   (let [pstats @@u/pd]
                     (when (:stats pstats)
                       (println (str "\n\n" (tufte/format-pstats pstats))))))
-            recorder-info @recorder-atom
-            _ (save-and-flush! ::debug :after-recorder-atom)
-            #_#_ _ (clojure.pprint/pprint recorder-info)
-            _ (do (def tlc tlc)
-                  (def recorder-info recorder-info))
-
-            simulator tlc2.TLCGlobals/simulator
-
-            {:keys [trace info]}
-            (if-some [error-trace (-> ^tlc2.output.ErrorTraceMessagePrinterRecorder
-                                      (private-field tlc "recorder")
-                                      .getMCErrorTrace
-                                      (.orElse nil))]
-              (let [states (->> (.getStates ^tlc2.model.MCError error-trace)
-                                (mapv bean))
-                    stuttering-state (some #(when (:stuttering %) %) states)
-                    back-to-state (some #(when (:backToState %) %) states)]
-                {:trace (->> states
-                             ;; We don't want to return the state which
-                             ;; is stuttering, it's always equals to the
-                             ;; anterior.
-                             (remove :stuttering)
-                             ;; Same for backToState.
-                             (remove :backToState)
-                             (mapv (fn [state]
-                                     (->> state
-                                          :variables
-                                          (some #(when (= (.getName ^tlc2.model.MCVariable %)
-                                                          "main_var")
-                                                   (.getTLCValue ^tlc2.model.MCVariable %))))))
-                             (mapv tla-edn/to-edn)
-                             (map-indexed (fn [idx v] [idx v]))
-                             (into []))
-                 :info (merge (dissoc recorder-info :others)
-                              (cond
-                                stuttering-state
-                                {:violation {:type :stuttering
-                                             :state-number (:stateNumber stuttering-state)}}
-
-                                back-to-state
-                                {:violation {:type :back-to-state
-                                             :state-number (dec (:stateNumber back-to-state))}}))})
-              (let [initial-state (when (-> recorder-info :violation :initial-state?)
-                                    ;; If we had a initial state violation, `MCError` is `nil`,
-                                    ;; but the state is stored in the main checker.
-                                    (some-> (private-field tlc2.TLCGlobals/mainChecker
-                                                           tlc2.tool.AbstractChecker
-                                                           "errState")
-                                            bean
-                                            :vals
-                                            (.get (UniqueString/uniqueStringOf "main_var"))
-                                            tla-edn/to-edn))]
-                (cond
-                  initial-state
-                  {:trace [[0 initial-state]]
-                   :info (dissoc recorder-info :others)}
-
-                  (:error recorder-info)
-                  {:trace :error
-                   :info (dissoc recorder-info :others)}
-
-                  :else
-                  {:trace :ok})))]
+            recorder-info @atom
+            _ (save-and-flush! ::debug :after-recorder-atom)]
 
         (save-and-flush! ::debug :after-building-violation-info)
 
-        ;; `do` for debugging.
-        #_(do (def recorder-value @recorder-atom)
-              (def simulator simulator))
-
-        (-> {:trace (cond
-                      (and (nil? (some-> ^tlc2.tool.AbstractChecker
-                                         tlc2.TLCGlobals/mainChecker
-                                         .theFPSet
-                                         .size))
-                           (nil? simulator))
-                      :error
-
-                      (and (= trace :ok) (:trace-example opts))
-                      (-> (:file-path state-writer)
-                          states-from-file
-                          random-traces-from-states
-                          rand-nth)
-
-                      :else
-                      trace)
-             :trace-info (if (and (nil? info) (:trace-example opts))
-                           {:trace-example true}
-                           info)
-             :distinct-states (some-> tlc2.TLCGlobals/mainChecker .theFPSet .size)
-             :generated-states (some-> tlc2.TLCGlobals/mainChecker .getStatesGenerated)
-             :seed (private-field tlc "seed")
-             :fp (private-field tlc "fpIndex")}
-            (merge (when simulator
-                     {:simulation
-                      {:states-count (long (private-field simulator "numOfGenStates"))
-                       :traces-count (long (private-field simulator "numOfGenTraces"))}}))
+        (-> (build-result-from-tlc tlc recorder-info)
+            (merge (when (and (= (:trace (build-result-from-tlc tlc recorder-info)) :ok) (:trace-example opts))
+                     {:trace (some-> state-writer
+                                     .getDumpFileName
+                                     states-from-file
+                                     random-traces-from-states
+                                     rand-nth)
+                      :trace-info {:trace-example true}}))
             (merge (when (:continue opts)
                      (select-keys opts [:continue])))
-            (medley/assoc-some :recife/transit-states-file-path (:file-path state-writer))))
+            (medley/assoc-some :recife/transit-states-file-path (some-> state-writer .getDumpFileName))))
 
       (catch Exception ex
         (serialize-obj ex exception-filename)
@@ -1913,7 +1984,7 @@ VIEW
   ([init-state next-operator operators]
    (run-model* init-state next-operator operators {}))
   ([init-state next-operator operators {:keys [seed fp workers tlc-args
-                                               raw-output run-local debug
+                                               raw-output run-local isolated debug
                                                complete-response?
                                                no-deadlock
                                                depth async simulate generate
@@ -1923,7 +1994,9 @@ VIEW
                                                trace-example dump-states]
                                         :as opts
                                         :or {workers :auto
-                                             async true}}]
+                                             async true
+                                             run-local true
+                                             isolated false}}]
    ;; Do some validation.
    (some->> (m/explain schema/Operator next-operator)
             me/humanize
@@ -1944,7 +2017,7 @@ VIEW
      (catch Exception _))
 
    ;; Run model.
-   (let [use-buffer true
+   (let [use-buffer (not run-local)
          opts (if continue
                 (assoc opts :trace-example false)
                 opts)
@@ -1960,11 +2033,16 @@ VIEW
                            :operators all-operators
                            :spec-name file-name})
          _ (spit abs-path module-contents)
-         _ (when use-buffer
-             (r.buf/reset-buf!)
-             (r.buf/sync!) ; sync so we can make sure that the writer can write
-             (reset! r.buf/*contents {})
-             (r.buf/start-sync-loop!))
+         ;; Start client loop - needed for save! calls in invariants even in run-local mode.
+         ;; For run-local, use simplified in-memory loop. For subprocess, use file-based buffer.
+         _ (if run-local
+             (r.buf/start-client-loop-local!)
+             (do
+               (r.buf/reset-buf!)
+               (r.buf/sync!) ; sync so we can make sure that the writer can write
+               (reset! r.buf/*contents {})
+               (r.buf/start-client-loop!)
+               (r.buf/start-sync-loop!)))
          ;; Also put a file with opts in the same folder so we can read configuration
          ;; in the tlc-handler function.
          id (gensym)
@@ -1975,8 +2053,8 @@ VIEW
          tlc-opts (->> (cond-> ["-noTE" "-nowarning"]
                          simulate (conj "-simulate")
                          generate (cond->
-                                      true (conj "-generate")
-                                      (:num generate) (conj (str "num=" (:num generate))))
+                                   true (conj "-generate")
+                                   (:num generate) (conj (str "num=" (:num generate))))
                          depth (conj "-depth" depth)
                          seed (conj "-seed" seed)
                          fp (conj "-fp" fp)
@@ -2004,34 +2082,50 @@ VIEW
      (io/delete-file exception-filename true)
      (io/delete-file invariant-data-filename true)
      (cond
-       run-local
-       (let [result (tlc-result-handler #(spec/run-spec abs-path
-                                                        (str file-name "." file-type)
-                                                        tlc-opts
-                                                        {:run? false}))]
+       ;; Isolated mode uses a fresh class loader for each run,
+       ;; avoiding TLC module caching issues when switching between specs.
+       (and run-local isolated)
+       (let [raw-result (spec/run-spec-isolated abs-path
+                                                (str file-name "." file-type)
+                                                tlc-opts
+                                                {:loaded-classes loaded-classes})
+             result (parse-tlc-isolated-output raw-result)]
          (if (.exists (io/as-file exception-filename))
            (throw (deserialize-obj exception-filename))
            result))
 
+       run-local
+       (let [result (tlc-result-handler-local #(spec/run-spec abs-path
+                                                              (str file-name "." file-type)
+                                                              tlc-opts
+                                                              {:run? false}))]
+         (if (.exists (io/as-file exception-filename))
+           (throw (deserialize-obj exception-filename))
+           ;; Add temporal properties check for consistency with subprocess mode
+           (cond-> result
+             (= (-> result :trace-info :violation :type) :back-to-state)
+             (assoc-in [:experimental :violated-temporal-properties]
+                       (rt/check-temporal-properties result (::components opts))))))
+
        raw-output
        (let [result (spec/run abs-path
-                      (str file-name "." file-type)
-                      tlc-opts
-                      {:tlc-result-handler #'tlc-result-printer-handler
-                       :complete-response? complete-response?
-                       :loaded-classes loaded-classes})]
+                              (str file-name "." file-type)
+                              tlc-opts
+                              {:tlc-result-handler #'tlc-result-printer-handler
+                               :complete-response? complete-response?
+                               :loaded-classes loaded-classes})]
          (if (.exists (io/as-file exception-filename))
            (throw (deserialize-obj exception-filename))
            result))
 
        :else
        (let [result (spec/run abs-path
-                      (str file-name "." file-type)
-                      tlc-opts
-                      {:tlc-result-handler #'tlc-result-printer-handler
-                       :loaded-classes loaded-classes
-                       :complete-response? true
-                       :raw-args [(str "-DRECIFE_OPTS_FILE_PATH=" opts-file-path)]})
+                              (str file-name "." file-type)
+                              tlc-opts
+                              {:tlc-result-handler #'tlc-result-printer-handler
+                               :loaded-classes loaded-classes
+                               :complete-response? true
+                               :raw-args [(str "-DRECIFE_OPTS_FILE_PATH=" opts-file-path)]})
              output (atom [])
              t0 (System/nanoTime)
              *destroyed? (atom false)
@@ -2308,9 +2402,9 @@ VIEW
                                                      [(key %)
                                                       {}])]
                                     (reg k#
-                                      (with-meta opts#
-                                        ~(meta name))
-                                      (val %)))))})))))
+                                         (with-meta opts#
+                                           ~(meta name))
+                                         (val %)))))})))))
 
 (defmacro -definvariant
   [name & opts]

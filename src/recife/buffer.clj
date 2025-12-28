@@ -160,20 +160,34 @@
   ([value]
    (save! :default value))
   ([bucket value]
-   (try
-     (p* ::save!
-         (>!! @*client-channel [bucket value]))
-     (catch Exception ex
-       (if (nil? @*client-channel)
-         (throw (ex-info "
+   (let [channel @*client-channel]
+     (cond
+       ;; Local mode - store directly to *contents synchronously
+       (= channel ::local-mode)
+       (do
+         (swap! *contents
+                (fn [contents]
+                  (if (contains? contents bucket)
+                    (update contents bucket conj value)
+                    (update contents bucket (comp vec conj) value))))
+         true)
+
+       ;; Async mode - use channel
+       (some? channel)
+       (do
+         (p* ::save!
+             (>!! channel [bucket value]))
+         true)
+
+       ;; No channel set up
+       :else
+       (throw (ex-info "
 
 Error when trying to save data, you need to set `:use-buffer` or
 run Recife using `:generate`.
 
 "
-                         {}))
-         (throw ex))))
-   true))
+                       {}))))))
 
 (defonce ^:private lock-sync
   (Object.))
@@ -188,7 +202,7 @@ run Recife using `:generate`.
                           (update contents bucket conj value)
                           (update contents bucket (comp vec conj) value)))
                       (catch Exception ex
-                        (println ::bad-value v)
+                        #_(println ::bad-value v)
                         contents
                         #_(throw ex))
                       (finally
@@ -230,14 +244,19 @@ run Recife using `:generate`.
 
 (defonce ^:private *sync-loop (atom nil))
 
-(defonce ^:private pool (clay/threadpool 2))
+;; Lazy threadpool - only created when needed for subprocess mode.
+;; This prevents non-daemon threads from keeping the JVM alive in run-local mode.
+(defonce ^:private *pool (delay (clay/threadpool 2)))
+
+(defn- get-pool []
+  @*pool)
 
 (defn start-sync-loop!
   []
   (when-not @*sync-loop
     (reset! *sync-loop
             (clay/future
-              pool
+              (get-pool)
               #_(println "Starting sync loop...")
               (while (not (Thread/interrupted))
                 (Thread/sleep 1)
@@ -266,6 +285,13 @@ run Recife using `:generate`.
         (let [v (<! ch)]
           (p* ::-save!
               (-save! v)))))))
+
+(defn start-client-loop-local!
+  "Simplified setup for run-local mode.
+  Uses a synchronous approach - no async channels needed."
+  []
+  ;; Set *client-channel to a special marker so save! knows to use sync mode
+  (reset! *client-channel ::local-mode))
 
 (defn read-contents
   "Read saved data, `bucket` is `:default` by default.

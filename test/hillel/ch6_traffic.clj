@@ -32,6 +32,7 @@
 (comment
 
   ;; ok (6 generated states).
-  (r/run-model global #{car light termination} {#_ #_:raw-output true #_ #_:debug true})
+  (r/run-model global #{car light termination}
+               {#_ #_:raw-output true #_ #_:debug true})
 
   ())
