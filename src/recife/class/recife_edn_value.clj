@@ -134,6 +134,10 @@
 
 (def *cache (atom {}))
 
+;; Cache for getDomain results - keyed by state identity
+;; Uses WeakHashMap to allow GC of unused states
+(def ^:private domain-cache (java.util.Collections/synchronizedMap (java.util.WeakHashMap.)))
+
 (defn- tlc-string->keyword
   [v]
   (or (get @*cache v)
@@ -197,16 +201,22 @@
 (defn edn-apply-Value-int
   [^RecifeEdnValue this ^Value arg ^Integer _control]
   (p* ::apply-V
-      (tla-edn/to-tla-value (get (.-state this)
-                                 (p* ::apply-V--arg
-                                     (tla-edn/to-edn arg))))))
+      ;; Short-circuit for RecifeEdnValue keys (avoids protocol dispatch)
+      (let [key (if (instance? RecifeEdnValue arg)
+                  (.-state ^RecifeEdnValue arg)
+                  (tla-edn/to-edn arg))]
+        (tla-edn/to-tla-value (get (.-state this) key)))))
 
 #_(.apply (RecifeEdnValue. {:a 1}) (tla-edn/to-tla-value :a) 0)
 
 (defn edn-select
   [^RecifeEdnValue this ^Value arg]
   (p* ::select
-      (tla-edn/to-tla-value (get (.-state this) (tla-edn/to-edn arg)))))
+      ;; Short-circuit for RecifeEdnValue keys (avoids protocol dispatch)
+      (let [key (if (instance? RecifeEdnValue arg)
+                  (.-state ^RecifeEdnValue arg)
+                  (tla-edn/to-edn arg))]
+        (tla-edn/to-tla-value (get (.-state this) key)))))
 
 #_(.select (RecifeEdnValue. {:a 1}) (tla-edn/to-tla-value :a))
 

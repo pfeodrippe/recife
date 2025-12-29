@@ -313,7 +313,7 @@
     (p* ::tla-edn--string
         (let [v (.val v')]
           (or (get @string-cache v)
-              (let [s (str/replace (str v) #"___" ".")
+              (let [s (str/replace (str v) triple-underscore-pattern ".")
                     k (keyword (repl/demunge s))
                     result (if (= k :recife/null)
                              nil
@@ -396,13 +396,10 @@
   (tla-edn/-to-tla-value
     [v]
     (p* ::to-tla--keyword
-        (RecifeEdnValue. v)
-        #_(use-cache v (RecifeEdnValue. v))
-        #_(or (get @cache v)
-              (let [result (RecifeEdnValue. v)]
-                (swap! cache assoc v result)
-                result)))
-    #_(StringValue. ^String (custom-munge (symbol v))))
+        (or (get @keyword-cache v)
+            (let [result (RecifeEdnValue. v)]
+              (swap! keyword-cache assoc v result)
+              result))))
 
   nil
   (tla-edn/-to-tla-value [_]
@@ -577,7 +574,7 @@
                        {:context [identifier (merge {:self self} extra-args)]})]
         (p* ::process-operator*--return
             (if (nil? result)
-              (dissoc (assoc main-var :recife/metadata metadata) ::extra-args)
+              (assoc global :recife/metadata metadata)
               (merge
                ;; All namespaced keywords are global.
                (dissoc result-global :recife/metadata)
@@ -1759,10 +1756,10 @@ VIEW
   [^tlc2.TLC tlc recorder-info]
   (let [simulator tlc2.TLCGlobals/simulator
         {:keys [trace info]}
-        (if-some [error-trace (-> ^tlc2.output.ErrorTraceMessagePrinterRecorder
-                               (private-field tlc "recorder")
-                                  .getMCErrorTrace
-                                  (.orElse nil))]
+        (if-some [error-trace (some-> (private-field tlc "recorder")
+                                      ^tlc2.output.ErrorTraceMessagePrinterRecorder
+                                      (.getMCErrorTrace)
+                                      (.orElse nil))]
           (let [states (->> (.getStates ^tlc2.model.MCError error-trace)
                             (mapv bean))
                 stuttering-state (some #(when (:stuttering %) %) states)

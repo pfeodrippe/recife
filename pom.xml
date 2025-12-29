@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>pfeodrippe</groupId>
   <artifactId>recife</artifactId>
-  <version>0.19.0</version>
+  <version>0.21.0</version>
   <name>recife</name>
   <description/>
   <url>https://github.com/pfeodrippe/recife</url>
@@ -85,7 +85,7 @@
     <dependency>
       <groupId>com.taoensso</groupId>
       <artifactId>nippy</artifactId>
-      <version>3.2.0</version>
+      <version>3.6.0</version>
     </dependency>
     <dependency>
       <groupId>potemkin</groupId>
@@ -100,7 +100,7 @@
     <dependency>
       <groupId>pfeodrippe</groupId>
       <artifactId>tla-edn</artifactId>
-      <version>0.14.0</version>
+      <version>0.32.0</version>
     </dependency>
     <dependency>
       <groupId>medley</groupId>
