@@ -1,14 +1,11 @@
 (ns recife.clerk
-  "You should have https://clojars.org/io.github.nextjournal/clerk and
-  https://clojars.org/io.github.pfeodrippe/dev-tooling on the
+  "You should have https://clojars.org/io.github.nextjournal/clerk on the
   classpath to use this namespace.
 
   The functions require clerk on demand as we don't want to affect the startup
   time for a Recife model run."
   (:require
    [clojure.pprint :as pp]
-   [com.pfeodrippe.tooling.clerk :as-alias tool.clerk]
-   [com.pfeodrippe.tooling.clerk.util :as-alias tool.clerk.util]
    [nextjournal.clerk :as-alias clerk]
    [nextjournal.clerk.config :as clerk.config]
    [nextjournal.clerk.viewer :as-alias v]
@@ -20,8 +17,6 @@
 (defmacro with-recife
   [& body]
   (when (not (System/getProperty "RECIFE_OPTS_FILE_PATH"))
-    (require '[com.pfeodrippe.tooling.clerk :as tool.clerk])
-    (require '[com.pfeodrippe.tooling.clerk.util :as tool.clerk.util])
     (require '[nextjournal.clerk :as clerk])
     (require '[nextjournal.clerk.viewer :as v])
     (require '[recife.buffer :as r.buf])
@@ -93,10 +88,15 @@
   [_]
   (<= (rh/get-level) 100))
 
+(defn- clerk-build?
+  "Check if we're in a Clerk build context."
+  []
+  (boolean (System/getProperty "CLERK_BUILD")))
+
 (defn -run-delayed
   [id cache-key global components {::keys [block] :as opts}]
   (with-recife
-    (if (or block (tool.clerk/build?))
+    (if (or block (clerk-build?))
       (let [model @(r/run-model global components opts)]
         (swap! *cache assoc cache-key model)
         model)
@@ -141,28 +141,28 @@
    `(run-model ~global ~components ~opts ~(meta &form)))
   ([global components opts form-meta]
    `(when #_(:only ~opts) true
-      (-run-model
-       ~(concat '(r/run-model)
-                (if opts
-                  (drop-last (drop 1 &form))
-                  (drop-last (drop-last (drop 1 &form)))))
-       (let [id# (::id ~form-meta)
-             opts# (merge {:trace-example true}
-                          ~opts)
-             components# (set (conj ~components
+          (-run-model
+           ~(concat '(r/run-model)
+                    (if opts
+                      (drop-last (drop 1 &form))
+                      (drop-last (drop-last (drop 1 &form)))))
+           (let [id# (::id ~form-meta)
+                 opts# (merge {:trace-example true}
+                              ~opts)
+                 components# (set (conj ~components
                                     ;; Add constraint so we can always have
                                     ;; finite traces
-                                    finite-trace))
-             cache-key# {id# [(quote ~(drop-last &form))
-                              ~global
-                              (mapv :hash (sort-by :hash components#))
-                              opts#]}]
-         (or (get @*cache cache-key#)
-             (-run-delayed id# cache-key#
-                           ~global
-                           components#
-                           (merge opts#
-                                  (select-keys ~form-meta [::block])))))))))
+                                        finite-trace))
+                 cache-key# {id# [(quote ~(drop-last &form))
+                                  ~global
+                                  (mapv :hash (sort-by :hash components#))
+                                  opts#]}]
+             (or (get @*cache cache-key#)
+                 (-run-delayed id# cache-key#
+                               ~global
+                               components#
+                               (merge opts#
+                                      (select-keys ~form-meta [::block])))))))))
 
 (defn- adapt-result
   [result]
@@ -271,7 +271,7 @@
                                   ;; when zooming in.
                                   :animations false
                                   :arrows true
-                                  #_ #_:glowBlend 0.2})))
+                                  #_#_:glowBlend 0.2})))
 
                          build-mermaid
                          (fn [el]
@@ -434,10 +434,10 @@
              (if (:status value)
                [:div.bg-gray-100.p-5.mt-2.w-full
                 (if (= (:status value) :running)
-                    [:div.animate-pulse
-                     "⚙ Running"]
-                    [:div.animate-pulse
-                     "⌛ Waiting"])]
+                  [:div.animate-pulse
+                   "⚙ Running"]
+                  [:div.animate-pulse
+                   "⌛ Waiting"])]
                (render-response value))))))
 
 (def recife-model-viewer
@@ -474,7 +474,7 @@
      :render-fn model-render-fn}))
 
 (with-recife
-  (tool.clerk.util/add-global-viewers!
+  (clerk/add-viewers!
    [recife-response-viewer
     recife-model-viewer
     recife-model-clerk-viewer]))
